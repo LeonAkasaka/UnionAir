@@ -1,0 +1,25 @@
+{
+  "name": "com.leonakasaka.unionair",
+  "version": "0.1.0",
+  "displayName": "UnionAir - Unity REST Bridge",
+  "description": "Exposes Unity Editor state (hierarchy, GameObjects, assets) as a REST API for external tools including LLM MCP bridges, development bots, and CI tooling.",
+  "unity": "6000.0",
+  "type": "tool",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LeonAkasaka/UnionAir.git"
+  },
+  "author": {
+    "name": "Leon Akasaka"
+  },
+  "keywords": [
+    "editor",
+    "rest",
+    "api",
+    "mcp",
+    "llm",
+    "hierarchy",
+    "tooling"
+  ]
+}

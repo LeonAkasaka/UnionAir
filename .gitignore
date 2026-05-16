@@ -1,0 +1,12 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor temp files
+*.suo
+*.user
+.vs/
+.idea/
+
+# Note: .meta files are intentionally tracked in this package repository.
+# Unity uses them to maintain stable GUIDs for package assets.

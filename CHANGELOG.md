@@ -1,0 +1,71 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-05-17
+
+### Added
+
+#### Read API
+
+- `GET /api/health` — health check
+- `GET /api/scene` — current scene info (name, path, isDirty, rootCount)
+- `GET /api/scene/hierarchy` — full GameObject tree with transform data (supports `?depth`, `?compact`, `?limit`, `?path`)
+- `GET /api/scene/stats` — scene statistics (object counts, component/tag/layer breakdown)
+- `GET /api/gameobjects` — GameObject details with serialized component properties
+- `GET /api/editor/status` — Editor state (isPlaying, isPaused, isCompiling, isUpdating)
+- `GET /api/editor/logs` — console log capture with type/search/limit filters
+- `GET /api/cameras` — camera list with depth, FOV, and path
+- `GET /api/cameras/capture` — render camera to base64 image (JPEG/PNG)
+- `GET /api/cameras/capture/image` — render camera as binary image stream
+- `GET /api/assets` — asset list with path/type/search filters
+- `GET /api/assets/{guid}` — asset detail with dependencies and labels
+- `GET /api/assets/dependents` — reverse dependency lookup
+- `GET /api/search/gameobjects` — multi-criteria GameObject search
+- `GET /api/search/asset-refs` — find scene references to an asset
+
+#### Scene Write API (disabled by default)
+
+- `POST /api/gameobjects` — create a new empty GameObject
+- `POST /api/gameobjects/primitive` — create a primitive GameObject (Cube, Sphere, Capsule, Cylinder, Plane, Quad)
+- `DELETE /api/gameobjects` — delete a GameObject
+- `PATCH /api/gameobjects` — update GameObject properties (name, isActive, tag, layer, transform)
+- `POST /api/gameobjects/duplicate` — duplicate a GameObject
+- `POST /api/gameobjects/reparent` — move a GameObject to a new parent
+- `POST /api/gameobjects/batch` — bulk create/update/delete in a single Undo group (HTTP 207)
+- `POST /api/gameobjects/components` — add a component to a GameObject
+- `DELETE /api/gameobjects/components` — remove a component from a GameObject
+- `PATCH /api/gameobjects/components` — update serialized component properties
+- `POST /api/scene/save` — save the current scene to disk
+
+#### Asset Write API (disabled by default, separate toggle)
+
+- `POST /api/editor/refresh` — trigger `AssetDatabase.Refresh()`
+- `POST /api/assets/prefabs` — create a prefab from a scene GameObject
+- `POST /api/assets/prefabs/apply` — apply instance overrides to the prefab asset
+- `POST /api/assets/prefabs/revert` — revert a prefab instance to match the asset
+- `POST /api/assets/materials` — create a new material
+- `PATCH /api/assets/materials` — update material properties (Color, Float, Vector, Texture)
+- `DELETE /api/assets/{guid}` — delete an asset and its `.meta` file
+- `POST /api/assets/move` — move/rename an asset preserving GUID and references
+
+#### Play Mode API (disabled by default, separate toggle)
+
+- `POST /api/editor/play` — enter play mode
+- `POST /api/editor/stop` — exit play mode
+- `POST /api/editor/pause` — set or toggle pause state
+- `POST /api/editor/step` — advance one frame (requires pause)
+
+#### Infrastructure
+
+- HTTP server via `HttpListener` (no external dependencies), default port 8765
+- CORS headers (`Access-Control-Allow-Origin: *`) for cross-origin access
+- Per-phase permission gating (Write / Asset Write / Play Mode toggles)
+- EditorWindow UI for server control, port configuration, and request log
+- Auto-start on Editor load via `[InitializeOnLoad]`
+- Graceful shutdown on domain reload; auto-restart after domain reload and play mode exit
+- Console log capture with 1000-entry ring buffer (`LogStore`)
