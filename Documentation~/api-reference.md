@@ -1,16 +1,16 @@
-# API リファレンス
+# API Reference
 
-ベース URL: `http://localhost:<port>/api/`（デフォルトポート: **8765**）
+Base URL: `http://localhost:<port>/api/` (default port: **8765**)
 
-すべてのレスポンスは `Content-Type: application/json; charset=utf-8` で返され、CORS ヘッダー (`Access-Control-Allow-Origin: *`) が付与されます。
+All responses are returned with `Content-Type: application/json; charset=utf-8` and include the CORS header (`Access-Control-Allow-Origin: *`).
 
 ---
 
 ## GET /api/health
 
-サーバーの稼働確認。
+Checks whether the server is running.
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -23,9 +23,9 @@
 
 ## GET /api/editor/status
 
-Unity Editor の実行状態を返します。
+Returns the execution status of the Unity Editor.
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -37,29 +37,29 @@ Unity Editor の実行状態を返します。
 }
 ```
 
-| フィールド | 型 | 説明 |
+| Field | Type | Description |
 |-----------|-----|------|
-| `isPlaying` | bool | Play モードが有効か (`EditorApplication.isPlaying`) |
-| `isPaused` | bool | Play モードで一時停止中か (`EditorApplication.isPaused`) |
-| `isCompiling` | bool | スクリプトをコンパイル中か (`EditorApplication.isCompiling`) |
-| `isUpdating` | bool | アセット更新処理中か (`EditorApplication.isUpdating`) |
-| `unityVersion` | string | Unity バージョン文字列 |
+| `isPlaying` | bool | Whether Play mode is enabled (`EditorApplication.isPlaying`) |
+| `isPaused` | bool | Whether playback is paused in Play mode (`EditorApplication.isPaused`) |
+| `isCompiling` | bool | Whether scripts are being compiled (`EditorApplication.isCompiling`) |
+| `isUpdating` | bool | Whether asset update processing is in progress (`EditorApplication.isUpdating`) |
+| `unityVersion` | string | Unity version string |
 
 ---
 
 ## GET /api/editor/logs
 
-Unity Console のログを返します。エディター起動（または最後のドメインリロード）以降に記録されたログが対象です。最大 1000 件をリングバッファで保持します。
+Returns Unity Console logs. Includes logs recorded since the editor started (or since the last domain reload). Up to 1000 entries are kept in a ring buffer.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | デフォルト | 説明 |
+| Parameter | Default | Description |
 |-------------|-----------|------|
 | `type` | `all` | `log` / `warning` / `error` / `exception` / `assert` / `all` |
-| `search` | ―  | メッセージへの部分一致フィルター（大文字小文字無視） |
-| `limit` | `100` | 最大返却件数（上限: 1000） |
+| `search` | ―  | Case-insensitive partial-match filter on messages |
+| `limit` | `100` | Maximum number of results to return (max: 1000) |
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -81,16 +81,16 @@ Unity Console のログを返します。エディター起動（または最後
 }
 ```
 
-> ログは新しい順（`timestamp` 降順）で返されます。  
-> ドメインリロード前に `StopCapturing()` が呼ばれるため、リロードをまたいだログは保持されません。
+> Logs are returned in newest-first order (`timestamp` descending).  
+> Because `StopCapturing()` is called before a domain reload, logs are not retained across reloads.
 
-### 使用例
+### Examples
 
 ```bash
-# エラーと例外のみ最新 20 件
+# Latest 20 errors and exceptions
 curl "http://localhost:8765/api/editor/logs?type=error&limit=20"
 
-# "NullReference" を含むログ
+# Logs containing "NullReference"
 curl "http://localhost:8765/api/editor/logs?search=NullReference"
 ```
 
@@ -98,9 +98,9 @@ curl "http://localhost:8765/api/editor/logs?search=NullReference"
 
 ## GET /api/cameras
 
-シーン内の全 Camera コンポーネントの一覧を返します。
+Returns a list of all Camera components in the scene.
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -119,30 +119,30 @@ curl "http://localhost:8765/api/editor/logs?search=NullReference"
 }
 ```
 
-| フィールド | 型 | 説明 |
+| Field | Type | Description |
 |-----------|-----|------|
-| `path` | string | GameObject の階層パス（`/api/cameras/capture` の `path` パラメーターに使用） |
-| `depth` | float | 描画順序（数値が大きいほど後から描画） |
-| `fieldOfView` | float | 垂直視野角（`isOrthographic: true` のときは無意味） |
+| `path` | string | Hierarchical GameObject path (used for the `path` parameter of `/api/cameras/capture`) |
+| `depth` | float | Render order (higher values are rendered later) |
+| `fieldOfView` | float | Vertical field of view (has no meaning when `isOrthographic: true`) |
 
 ---
 
 ## GET /api/cameras/capture
 
-指定カメラで `camera.Render()` を実行し、結果を base64 エンコード画像として返します。  
-Edit モード・Play モード両方で動作します。
+Runs `camera.Render()` with the specified camera and returns the result as a base64-encoded image.  
+Works in both Edit mode and Play mode.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | デフォルト | 説明 |
+| Parameter | Default | Description |
 |-------------|-----------|------|
-| `path` | **必須** | カメラが付いた GameObject の階層パス（例: `Main Camera`） |
-| `width` | `640` | 出力幅（px）、上限 1920 |
-| `height` | `360` | 出力高さ（px）、上限 1080 |
-| `format` | `jpeg` | `png` または `jpeg` |
-| `quality` | `85` | JPEG 品質（1–100、`format=jpeg` のとき有効） |
+| `path` | **Required** | Hierarchical path of the GameObject with the camera attached (example: `Main Camera`) |
+| `width` | `640` | Output width (px), max 1920 |
+| `height` | `360` | Output height (px), max 1080 |
+| `format` | `jpeg` | `png` or `jpeg` |
+| `quality` | `85` | JPEG quality (1–100, valid when `format=jpeg`) |
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -151,67 +151,67 @@ Edit モード・Play モード両方で動作します。
   "height": 360,
   "format": "jpeg",
   "mimeType": "image/jpeg",
-  "data": "<base64エンコード済み画像データ>"
+  "data": "<base64-encoded image data>"
 }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `path` が未指定 |
-| 404 | 指定パスに Camera コンポーネントが存在しない |
+| 400 | `path` is missing |
+| 404 | No Camera component exists at the specified path |
 
-### 使用例
+### Examples
 
 ```bash
-# カメラ一覧でパスを確認
+# List cameras to find the path
 curl "http://localhost:8765/api/cameras"
 
-# Main Camera をデフォルト解像度で JPEG キャプチャ
+# Capture Main Camera at default resolution in JPEG
 curl "http://localhost:8765/api/cameras/capture?path=Main+Camera"
 
-# PNG で HD キャプチャ
+# Capture in PNG at HD resolution
 curl "http://localhost:8765/api/cameras/capture?path=Main+Camera&width=1280&height=720&format=png"
 ```
 
-### LLM / MCP ブリッジでの利用
+### Use with LLM / MCP Bridges
 
-レスポンスの `mimeType` と `data` フィールドをそのまま MCP の image content ブロックに変換できます。
+The response `mimeType` and `data` fields can be converted directly into an MCP image content block.
 
 ---
 
 ## GET /api/cameras/capture/image
 
-`/api/cameras/capture` と同じパラメーターで、バイナリ画像を直接返します。  
-ブラウザで開けばそのまま表示され、`curl -o` でファイル保存できます。
+With the same parameters as `/api/cameras/capture`, returns the binary image directly.  
+If opened in a browser, it displays as-is, and you can save it to a file with `curl -o`.
 
-### クエリパラメーター
+### Query Parameters
 
-`/api/cameras/capture` と同一（`path` 必須、`width` / `height` / `format` / `quality` 任意）。
+Same as `/api/cameras/capture` (`path` required, `width` / `height` / `format` / `quality` optional).
 
-### レスポンス
+### Response
 
-`Content-Type: image/jpeg`（または `image/png`）のバイナリストリーム。JSON ラッパーなし。
+`Content-Type: image/jpeg` (or `image/png`) binary stream. No JSON wrapper.
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `path` が未指定 |
-| 404 | 指定パスに Camera コンポーネントが存在しない |
+| 400 | `path` is missing |
+| 404 | No Camera component exists at the specified path |
 
-### 使用例
+### Examples
 
 ```bash
-# ブラウザで開いてそのまま確認
+# Open in browser to view directly
 open "http://localhost:8765/api/cameras/capture/image?path=Main+Camera"
 
-# curl でファイル保存
+# Save to file with curl
 curl -o screenshot.png \
   "http://localhost:8765/api/cameras/capture/image?path=Main+Camera&format=png"
 
-# HD JPEG で保存
+# Save HD JPEG
 curl -o hd.jpg \
   "http://localhost:8765/api/cameras/capture/image?path=Main+Camera&width=1280&height=720&quality=90"
 ```
@@ -220,9 +220,9 @@ curl -o hd.jpg \
 
 ## GET /api/scene
 
-現在開いているシーンのメタ情報を返します。
+Returns metadata for the currently open scene.
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -234,21 +234,21 @@ curl -o hd.jpg \
 }
 ```
 
-| フィールド | 型 | 説明 |
+| Field | Type | Description |
 |-----------|-----|------|
-| `name` | string | シーン名 |
-| `path` | string | Assets/ 以下のパス |
-| `isDirty` | bool | 未保存の変更があるか |
-| `isLoaded` | bool | シーンがロード済みか |
-| `rootCount` | int | ルート GameObject の数 |
+| `name` | string | Scene name |
+| `path` | string | Path under Assets/ |
+| `isDirty` | bool | Whether there are unsaved changes |
+| `isLoaded` | bool | Whether the scene is loaded |
+| `rootCount` | int | Number of root GameObjects |
 
 ---
 
 ## GET /api/scene/hierarchy
 
-シーン全体の GameObject ツリーを返します。
+Returns the GameObject tree for the entire scene.
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -281,29 +281,29 @@ curl -o hd.jpg \
 }
 ```
 
-| フィールド | 型 | 説明 |
+| Field | Type | Description |
 |-----------|-----|------|
-| `name` | string | GameObject 名 |
-| `path` | string | ルートからの `/` 区切りパス |
-| `isActive` | bool | `activeInHierarchy`（親も含む） |
-| `tag` | string | タグ |
-| `layer` | int | レイヤー番号 |
-| `transform` | object | ローカル座標系の position / rotation (EulerAngles) / scale |
-| `children` | array | 子 GameObjectNode の配列（再帰） |
+| `name` | string | GameObject name |
+| `path` | string | `/`-separated path from the root |
+| `isActive` | bool | `activeInHierarchy` (including parents) |
+| `tag` | string | Tag |
+| `layer` | int | Layer number |
+| `transform` | object | position / rotation (EulerAngles) / scale in local coordinate system |
+| `children` | array | Array of child GameObjectNodes (recursive) |
 
 ---
 
 ## GET /api/gameobjects
 
-指定パスの GameObject の詳細情報（コンポーネント含む）を返します。
+Returns detailed information for the GameObject at the specified path (including components).
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 必須 | 説明 |
+| Parameter | Required | Description |
 |-------------|------|------|
-| `path` | ✅ | ルートからの `/` 区切りパス（例: `Canvas/Panel/Button`） |
+| `path` | ✅ | `/`-separated path from the root (example: `Canvas/Panel/Button`) |
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -332,31 +332,31 @@ curl -o hd.jpg \
 }
 ```
 
-`components[].properties` は `SerializedObject` 経由で取得したプロパティです。  
-対応する `SerializedPropertyType`: `bool`, `int`, `float`, `string`, `Color`, `Vector2/3/4`, `Rect`, `ObjectReference`。それ以外は `null`。
+`components[].properties` are properties obtained via `SerializedObject`.  
+Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Color`, `Vector2/3/4`, `Rect`, `ObjectReference`. Other types are `null`.
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `path` パラメーターがない |
-| 404 | 指定パスに GameObject が存在しない |
+| 400 | Missing `path` parameter |
+| 404 | No GameObject exists at the specified path |
 
 ---
 
 ## GET /api/assets
 
-プロジェクト内のアセット一覧を返します。
+Returns a list of assets in the project.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 必須 | 説明 |
+| Parameter | Required | Description |
 |-------------|------|------|
-| `path` | ❌ | 検索対象フォルダ（例: `Assets/UI`）。省略時は `Assets/` 全体 |
-| `type` | ❌ | アセットタイプ名（例: `Texture2D`, `Material`, `Scene`） |
-| `search` | ❌ | `AssetDatabase.FindAssets` に渡す追加フィルター文字列 |
+| `path` | ❌ | Search target folder (example: `Assets/UI`). If omitted, the entire `Assets/` tree |
+| `type` | ❌ | Asset type name (example: `Texture2D`, `Material`, `Scene`) |
+| `search` | ❌ | Additional filter string passed to `AssetDatabase.FindAssets` |
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -372,21 +372,21 @@ curl -o hd.jpg \
 }
 ```
 
-> 最大 **500 件**を返します。`total` が 500 を超える場合はフィルターを絞ってください。
+> Returns up to **500 items**. If `total` exceeds 500, narrow the filters.
 
 ---
 
 ## GET /api/assets/{guid}
 
-GUID を指定してアセットの詳細情報を返します。
+Returns detailed information about an asset specified by GUID.
 
-### パスパラメーター
+### Path Parameters
 
-| パラメーター | 説明 |
+| Parameter | Description |
 |-------------|------|
-| `guid` | `AssetDatabase` の GUID 文字列 |
+| `guid` | GUID string for `AssetDatabase` |
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -400,40 +400,40 @@ GUID を指定してアセットの詳細情報を返します。
 }
 ```
 
-| フィールド | 型 | 説明 |
+| Field | Type | Description |
 |-----------|-----|------|
-| `guid` | string | アセットの GUID |
-| `path` | string | Assets/ 以下のパス |
-| `type` | string | 完全修飾型名 |
-| `dependencies` | string[] | 直接依存するアセットのパス（`GetDependencies(recursive: false)`） |
-| `labels` | string[] | アセットラベル |
+| `guid` | string | Asset GUID |
+| `path` | string | Path under Assets/ |
+| `type` | string | Fully qualified type name |
+| `dependencies` | string[] | Paths of directly dependent assets (`GetDependencies(recursive: false)`) |
+| `labels` | string[] | Asset labels |
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | GUID が空 |
-| 404 | 該当アセットが存在しない |
+| 400 | GUID is empty |
+| 404 | No matching asset exists |
 
 ---
 
 ## GET /api/search/gameobjects
 
-シーン内の GameObject を複数条件で AND 検索します。全パラメーターはオプションです。
+Searches GameObjects in the scene using multiple AND conditions. All parameters are optional.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 型 | 説明 |
+| Parameter | Type | Description |
 |-------------|-----|------|
-| `name` | string | 名前の部分一致（大文字小文字無視） |
-| `component` | string | コンポーネント型名の部分一致（例: `Camera`, `MeshRenderer`） |
-| `tag` | string | タグの完全一致 |
-| `layer` | int | レイヤー番号 |
-| `active` | bool | `true`/`false`（省略 = どちらも） |
-| `assetGuid` | string | 指定 GUID のアセットをいずれかのコンポーネントで参照している |
-| `includeComponents` | bool | `true` のとき各 GameObject のコンポーネント型名一覧を含める（デフォルト: `false`） |
+| `name` | string | Case-insensitive partial match on the name |
+| `component` | string | Partial match on the component type name (example: `Camera`, `MeshRenderer`) |
+| `tag` | string | Exact match on the tag |
+| `layer` | int | Layer number |
+| `active` | bool | `true`/`false` (omitted = both) |
+| `assetGuid` | string | References the asset with the specified GUID from any component |
+| `includeComponents` | bool | When `true`, includes the list of component type names for each GameObject (default: `false`) |
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -455,18 +455,18 @@ GUID を指定してアセットの詳細情報を返します。
 }
 ```
 
-> `components` フィールドは `includeComponents=true` を指定した場合のみ含まれます。
+> The `components` field is included only when `includeComponents=true` is specified.
 
-### 使用例
+### Examples
 
 ```bash
-# 名前に "Enemy" を含む GameObject
+# GameObjects whose name contains "Enemy"
 curl "http://localhost:8765/api/search/gameobjects?name=Enemy"
 
-# Camera コンポーネントを持つもの（コンポーネント一覧付き）
+# GameObjects with Camera component (include component list)
 curl "http://localhost:8765/api/search/gameobjects?component=Camera&includeComponents=true"
 
-# 特定アセットを参照している + 非アクティブ
+# References a specific asset + inactive only
 curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false"
 ```
 
@@ -474,15 +474,15 @@ curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false
 
 ## GET /api/search/asset-refs
 
-シーン内のコンポーネントが特定アセットを参照している場所を列挙します。
+Lists places where components in the scene reference a specific asset.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 必須 | 説明 |
+| Parameter | Required | Description |
 |-------------|------|------|
-| `guid` | ✅ | 検索対象アセットの GUID |
+| `guid` | ✅ | GUID of the asset to search for |
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -502,28 +502,28 @@ curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false
 }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `guid` が未指定 |
-| 404 | 該当アセットが存在しない |
+| 400 | `guid` is missing |
+| 404 | No matching asset exists |
 
-> **注意**: シーン全 GameObject の全コンポーネントを SerializedObject で走査します。大規模シーンでは処理に時間がかかる場合があります。
+> **Note**: Scans all components on all GameObjects in the scene using `SerializedObject`. Processing may take time in large scenes.
 
 ---
 
 ## GET /api/assets/dependents
 
-指定アセットを依存先として持つアセット（逆依存）を返します。
+Returns assets that depend on the specified asset (reverse dependencies).
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 必須 | 説明 |
+| Parameter | Required | Description |
 |-------------|------|------|
-| `guid` | ✅ | 被依存アセットの GUID |
+| `guid` | ✅ | GUID of the depended-on asset |
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -543,22 +543,22 @@ curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false
 }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `guid` が未指定 |
-| 404 | 該当アセットが存在しない |
+| 400 | `guid` is missing |
+| 404 | No matching asset exists |
 
-> **注意**: `Assets/` 内の全アセットに対して `GetDependencies()` を呼び出します。アセット数が多い場合は処理に時間がかかります。
+> **Note**: Calls `GetDependencies()` for all assets under `Assets/`. If there are many assets, processing may take time.
 
 ---
 
 ## GET /api/scene/stats
 
-現在のシーンの集計統計情報を返します。
+Returns aggregate statistics for the current scene.
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -584,24 +584,24 @@ curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false
 }
 ```
 
-> `Transform` / `RectTransform` はノイズになるため `componentCounts` から除外されています。  
-> `layerCounts` のキーはレイヤー名（未設定のレイヤーは番号）です。
+> `Transform` / `RectTransform` are excluded from `componentCounts` because they would be noise.  
+> The keys in `layerCounts` are layer names (or numeric IDs for unnamed layers).
 
 ---
 
-## Write API — 共通事項
+## Write API — Common Notes
 
-> **セキュリティ:** Write 系エンドポイントはデフォルトで**無効**です。  
-> **Window > UnionAir > REST Bridge** の各トグルで有効化してください。  
-> すべての書き込み操作は Unity Editor の Undo（Ctrl+Z）で元に戻せます。
+> **Security:** Write endpoints are **disabled** by default.  
+> Enable them using the toggles under **Window > UnionAir > REST Bridge**.  
+> All write operations can be undone with Unity Editor Undo (Ctrl+Z).
 
 ---
 
 ## POST /api/gameobjects
 
-新しい空の GameObject をシーンに作成します。
+Creates a new empty GameObject in the scene.
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -610,12 +610,12 @@ curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false
 }
 ```
 
-| フィールド | 必須 | 説明 |
+| Field | Required | Description |
 |-----------|------|------|
-| `name` | ✅ | 作成する GameObject の名前 |
-| `parentPath` | ❌ | 親 GameObject のパス。省略するとシーンルートに配置 |
+| `name` | ✅ | Name of the GameObject to create |
+| `parentPath` | ❌ | Path of the parent GameObject. If omitted, it is placed at the scene root |
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -624,21 +624,21 @@ curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false
 }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `name` が未指定 |
-| 404 | `parentPath` が存在しない |
-| 403 | Write API が無効 |
+| 400 | `name` is missing |
+| 404 | `parentPath` does not exist |
+| 403 | Write API is disabled |
 
 ---
 
 ## POST /api/gameobjects/primitive
 
-プリミティブ型の GameObject を作成します。
+Creates a primitive-type GameObject.
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -648,13 +648,13 @@ curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false
 }
 ```
 
-| フィールド | 必須 | 説明 |
+| Field | Required | Description |
 |-----------|------|------|
 | `type` | ✅ | `Cube` \| `Sphere` \| `Capsule` \| `Cylinder` \| `Plane` \| `Quad` |
-| `name` | ❌ | 省略時はタイプ名がそのまま使用される |
-| `parentPath` | ❌ | 親 GameObject のパス。省略するとシーンルート |
+| `name` | ❌ | If omitted, the type name is used as-is |
+| `parentPath` | ❌ | Path of the parent GameObject. If omitted, the scene root |
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -663,52 +663,52 @@ curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false
 }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `type` が未指定または不正 |
-| 403 | Write API が無効 |
+| 400 | `type` is missing or invalid |
+| 403 | Write API is disabled |
 
 ---
 
 ## DELETE /api/gameobjects
 
-指定パスの GameObject をシーンから削除します。
+Deletes the GameObject at the specified path from the scene.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 必須 | 説明 |
+| Parameter | Required | Description |
 |-------------|------|------|
-| `path` | ✅ | 削除する GameObject のパス |
+| `path` | ✅ | Path of the GameObject to delete |
 
-### レスポンス
+### Response
 
 ```json
 { "deleted": "Canvas/MyObject" }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `path` が未指定 |
-| 404 | 指定パスが存在しない |
-| 403 | Write API が無効 |
+| 400 | `path` is missing |
+| 404 | The specified path does not exist |
+| 403 | Write API is disabled |
 
 ---
 
 ## PATCH /api/gameobjects
 
-指定パスの GameObject のプロパティを更新します。
+Updates the properties of the GameObject at the specified path.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 必須 | 説明 |
+| Parameter | Required | Description |
 |-------------|------|------|
-| `path` | ✅ | 対象 GameObject のパス |
+| `path` | ✅ | Path of the target GameObject |
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -724,55 +724,55 @@ curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false
 }
 ```
 
-すべてのフィールドはオプションです。省略したフィールドは変更されません。`transform` の各サブフィールドも同様にオプションです。
+All fields are optional. Omitted fields are not changed. Each subfield of `transform` is likewise optional.
 
-### レスポンス
+### Response
 
 ```json
 { "path": "Canvas/RenamedObject", "name": "RenamedObject" }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `path` が未指定 |
-| 404 | 指定パスが存在しない |
-| 403 | Write API が無効 |
+| 400 | `path` is missing |
+| 404 | The specified path does not exist |
+| 403 | Write API is disabled |
 
 ---
 
 ## POST /api/gameobjects/duplicate
 
-指定パスの GameObject を複製します。
+Duplicates the GameObject at the specified path.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 必須 | 説明 |
+| Parameter | Required | Description |
 |-------------|------|------|
-| `path` | ✅ | 複製元 GameObject のパス |
+| `path` | ✅ | Path of the source GameObject to duplicate |
 
-### レスポンス
+### Response
 
 ```json
 { "path": "Canvas/MyObject (1)", "name": "MyObject (1)" }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `path` が未指定 |
-| 404 | 指定パスが存在しない |
-| 403 | Write API が無効 |
+| 400 | `path` is missing |
+| 404 | The specified path does not exist |
+| 403 | Write API is disabled |
 
 ---
 
 ## POST /api/gameobjects/reparent
 
-GameObject を別の親に移動します。
+Moves a GameObject to a different parent.
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -781,32 +781,32 @@ GameObject を別の親に移動します。
 }
 ```
 
-| フィールド | 必須 | 説明 |
+| Field | Required | Description |
 |-----------|------|------|
-| `path` | ✅ | 移動する GameObject のパス |
-| `parentPath` | ❌ | 新しい親のパス。省略するとシーンルートへ移動 |
+| `path` | ✅ | Path of the GameObject to move |
+| `parentPath` | ❌ | Path of the new parent. If omitted, moves to the scene root |
 
-### レスポンス
+### Response
 
 ```json
 { "path": "Canvas/NewPanel/Button" }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `path` が未指定 |
-| 404 | `path` または `parentPath` が存在しない |
-| 403 | Write API が無効 |
+| 400 | `path` is missing |
+| 404 | `path` or `parentPath` does not exist |
+| 403 | Write API is disabled |
 
 ---
 
 ## POST /api/gameobjects/batch
 
-複数の create / update / delete 操作を**1 つの Undo グループ**としてまとめて実行します。
+Executes multiple create / update / delete operations together as **a single Undo group**.
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -819,9 +819,9 @@ GameObject を別の親に移動します。
 }
 ```
 
-#### `op` の種類
+#### `op` Types
 
-| `op` | 必須フィールド | オプションフィールド |
+| `op` | Required Fields | Optional Fields |
 |------|--------------|------------------|
 | `create` | `name` | `parentPath`, `transform` |
 | `create_primitive` | `type` (`Cube`\|`Sphere`\|`Capsule`\|`Cylinder`\|`Plane`\|`Quad`) | `name`, `parentPath`, `transform` |
@@ -830,7 +830,7 @@ GameObject を別の親に移動します。
 
 `transform` shape: `{"position":{"x":0,"y":0,"z":0},"rotation":{...},"scale":{...}}`
 
-### レスポンス (HTTP 207)
+### Response (HTTP 207)
 
 ```json
 {
@@ -845,22 +845,22 @@ GameObject を別の親に移動します。
 }
 ```
 
-1 つの操作が失敗しても残りの操作は継続されます。すべての成功操作は単一の Undo グループにまとめられます。
+Even if one operation fails, the remaining operations continue. All successful operations are grouped into a single Undo group.
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `operations` が未指定または空 |
-| 403 | Write API が無効 |
+| 400 | `operations` is missing or empty |
+| 403 | Write API is disabled |
 
 ---
 
 ## POST /api/gameobjects/components
 
-指定 GameObject にコンポーネントを追加します。
+Adds a component to the specified GameObject.
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -869,67 +869,67 @@ GameObject を別の親に移動します。
 }
 ```
 
-| フィールド | 必須 | 説明 |
+| Field | Required | Description |
 |-----------|------|------|
-| `path` | ✅ | 対象 GameObject のパス |
-| `type` | ✅ | 追加するコンポーネントの完全修飾型名 |
+| `path` | ✅ | Path of the target GameObject |
+| `type` | ✅ | Fully qualified type name of the component to add |
 
-### レスポンス
+### Response
 
 ```json
 { "path": "Canvas/MyObject", "component": "UnityEngine.BoxCollider" }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `path` または `type` が未指定 |
-| 404 | 指定パスが存在しない |
-| 422 | 型名が解決できない、またはコンポーネントの追加に失敗 |
-| 403 | Write API が無効 |
+| 400 | `path` or `type` is missing |
+| 404 | The specified path does not exist |
+| 422 | The type name cannot be resolved, or adding the component failed |
+| 403 | Write API is disabled |
 
 ---
 
 ## DELETE /api/gameobjects/components
 
-指定 GameObject からコンポーネントを削除します。
+Removes a component from the specified GameObject.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 必須 | 説明 |
+| Parameter | Required | Description |
 |-------------|------|------|
-| `path` | ✅ | 対象 GameObject のパス |
-| `type` | ✅ | 削除するコンポーネントの完全修飾型名 |
+| `path` | ✅ | Path of the target GameObject |
+| `type` | ✅ | Fully qualified type name of the component to remove |
 
-### レスポンス
+### Response
 
 ```json
 { "path": "Canvas/MyObject", "removed": "UnityEngine.BoxCollider" }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `path` または `type` が未指定 |
-| 404 | 指定パスが存在しない、またはコンポーネントが存在しない |
-| 403 | Write API が無効 |
+| 400 | `path` or `type` is missing |
+| 404 | The specified path does not exist, or the component does not exist |
+| 403 | Write API is disabled |
 
 ---
 
 ## PATCH /api/gameobjects/components
 
-指定コンポーネントのシリアライズ済みプロパティを更新します。
+Updates serialized properties of the specified component.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 必須 | 説明 |
+| Parameter | Required | Description |
 |-------------|------|------|
-| `path` | ✅ | 対象 GameObject のパス |
-| `type` | ✅ | 対象コンポーネントの完全修飾型名 |
+| `path` | ✅ | Path of the target GameObject |
+| `type` | ✅ | Fully qualified type name of the target component |
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -940,31 +940,31 @@ GameObject を別の親に移動します。
 }
 ```
 
-`properties` の各キーは `SerializedProperty` のプロパティパス（`SerializedObject` のフィールド名）です。
+Each key in `properties` is a `SerializedProperty` property path (a `SerializedObject` field name).
 
-### レスポンス
+### Response
 
 ```json
 { "path": "Directional Light", "component": "UnityEngine.Light", "updated": ["m_Intensity", "m_Color"] }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `path` / `type` / `properties` が未指定 |
-| 404 | GameObject またはコンポーネントが存在しない |
-| 403 | Write API が無効 |
+| 400 | `path` / `type` / `properties` is missing |
+| 404 | The GameObject or component does not exist |
+| 403 | Write API is disabled |
 
 ---
 
 ## POST /api/scene/save
 
-現在のシーンをディスクに保存します。
+Saves the current scene to disk.
 
-> Asset Write API が有効の場合のみ呼び出せます。
+> Can be called only when the Asset Write API is enabled.
 
-### レスポンス
+### Response
 
 ```json
 { "saved": true, "path": "Assets/Scenes/SampleScene.unity" }
@@ -974,11 +974,11 @@ GameObject を別の親に移動します。
 
 ## POST /api/editor/refresh
 
-`AssetDatabase.Refresh()` を呼び出し、スクリプトや素材の変更を Unity に認識させます。
+Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and assets.
 
-> Asset Write API が有効の場合のみ呼び出せます。
+> Can be called only when the Asset Write API is enabled.
 
-### レスポンス
+### Response
 
 ```json
 {
@@ -989,17 +989,17 @@ GameObject を別の親に移動します。
 }
 ```
 
-> 新しいスクリプトコンポーネントをアタッチする前に `GET /api/editor/status` をポーリングし、`isCompiling: false` になるまで待機してください。
+> Before attaching a new script component, poll `GET /api/editor/status` and wait until `isCompiling: false`.
 
 ---
 
 ## POST /api/assets/prefabs
 
-シーン内の GameObject からプレハブを作成します。
+Creates a prefab from a GameObject in the scene.
 
-> Asset Write API が有効の場合のみ呼び出せます。
+> Can be called only when the Asset Write API is enabled.
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -1009,41 +1009,41 @@ GameObject を別の親に移動します。
 }
 ```
 
-| フィールド | 必須 | 説明 |
+| Field | Required | Description |
 |-----------|------|------|
-| `goPath` | ✅ | ソース GameObject のパス |
-| `assetPath` | ✅ | 保存先のアセットパス（`Assets/` から始まる `.prefab` ファイル） |
-| `mode` | ✅ | `new`（インスタンスを接続して作成）または `replace`（既存プレハブを上書き） |
+| `goPath` | ✅ | Path of the source GameObject |
+| `assetPath` | ✅ | Destination asset path (a `.prefab` file starting with `Assets/`) |
+| `mode` | ✅ | `new` (create while connecting the instance) or `replace` (overwrite an existing prefab) |
 
-### レスポンス
+### Response
 
 ```json
 { "assetPath": "Assets/Prefabs/Player.prefab", "guid": "a1b2c3..." }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | 必須フィールドが不足、または `mode` が不正 |
-| 404 | `goPath` が存在しない |
-| 403 | Asset Write API が無効 |
+| 400 | Required fields are missing, or `mode` is invalid |
+| 404 | `goPath` does not exist |
+| 403 | Asset Write API is disabled |
 
 ---
 
 ## POST /api/assets/prefabs/apply
 
-プレハブインスタンスのオーバーライドをプレハブアセットに適用します。
+Applies prefab instance overrides to the prefab asset.
 
-> Asset Write API が有効の場合のみ呼び出せます。
+> Can be called only when the Asset Write API is enabled.
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 { "goPath": "Stage/Player" }
 ```
 
-### レスポンス
+### Response
 
 ```json
 { "applied": true, "goPath": "Stage/Player" }
@@ -1053,17 +1053,17 @@ GameObject を別の親に移動します。
 
 ## POST /api/assets/prefabs/revert
 
-プレハブインスタンスをプレハブアセットの状態に戻します。
+Reverts a prefab instance to the state of the prefab asset.
 
-> Asset Write API が有効の場合のみ呼び出せます。
+> Can be called only when the Asset Write API is enabled.
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 { "goPath": "Stage/Player" }
 ```
 
-### レスポンス
+### Response
 
 ```json
 { "reverted": true, "goPath": "Stage/Player" }
@@ -1073,11 +1073,11 @@ GameObject を別の親に移動します。
 
 ## POST /api/assets/materials
 
-新しいマテリアルアセットを作成します。
+Creates a new material asset.
 
-> Asset Write API が有効の場合のみ呼び出せます。
+> Can be called only when the Asset Write API is enabled.
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -1086,40 +1086,40 @@ GameObject を別の親に移動します。
 }
 ```
 
-| フィールド | 必須 | 説明 |
+| Field | Required | Description |
 |-----------|------|------|
-| `assetPath` | ✅ | 保存先（`Assets/` から始まる `.mat` ファイル） |
-| `shader` | ✅ | シェーダー名 |
+| `assetPath` | ✅ | Destination (`Assets/`-prefixed `.mat` file) |
+| `shader` | ✅ | Shader name |
 
-### レスポンス
+### Response
 
 ```json
 { "guid": "d4e5f6...", "assetPath": "Assets/Materials/MyMat.mat" }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | 必須フィールドが不足 |
-| 422 | シェーダーが見つからない |
-| 403 | Asset Write API が無効 |
+| 400 | Required fields are missing |
+| 422 | Shader not found |
+| 403 | Asset Write API is disabled |
 
 ---
 
 ## PATCH /api/assets/materials
 
-マテリアルのプロパティを更新します。
+Updates material properties.
 
-> Asset Write API が有効の場合のみ呼び出せます。
+> Can be called only when the Asset Write API is enabled.
 
-### クエリパラメーター
+### Query Parameters
 
-| パラメーター | 必須 | 説明 |
+| Parameter | Required | Description |
 |-------------|------|------|
-| `guid` | ✅ | 対象マテリアルの GUID |
+| `guid` | ✅ | GUID of the target material |
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -1131,66 +1131,66 @@ GameObject を別の親に移動します。
 }
 ```
 
-`properties` の値の型:
+Types of values in `properties`:
 
-| 型 | 形式 |
+| Type | Format |
 |----|------|
 | Color | `{"r":float,"g":float,"b":float,"a":float}` |
 | Float | `float` |
 | Vector | `{"x":float,"y":float,"z":float,"w":float}` |
-| Texture | GUID 文字列 |
+| Texture | GUID string |
 
-### レスポンス
+### Response
 
 ```json
 { "guid": "d4e5f6...", "updated": ["_BaseColor", "_Metallic"] }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `guid` が未指定 |
-| 404 | 該当マテリアルが存在しない |
-| 403 | Asset Write API が無効 |
+| 400 | `guid` is missing |
+| 404 | No matching material exists |
+| 403 | Asset Write API is disabled |
 
 ---
 
 ## DELETE /api/assets/{guid}
 
-アセットとその `.meta` ファイルを削除します。
+Deletes the asset and its `.meta` file.
 
-> Asset Write API が有効の場合のみ呼び出せます。
+> Can be called only when the Asset Write API is enabled.
 
-### パスパラメーター
+### Path Parameters
 
-| パラメーター | 説明 |
+| Parameter | Description |
 |-------------|------|
-| `guid` | 削除するアセットの GUID |
+| `guid` | GUID of the asset to delete |
 
-### レスポンス
+### Response
 
 ```json
 { "deleted": "Assets/Textures/old_icon.png" }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | GUID が空 |
-| 404 | 該当アセットが存在しない |
-| 403 | Asset Write API が無効 |
+| 400 | GUID is empty |
+| 404 | No matching asset exists |
+| 403 | Asset Write API is disabled |
 
 ---
 
 ## POST /api/assets/move
 
-アセットを移動/リネームします。GUID およびプロジェクト内の参照は保持されます。
+Moves/renames an asset. Its GUID and references within the project are preserved.
 
-> Asset Write API が有効の場合のみ呼び出せます。
+> Can be called only when the Asset Write API is enabled.
 
-### リクエスト Body (JSON)
+### Request Body (JSON)
 
 ```json
 {
@@ -1199,36 +1199,36 @@ GameObject を別の親に移動します。
 }
 ```
 
-| フィールド | 必須 | 説明 |
+| Field | Required | Description |
 |-----------|------|------|
-| `guid` | ✅ | 移動するアセットの GUID |
-| `newPath` | ✅ | 移動先のパス（`Assets/` から始まる） |
+| `guid` | ✅ | GUID of the asset to move |
+| `newPath` | ✅ | Destination path (starts with `Assets/`) |
 
-### レスポンス
+### Response
 
 ```json
 { "guid": "a1b2c3...", "newPath": "Assets/Textures/Renamed/icon.png" }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | `guid` または `newPath` が未指定 |
-| 404 | 該当アセットが存在しない |
-| 422 | 移動操作が失敗（パスの重複など） |
-| 403 | Asset Write API が無効 |
+| 400 | `guid` or `newPath` is missing |
+| 404 | No matching asset exists |
+| 422 | Move operation failed (duplicate path, etc.) |
+| 403 | Asset Write API is disabled |
 
 ---
 
 ## POST /api/editor/play
 
-プレイモードに入ります（`EditorApplication.isPlaying = true`）。
+Enters Play mode (`EditorApplication.isPlaying = true`).
 
-> Play Mode API が有効の場合のみ呼び出せます。  
-> ドメインリロードが発生する場合、HTTP サーバーは一時的に再起動します。`GET /api/editor/status` をポーリングして `isPlaying: true` になるまで待機してください。
+> Can be called only when the Play Mode API is enabled.  
+> If a domain reload occurs, the HTTP server will restart temporarily. Poll `GET /api/editor/status` and wait until `isPlaying: true`.
 
-### レスポンス
+### Response
 
 ```json
 { "requested": true, "action": "play" }
@@ -1238,11 +1238,11 @@ GameObject を別の親に移動します。
 
 ## POST /api/editor/stop
 
-プレイモードを終了します（`EditorApplication.isPlaying = false`）。
+Exits Play mode (`EditorApplication.isPlaying = false`).
 
-> Play Mode API が有効の場合のみ呼び出せます。
+> Can be called only when the Play Mode API is enabled.
 
-### レスポンス
+### Response
 
 ```json
 { "requested": true, "action": "stop" }
@@ -1252,17 +1252,17 @@ GameObject を別の親に移動します。
 
 ## POST /api/editor/pause
 
-一時停止状態を設定します。Body 省略時は現在の状態をトグルします。
+Sets the paused state. If the body is omitted, toggles the current state.
 
-> Play Mode API が有効の場合のみ呼び出せます。
+> Can be called only when the Play Mode API is enabled.
 
-### リクエスト Body (JSON、オプション)
+### Request Body (JSON, optional)
 
 ```json
 { "paused": true }
 ```
 
-### レスポンス
+### Response
 
 ```json
 { "isPaused": true }
@@ -1272,19 +1272,19 @@ GameObject を別の親に移動します。
 
 ## POST /api/editor/step
 
-1 フレーム進めます。`isPaused: true` のときのみ有効です。
+Advances by one frame. Valid only when `isPaused: true`.
 
-> Play Mode API が有効の場合のみ呼び出せます。
+> Can be called only when the Play Mode API is enabled.
 
-### レスポンス
+### Response
 
 ```json
 { "stepped": true }
 ```
 
-### エラー
+### Errors
 
-| ステータス | 原因 |
+| Status | Cause |
 |-----------|------|
-| 400 | プレイモードでない、または一時停止していない |
-| 403 | Play Mode API が無効 |
+| 400 | Not in Play mode, or not paused |
+| 403 | Play Mode API is disabled |

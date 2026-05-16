@@ -1,27 +1,27 @@
 # UnionAir — Unity REST Bridge
 
-UnionAir は Unity Editor の状態をシンプルな **REST API** として外部に公開する Editor 専用パッケージです。  
-LLM の MCP ブリッジ・開発ボット・CI ツールなど、HTTP を話せるあらゆるクライアントから Unity の情報を取得できます。
+UnionAir is an Editor-only package that exposes the state of the Unity Editor externally as a simple **REST API**.  
+It allows any HTTP-capable client—such as LLM MCP bridges, development bots, and CI tools—to retrieve information from Unity.
 
 ---
 
-## セットアップ
+## Setup
 
-### 1. パッケージのインポート
+### 1. Import the package
 
-プロジェクトの `Packages/com.leonakasaka.unionair/` フォルダが存在すれば Unity が自動で検出します（embedded package）。特別な操作は不要です。
+If the project's `Packages/com.leonakasaka.unionair/` folder exists, Unity will detect it automatically (embedded package). No special action is required.
 
-### 2. サーバーの確認
+### 2. Check the server
 
-Unity Editor を開くと自動的に REST サーバーが起動します（デフォルトポート: **8765**）。
+When you open the Unity Editor, the REST server starts automatically (default port: **8765**).
 
 ```
 Window > UnionAir > REST Bridge
 ```
 
-上記のメニューから EditorWindow を開き、サーバーの状態を確認してください。
+Open the EditorWindow from the menu above and check the server status.
 
-### 3. 動作確認
+### 3. Verify operation
 
 ```bash
 curl http://localhost:8765/api/health
@@ -30,9 +30,9 @@ curl http://localhost:8765/api/health
 
 ---
 
-## クイックスタート
+## Quick Start
 
-### シーンのヒエラルキーを取得する
+### Get the scene hierarchy
 
 ```bash
 curl http://localhost:8765/api/scene/hierarchy
@@ -59,44 +59,44 @@ curl http://localhost:8765/api/scene/hierarchy
 }
 ```
 
-### 特定 GameObject のコンポーネントを確認する
+### Check the components of a specific GameObject
 
 ```bash
 curl "http://localhost:8765/api/gameobjects?path=Main Camera"
 ```
 
-### アセット一覧を検索する
+### Search the asset list
 
 ```bash
-# すべての Texture2D
+# All Texture2D
 curl "http://localhost:8765/api/assets?type=Texture2D"
 
-# パスでフィルター
+# Filter by path
 curl "http://localhost:8765/api/assets?path=Assets/UI"
 ```
 
 ---
 
-## EditorWindow の操作
+## Using the EditorWindow
 
-| 項目 | 説明 |
+| Item | Description |
 |------|------|
-| **Status** | サーバーの起動状態とポート番号を表示 |
-| **Port** | サーバーのリッスンポート（停止中のみ変更可） |
-| **Auto Start on Load** | Editor 起動時に自動でサーバーを起動するか |
-| **Start / Stop / Restart** | サーバーの手動制御 |
-| **Request Log** | 受信したリクエストのログ（最新 100 件） |
+| **Status** | Displays the server running state and port number |
+| **Port** | The server listening port (can only be changed while stopped) |
+| **Auto Start on Load** | Whether to start the server automatically when the Editor starts |
+| **Start / Stop / Restart** | Manual control of the server |
+| **Request Log** | Log of received requests (latest 100 entries) |
 
 ---
 
-## ドキュメント
+## Documentation
 
-- [API リファレンス](api-reference.md) — 全エンドポイントの詳細仕様
+- [API Reference](api-reference.md) — Detailed specifications for all endpoints
 
 ---
 
-## ライフサイクル
+## Lifecycle
 
-- **Editor 起動時**: `[InitializeOnLoad]` によりサーバーが自動起動
-- **Domain リロード時**: ポートを解放してスレッドを停止し、リロード後に自動再起動
-- **プレイモード中**: サーバーは継続稼働。Exit Play Mode 後に停止していれば自動再起動
+- **When the Editor starts**: The server starts automatically via `[InitializeOnLoad]`
+- **During Domain reload**: Releases the port and stops the thread, then restarts automatically after the reload
+- **In Play Mode**: The server continues running. If it was stopped after Exit Play Mode, it restarts automatically

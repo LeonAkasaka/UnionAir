@@ -16,6 +16,15 @@ All implementation lives under `Editor/` and is excluded from runtime builds via
 | `Documentation~/api-reference.md` | Full endpoint reference (requests, responses, and examples) |
 | `CHANGELOG.md` | Version history in Keep a Changelog format |
 
+## Language Policy
+
+**All documentation, source code comments, and commit messages must be in English.**
+
+- Exception: Markdown table cell content may use English to maintain international clarity.
+- Source files: C# code comments, XML docs, and inline comments must be English.
+- Documentation: All `.md` files must be English.
+- Commit messages: Use English. Include a co-authored-by trailer for AI contributions.
+
 ## Documentation Update Rules
 
 **Whenever an API endpoint is added, changed, or removed, update the following in the same commit:**
@@ -23,7 +32,7 @@ All implementation lives under `Editor/` and is excluded from runtime builds via
 1. **`Documentation~/api-reference.md`** — add or update the relevant endpoint section
 2. **`CHANGELOG.md`** — record the change under `[Unreleased]`
 
-Update `README.md` only for overview-level changes (e.g., a new Phase being introduced).
+Update `README.md` only for overview-level changes (e.g., a new capability being introduced).
 
 ## Coding Conventions
 
@@ -42,3 +51,4 @@ Update `README.md` only for overview-level changes (e.g., a new Phase being intr
 - `main` is the stable branch
 - Develop new features on a feature branch and merge via PR
 - Write commit messages in English, concisely describing the change
+- Include the co-authored-by trailer: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
