@@ -170,7 +170,7 @@ namespace LeonAkasaka.UnionAir.Editor
             return current;
         }
 
-        private static string F(float v) => v.ToString("G", CultureInfo.InvariantCulture);
+        private static string F(float v) => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("G", CultureInfo.InvariantCulture);
         private static string Bool(bool b) => b ? "true" : "false";
     }
 }

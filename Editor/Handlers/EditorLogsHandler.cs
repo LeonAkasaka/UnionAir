@@ -36,10 +36,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (i > 0) sb.Append(",");
                 var e = entries[i];
                 sb.Append("{");
-                sb.Append($"\"type\":\"{e.Type}\",");
+                sb.Append($"\"type\":\"{RestResponse.EscapeJson(e.Type.ToString())}\",");
                 sb.Append($"\"message\":\"{RestResponse.EscapeJson(e.Message)}\",");
                 sb.Append($"\"stackTrace\":\"{RestResponse.EscapeJson(e.StackTrace)}\",");
-                sb.Append($"\"timestamp\":\"{e.Timestamp:yyyy-MM-ddTHH:mm:ss}\"");
+                sb.Append($"\"timestamp\":\"{RestResponse.EscapeJson(e.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss"))}\"");
                 sb.Append("}");
             }
 

@@ -3,6 +3,8 @@
 Base URL: `http://localhost:<port>/api/` (default port: **8765**)
 
 All responses are returned with `Content-Type: application/json; charset=utf-8` and include the CORS header (`Access-Control-Allow-Origin: *`).
+String fields in JSON responses are escaped consistently, including control characters.
+Non-finite floating-point values (`NaN`, `Infinity`, `-Infinity`) are emitted as `null` in JSON numeric fields.
 
 ---
 

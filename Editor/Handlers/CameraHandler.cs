@@ -119,9 +119,9 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"cameraPath\":\"{RestResponse.EscapeJson(path)}\",");
             sb.Append($"\"width\":{width},");
             sb.Append($"\"height\":{height},");
-            sb.Append($"\"format\":\"{format}\",");
-            sb.Append($"\"mimeType\":\"{mimeType}\",");
-            sb.Append($"\"data\":\"{base64}\"");
+            sb.Append($"\"format\":\"{RestResponse.EscapeJson(format)}\",");
+            sb.Append($"\"mimeType\":\"{RestResponse.EscapeJson(mimeType)}\",");
+            sb.Append($"\"data\":\"{RestResponse.EscapeJson(base64)}\"");
             sb.Append("}");
             RestResponse.Send(response, sb.ToString());
         }
@@ -217,6 +217,6 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         private static string Bool(bool b) => b ? "true" : "false";
-        private static string F(float v)   => v.ToString("G", CultureInfo.InvariantCulture);
+        private static string F(float v)   => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("G", CultureInfo.InvariantCulture);
     }
 }

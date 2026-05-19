@@ -69,7 +69,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(go.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(goPath)}\",");
-            sb.Append($"\"primitiveType\":\"{primitiveType}\",");
+            sb.Append($"\"primitiveType\":\"{RestResponse.EscapeJson(primitiveType.ToString())}\",");
             sb.Append("\"components\":[");
             for (int i = 0; i < components.Length; i++)
             {

@@ -10,7 +10,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
-            var json = $"{{\"status\":\"ok\",\"unityVersion\":\"{Application.unityVersion}\"}}";
+            var json = $"{{\"status\":\"ok\",\"unityVersion\":\"{RestResponse.EscapeJson(Application.unityVersion)}\"}}";
             RestResponse.Send(response, json);
         }
     }

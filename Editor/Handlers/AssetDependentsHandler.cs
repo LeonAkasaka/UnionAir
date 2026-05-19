@@ -38,7 +38,7 @@ namespace LeonAkasaka.UnionAir.Editor
             int depCount   = 0;
 
             sb.Append("{\"asset\":{");
-            sb.Append($"\"guid\":\"{guid}\",");
+            sb.Append($"\"guid\":\"{RestResponse.EscapeJson(guid)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(targetPath)}\",");
             sb.Append($"\"type\":\"{RestResponse.EscapeJson(targetTypeName)}\"");
             sb.Append("},\"dependents\":[");
@@ -61,7 +61,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 if (depCount > 0) sb.Append(",");
                 sb.Append("{");
-                sb.Append($"\"guid\":\"{candidateGuid}\",");
+                sb.Append($"\"guid\":\"{RestResponse.EscapeJson(candidateGuid)}\",");
                 sb.Append($"\"path\":\"{RestResponse.EscapeJson(candidatePath)}\",");
                 sb.Append($"\"type\":\"{RestResponse.EscapeJson(typeName)}\"");
                 sb.Append("}");

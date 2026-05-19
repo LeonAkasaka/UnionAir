@@ -61,7 +61,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var guid = AssetDatabase.AssetPathToGUID(assetPath);
             RestResponse.Send(response,
-                $"{{\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",\"guid\":\"{guid}\"," +
+                $"{{\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",\"guid\":\"{RestResponse.EscapeJson(guid)}\"," +
                 $"\"shader\":\"{RestResponse.EscapeJson(shaderName)}\"}}", 201);
         }
 

@@ -58,7 +58,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 if (returned > 0) sb.Append(",");
                 sb.Append("{");
-                sb.Append($"\"guid\":\"{guid}\",");
+                sb.Append($"\"guid\":\"{RestResponse.EscapeJson(guid)}\",");
                 sb.Append($"\"path\":\"{RestResponse.EscapeJson(assetPath)}\",");
                 sb.Append($"\"type\":\"{RestResponse.EscapeJson(typeName)}\"");
                 sb.Append("}");
@@ -92,7 +92,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var sb = new StringBuilder();
             sb.Append("{");
-            sb.Append($"\"guid\":\"{guid}\",");
+            sb.Append($"\"guid\":\"{RestResponse.EscapeJson(guid)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(assetPath)}\",");
             sb.Append($"\"type\":\"{RestResponse.EscapeJson(typeName)}\",");
 

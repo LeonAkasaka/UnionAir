@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Hardened JSON string escaping in API responses to correctly encode control characters and prevent malformed JSON output from string fields.
+- Normalized non-finite float values (`NaN`, `Infinity`, `-Infinity`) to `null` in JSON responses to keep numeric fields JSON-compliant.
+
 ## [0.1.0] - 2026-05-17
 
 ### Added

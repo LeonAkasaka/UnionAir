@@ -37,7 +37,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var sb = new StringBuilder();
             sb.Append("{\"asset\":{");
-            sb.Append($"\"guid\":\"{guid}\",");
+            sb.Append($"\"guid\":\"{RestResponse.EscapeJson(guid)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(assetPath)}\",");
             sb.Append($"\"type\":\"{RestResponse.EscapeJson(assetTypeName)}\"");
             sb.Append("},\"references\":[");
