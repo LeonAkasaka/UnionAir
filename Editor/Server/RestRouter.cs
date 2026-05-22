@@ -1,26 +1,28 @@
 using System.Collections.Generic;
 using System.Net;
+using System.Reflection;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
     /// <summary>
-    /// Routes incoming HTTP requests to the appropriate <see cref="IRequestHandler"/>.
+    /// Routes incoming HTTP requests to controller methods discovered from route attributes.
     /// </summary>
     internal class RestRouter
     {
-        private readonly List<IRequestHandler> _handlers = new List<IRequestHandler>();
-
-        public void Register(IRequestHandler handler)
+        public RestRouter()
         {
-            _handlers.Add(handler);
+            UnionAirRouteRegistry.Refresh();
         }
 
+        /// <summary>
+        /// Dispatches an HTTP listener context to the matching route descriptor.
+        /// </summary>
+        /// <param name="context">HTTP listener context received by the server.</param>
         public void Handle(HttpListenerContext context)
         {
             var request = context.Request;
             var response = context.Response;
 
-            // CORS preflight
             if (request.HttpMethod == "OPTIONS")
             {
                 RestResponse.AddCorsHeaders(response);
@@ -28,71 +30,49 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            // Permission gate
-            if (request.HttpMethod != "GET")
+            var pathMatched = false;
+            foreach (var descriptor in UnionAirRouteRegistry.Descriptors)
             {
-                if (IsAssetMutation(request))
-                {
-                    if (!UnionAirSettings.AssetWriteEnabled)
-                    {
-                        RestResponse.SendError(response,
-                            "Asset Write API is disabled. Enable it in Window > UnionAir > REST Bridge.", 403);
-                        return;
-                    }
-                }
-                else if (IsPlayMutation(request))
-                {
-                    if (!UnionAirSettings.PlayModeEnabled)
-                    {
-                        RestResponse.SendError(response,
-                            "Play Mode API is disabled. Enable it in Window > UnionAir > REST Bridge.", 403);
-                        return;
-                    }
-                }
-                else
-                {
-                    if (!UnionAirSettings.WriteEnabled)
-                    {
-                        RestResponse.SendError(response,
-                            "Write API is disabled. Enable it in Window > UnionAir > REST Bridge.", 403);
-                        return;
-                    }
-                }
-            }
+                var routeValues = new Dictionary<string, string>();
+                if (!descriptor.TryMatch(request.Url.AbsolutePath, routeValues))
+                    continue;
 
-            foreach (var handler in _handlers)
-            {
-                if (handler.CanHandle(request))
+                pathMatched = true;
+                if (descriptor.Method != request.HttpMethod)
+                    continue;
+
+                if (!descriptor.Enabled)
                 {
-                    handler.Handle(request, response);
+                    RestResponse.SendError(response,
+                        string.IsNullOrEmpty(descriptor.Error)
+                            ? descriptor.CategoryDefinition.DisplayName + " category is disabled."
+                            : descriptor.Error,
+                        403);
                     return;
                 }
+
+                var routeContext = new UnionAirRequestContext(request, response, routeValues, descriptor);
+                try
+                {
+                    descriptor.Handler.Invoke(descriptor.Target, new object[] { routeContext });
+                }
+                catch (TargetInvocationException ex)
+                {
+                    throw ex.InnerException ?? ex;
+                }
+                return;
+            }
+
+            if (pathMatched)
+            {
+                RestResponse.SendError(response,
+                    $"Method not allowed for {request.Url.AbsolutePath}", 405);
+                return;
             }
 
             RestResponse.SendNotFound(response,
                 $"No handler for {request.HttpMethod} {request.Url.AbsolutePath}");
         }
 
-        /// <summary>
-        /// Returns true for requests that mutate assets on disk (require AssetWriteEnabled).
-        /// All other mutating requests require WriteEnabled.
-        /// </summary>
-        private static bool IsAssetMutation(HttpListenerRequest request)
-        {
-            var path = request.Url.AbsolutePath;
-            return path.StartsWith("/api/assets") || path == "/api/scene/save" || path == "/api/editor/refresh";
-        }
-
-        /// <summary>
-        /// Returns true for requests that control play mode (require PlayModeEnabled).
-        /// </summary>
-        private static bool IsPlayMutation(HttpListenerRequest request)
-        {
-            var path = request.Url.AbsolutePath;
-            return path == "/api/editor/play"  ||
-                   path == "/api/editor/stop"  ||
-                   path == "/api/editor/pause" ||
-                   path == "/api/editor/step";
-        }
     }
 }

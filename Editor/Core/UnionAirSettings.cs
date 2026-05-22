@@ -2,22 +2,29 @@ using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
-    /// <summary>Persistent settings stored in EditorPrefs.</summary>
+    /// <summary>
+    /// Persistent UnionAir settings stored in Unity <see cref="EditorPrefs"/>.
+    /// </summary>
     public static class UnionAirSettings
     {
         private const string PortKey         = "UnionAir.Port";
         private const string AutoStartKey    = "UnionAir.AutoStart";
-        private const string WriteEnabledKey      = "UnionAir.WriteEnabled";
-        private const string AssetWriteEnabledKey  = "UnionAir.AssetWriteEnabled";
+        private const string CustomHandlersEnabledKey = "UnionAir.CustomHandlersEnabled";
+        private const string EnabledCategoriesKey = "UnionAir.EnabledCategories";
+        private const string DisabledCategoriesKey = "UnionAir.DisabledCategories";
 
-        private const string PlayModeEnabledKey  = "UnionAir.PlayModeEnabled";
-
+        /// <summary>
+        /// Gets or sets the TCP port used by the local HTTP server.
+        /// </summary>
         public static int Port
         {
             get => EditorPrefs.GetInt(PortKey, 8765);
             set => EditorPrefs.SetInt(PortKey, value);
         }
 
+        /// <summary>
+        /// Gets or sets whether UnionAir should start automatically when the Unity editor loads.
+        /// </summary>
         public static bool AutoStart
         {
             get => EditorPrefs.GetBool(AutoStartKey, true);
@@ -25,34 +32,86 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// When false (default), all non-GET requests are rejected with 403.
-        /// Must be explicitly enabled to allow scene modification via the API.
+        /// Gets or sets whether custom controllers from external Editor assemblies are globally enabled.
         /// </summary>
-        public static bool WriteEnabled
+        /// <remarks>
+        /// When this value is <c>false</c>, custom categories and endpoints remain discoverable with
+        /// <c>includeDisabled=true</c> but are not routable.
+        /// </remarks>
+        public static bool CustomHandlersEnabled
         {
-            get => EditorPrefs.GetBool(WriteEnabledKey, false);
-            set => EditorPrefs.SetBool(WriteEnabledKey, value);
+            get => EditorPrefs.GetBool(CustomHandlersEnabledKey, false);
+            set => EditorPrefs.SetBool(CustomHandlersEnabledKey, value);
         }
 
         /// <summary>
-        /// When false (default), all asset-mutating requests are rejected with 403.
-        /// Covers: prefab creation, material editing, asset delete/move, scene save.
-        /// Must be explicitly enabled separately from WriteEnabled.
+        /// Returns the effective enabled state for a category key.
         /// </summary>
-        public static bool AssetWriteEnabled
+        /// <param name="key">Stable category key, usually <see cref="UnionAirCategoryDefinition.Key"/>.</param>
+        /// <param name="enabledByDefault">Default state declared by the category metadata.</param>
+        /// <returns>The effective enabled state after applying persisted user overrides.</returns>
+        public static bool IsCategoryEnabled(string key, bool enabledByDefault)
         {
-            get => EditorPrefs.GetBool(AssetWriteEnabledKey, false);
-            set => EditorPrefs.SetBool(AssetWriteEnabledKey, value);
+            if (string.IsNullOrEmpty(key)) return false;
+            var enabled = EditorPrefs.GetString(EnabledCategoriesKey, "");
+            if (ContainsToken(enabled, key)) return true;
+            var disabled = EditorPrefs.GetString(DisabledCategoriesKey, "");
+            if (ContainsToken(disabled, key)) return false;
+            return enabledByDefault;
         }
 
         /// <summary>
-        /// When false (default), play/stop/pause/step requests are rejected with 403.
-        /// Controls EditorApplication.isPlaying and isPaused via the API.
+        /// Persists a category enabled-state override.
         /// </summary>
-        public static bool PlayModeEnabled
+        /// <param name="key">Stable category key, usually <see cref="UnionAirCategoryDefinition.Key"/>.</param>
+        /// <param name="enabled">New enabled state requested by the user.</param>
+        /// <param name="enabledByDefault">Default state declared by the category metadata.</param>
+        public static void SetCategoryEnabled(string key, bool enabled, bool enabledByDefault)
         {
-            get => EditorPrefs.GetBool(PlayModeEnabledKey, false);
-            set => EditorPrefs.SetBool(PlayModeEnabledKey, value);
+            if (string.IsNullOrEmpty(key)) return;
+
+            var explicitlyEnabled = EditorPrefs.GetString(EnabledCategoriesKey, "");
+            var disabled = EditorPrefs.GetString(DisabledCategoriesKey, "");
+            if (enabled == enabledByDefault)
+            {
+                explicitlyEnabled = RemoveToken(explicitlyEnabled, key);
+                disabled = RemoveToken(disabled, key);
+            }
+            else if (enabled)
+            {
+                disabled = RemoveToken(disabled, key);
+                if (!ContainsToken(explicitlyEnabled, key))
+                    explicitlyEnabled = string.IsNullOrEmpty(explicitlyEnabled) ? key : explicitlyEnabled + "," + key;
+            }
+            else
+            {
+                explicitlyEnabled = RemoveToken(explicitlyEnabled, key);
+                if (!ContainsToken(disabled, key))
+                    disabled = string.IsNullOrEmpty(disabled) ? key : disabled + "," + key;
+            }
+
+            EditorPrefs.SetString(EnabledCategoriesKey, explicitlyEnabled);
+            EditorPrefs.SetString(DisabledCategoriesKey, disabled);
+        }
+
+        private static bool ContainsToken(string csv, string token)
+        {
+            var parts = csv.Split(',');
+            foreach (var part in parts)
+                if (part == token) return true;
+            return false;
+        }
+
+        private static string RemoveToken(string csv, string token)
+        {
+            var parts = csv.Split(',');
+            var result = "";
+            foreach (var part in parts)
+            {
+                if (string.IsNullOrEmpty(part) || part == token) continue;
+                result = string.IsNullOrEmpty(result) ? part : result + "," + part;
+            }
+            return result;
         }
     }
 }

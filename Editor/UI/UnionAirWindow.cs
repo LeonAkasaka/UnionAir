@@ -4,38 +4,35 @@ using UnityEngine;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
+    /// <summary>
+    /// Unity EditorWindow used to control the UnionAir server and inspect discovered API routes.
+    /// </summary>
     public class UnionAirWindow : EditorWindow
     {
         private const int MaxLogLines = 100;
-        private const string PrefKeyReadFold       = "UnionAir.UI.Foldout.Read";
-        private const string PrefKeyWriteFold      = "UnionAir.UI.Foldout.Write";
-        private const string PrefKeyAssetWriteFold = "UnionAir.UI.Foldout.AssetWrite";
-        private const string PrefKeyPlayModeFold   = "UnionAir.UI.Foldout.PlayMode";
+        private const string PrefKeyTab = "UnionAir.UI.Tab";
 
         private readonly List<string> _log = new List<string>();
+        private Vector2 _scroll;
         private Vector2 _logScroll;
         private int _portInput;
+        private int _tab;
 
-        private bool _showReadEndpoints;
-        private bool _showWriteEndpoints;
-        private bool _showAssetWriteEndpoints;
-        private bool _showPlayModeEndpoints;
-
+        /// <summary>
+        /// Opens the UnionAir REST Bridge window.
+        /// </summary>
         [MenuItem("Window/UnionAir/REST Bridge")]
         public static void ShowWindow()
         {
             var window = GetWindow<UnionAirWindow>("UnionAir");
-            window.minSize = new Vector2(320, 380);
+            window.minSize = new Vector2(360, 420);
             window.Show();
         }
 
         private void OnEnable()
         {
             _portInput = UnionAirSettings.Port;
-            _showReadEndpoints       = EditorPrefs.GetBool(PrefKeyReadFold,       false);
-            _showWriteEndpoints      = EditorPrefs.GetBool(PrefKeyWriteFold,      false);
-            _showAssetWriteEndpoints = EditorPrefs.GetBool(PrefKeyAssetWriteFold, false);
-            _showPlayModeEndpoints   = EditorPrefs.GetBool(PrefKeyPlayModeFold,   false);
+            _tab = EditorPrefs.GetInt(PrefKeyTab, 0);
             UnionAirInit.Server.OnRequest += AddLog;
         }
 
@@ -54,97 +51,53 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private void OnGUI()
         {
-            var server = UnionAirInit.Server;
-            var isRunning = server.IsRunning;
-            var writeEnabled = UnionAirSettings.WriteEnabled;
-            var assetWriteEnabled = UnionAirSettings.AssetWriteEnabled;
-            var playModeEnabled = UnionAirSettings.PlayModeEnabled;
+            EditorGUILayout.Space(6);
+            EditorGUILayout.LabelField("UnionAir - REST Bridge", EditorStyles.boldLabel);
+
+            var newTab = GUILayout.Toolbar(_tab, new[] { "Server", "Built-in API", "Custom Handlers" });
+            if (newTab != _tab)
+            {
+                _tab = newTab;
+                EditorPrefs.SetInt(PrefKeyTab, _tab);
+            }
 
             EditorGUILayout.Space(6);
-            EditorGUILayout.LabelField("UnionAir — REST Bridge", EditorStyles.boldLabel);
-            EditorGUILayout.Space(4);
+            _scroll = EditorGUILayout.BeginScrollView(_scroll);
+            switch (_tab)
+            {
+                case 1: DrawBuiltInApiTab(); break;
+                case 2: DrawCustomHandlersTab(); break;
+                default: DrawServerTab(); break;
+            }
+            EditorGUILayout.EndScrollView();
+        }
 
-            // ── Status ──────────────────────────────────────────────────────────
+        private void DrawServerTab()
+        {
+            var server = UnionAirInit.Server;
+            var isRunning = server.IsRunning;
+
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUILayout.PrefixLabel("Status");
                 var prevColor = GUI.color;
                 GUI.color = isRunning ? Color.green : Color.gray;
-                var statusLabel = isRunning
-                        ? $"● Running  (port {server.Port}){(writeEnabled ? "  [WRITE]" : "")}{(assetWriteEnabled ? "  [ASSET-WRITE]" : "")}{(playModeEnabled ? "  [PLAY-MODE]" : "")}"
-                    : "○ Stopped";
-                EditorGUILayout.LabelField(statusLabel, EditorStyles.boldLabel);
+                EditorGUILayout.LabelField(isRunning ? $"Running (port {server.Port})" : "Stopped", EditorStyles.boldLabel);
                 GUI.color = prevColor;
             }
 
             if (isRunning)
-                EditorGUILayout.LabelField("Base URL",
-                    $"http://localhost:{server.Port}/api/", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField("Base URL", $"http://localhost:{server.Port}/api/", EditorStyles.miniLabel);
 
-            EditorGUILayout.Space(6);
-
-            // ── Settings ─────────────────────────────────────────────────────────
-            EditorGUILayout.LabelField("Settings", EditorStyles.boldLabel);
-
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField("Server", EditorStyles.boldLabel);
             using (new EditorGUI.DisabledScope(isRunning))
                 _portInput = EditorGUILayout.IntField("Port", _portInput);
 
             UnionAirSettings.AutoStart =
                 EditorGUILayout.Toggle("Auto Start on Load", UnionAirSettings.AutoStart);
 
-            EditorGUILayout.Space(6);
-
-            // ── Write API ────────────────────────────────────────────────────────
-            EditorGUILayout.LabelField("Write API", EditorStyles.boldLabel);
-
-            var warningStyle = new GUIStyle(EditorStyles.helpBox);
-            EditorGUILayout.LabelField(
-                "⚠ Write operations modify the scene. All changes are Undo-able within the Editor.",
-                warningStyle);
-
-            var prevBg = GUI.backgroundColor;
-            if (writeEnabled) GUI.backgroundColor = new Color(1f, 0.5f, 0.4f);
-            var newWriteEnabled = EditorGUILayout.Toggle("Enable Write API", writeEnabled);
-            GUI.backgroundColor = prevBg;
-
-            if (newWriteEnabled != writeEnabled)
-                UnionAirSettings.WriteEnabled = newWriteEnabled;
-
-            EditorGUILayout.Space(4);
-
-            // ── Asset Write API ───────────────────────────────────────────────
-            EditorGUILayout.LabelField("Asset Write API", EditorStyles.boldLabel);
-
-            EditorGUILayout.LabelField(
-                "⚠ Asset Write operations modify files on disk (prefabs, materials, scene save).",
-                warningStyle);
-
-            if (assetWriteEnabled) GUI.backgroundColor = new Color(1f, 0.5f, 0.4f);
-            var newAssetWriteEnabled = EditorGUILayout.Toggle("Enable Asset Write API", assetWriteEnabled);
-            GUI.backgroundColor = prevBg;
-
-            if (newAssetWriteEnabled != assetWriteEnabled)
-                UnionAirSettings.AssetWriteEnabled = newAssetWriteEnabled;
-
-            EditorGUILayout.Space(6);
-
-            // ── Play Mode API ─────────────────────────────────────────────────
-            EditorGUILayout.LabelField("Play Mode API", EditorStyles.boldLabel);
-
-            EditorGUILayout.LabelField(
-                "⚠ Play Mode API starts/stops game execution. May trigger a domain reload — server restarts briefly.",
-                warningStyle);
-
-            if (playModeEnabled) GUI.backgroundColor = new Color(1f, 0.5f, 0.4f);
-            var newPlayModeEnabled = EditorGUILayout.Toggle("Enable Play Mode API", playModeEnabled);
-            GUI.backgroundColor = prevBg;
-
-            if (newPlayModeEnabled != playModeEnabled)
-                UnionAirSettings.PlayModeEnabled = newPlayModeEnabled;
-
-            EditorGUILayout.Space(6);
-
-            // ── Controls ─────────────────────────────────────────────────────────
+            EditorGUILayout.Space(8);
             using (new EditorGUILayout.HorizontalScope())
             {
                 using (new EditorGUI.DisabledScope(isRunning))
@@ -155,11 +108,13 @@ namespace LeonAkasaka.UnionAir.Editor
                         server.Start(_portInput);
                     }
                 }
+
                 using (new EditorGUI.DisabledScope(!isRunning))
                 {
                     if (GUILayout.Button("Stop"))
                         server.Stop();
                 }
+
                 if (GUILayout.Button("Restart"))
                 {
                     server.Stop();
@@ -168,112 +123,94 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
             }
 
-            EditorGUILayout.Space(6);
+            EditorGUILayout.Space(12);
+            DrawRequestLog();
+        }
 
-            // ── Endpoints Reference ──────────────────────────────────────────────
-            var port = UnionAirSettings.Port;
+        private void DrawBuiltInApiTab()
+        {
+            DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.Read));
+            DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.SceneWrite));
+            DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.AssetWrite));
+            DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.PlayMode));
+        }
 
-            var newShowRead = EditorGUILayout.Foldout(_showReadEndpoints, "Endpoints (Read)", true);
-            if (newShowRead != _showReadEndpoints)
+        private void DrawCustomHandlersTab()
+        {
+            var oldEnabled = UnionAirSettings.CustomHandlersEnabled;
+            var newEnabled = EditorGUILayout.Toggle("Enable Custom Handlers", oldEnabled);
+            if (newEnabled != oldEnabled)
             {
-                _showReadEndpoints = newShowRead;
-                EditorPrefs.SetBool(PrefKeyReadFold, _showReadEndpoints);
-            }
-            if (_showReadEndpoints)
-            {
-                DrawEndpointRow("GET",    "/api/health",                           null,                                         port);
-                DrawEndpointRow("GET",    "/api/editor/status",                    null,                                         port);
-                DrawEndpointRow("GET",    "/api/editor/logs",                      "[?type=&search=&limit=]",                    port);
-                DrawEndpointRow("GET",    "/api/cameras",                          null,                                         port);
-                DrawEndpointRow("GET",    "/api/cameras/capture",                  "?path=<path>[&width=&height=&format=&quality=]", port);
-                DrawEndpointRow("GET",    "/api/cameras/capture/image",            "?path=<path>[&width=&height=&format=&quality=]", port);
-                DrawEndpointRow("GET",    "/api/scene",                            null,                                         port);
-                DrawEndpointRow("GET",    "/api/scene/hierarchy",                  "[?depth=N&compact=true&limit=N&path=<path>]", port);
-                DrawEndpointRow("GET",    "/api/scene/stats",                      null,                                         port);
-                DrawEndpointRow("GET",    "/api/gameobjects",                      "?path=<path>",                               port);
-                DrawEndpointRow("GET",    "/api/assets",                           "[?path=&type=&search=]",                     port);
-                DrawEndpointRow("GET",    "/api/assets/<guid>",                    null,                                         port);
-                DrawEndpointRow("GET",    "/api/assets/dependents",                "?guid=<guid>",                               port);
-                DrawEndpointRow("GET",    "/api/search/gameobjects",               "[?name=&component=&tag=&layer=&active=&assetGuid=]", port);
-                DrawEndpointRow("GET",    "/api/search/asset-refs",                "?guid=<guid>",                               port);
+                UnionAirSettings.CustomHandlersEnabled = newEnabled;
+                UnionAirRouteRegistry.Refresh();
             }
 
-            EditorGUILayout.Space(2);
+            if (GUILayout.Button("Rescan Custom Handlers"))
+                UnionAirRouteRegistry.Refresh();
 
-            using (new EditorGUI.DisabledScope(!writeEnabled))
+            EditorGUILayout.Space(8);
+
+            var categories = new SortedDictionary<string, List<UnionAirEndpointDescriptor>>();
+            foreach (var endpoint in UnionAirRouteRegistry.Descriptors)
             {
-                var newShowWrite = EditorGUILayout.Foldout(_showWriteEndpoints, "Endpoints (Write — requires Enable Write API)", true);
-                if (newShowWrite != _showWriteEndpoints)
+                if (endpoint.Source != UnionAirRouteSource.Custom)
+                    continue;
+
+                if (!categories.TryGetValue(endpoint.Category, out var list))
                 {
-                    _showWriteEndpoints = newShowWrite;
-                    EditorPrefs.SetBool(PrefKeyWriteFold, _showWriteEndpoints);
+                    list = new List<UnionAirEndpointDescriptor>();
+                    categories[endpoint.Category] = list;
                 }
-                if (_showWriteEndpoints)
-                {
-                    DrawEndpointRow("POST",   "/api/gameobjects",                  "body:{name,parentPath?}",                    port);
-                    DrawEndpointRow("DELETE", "/api/gameobjects",                  "?path=",                                     port);
-                    DrawEndpointRow("PATCH",  "/api/gameobjects",                  "?path=  body:{name?,isActive?,tag?,layer?,transform?}", port);
-                    DrawEndpointRow("POST",   "/api/gameobjects/batch",            "body:{operations:[{op,…}]}",                 port);
-                    DrawEndpointRow("POST",   "/api/gameobjects/primitive",        "body:{type,name?,parentPath?}",              port);
-                    DrawEndpointRow("POST",   "/api/gameobjects/instantiate",      "body:{guid|assetPath,name?,parentPath?}",    port);
-                    DrawEndpointRow("POST",   "/api/gameobjects/reparent",         "body:{path,parentPath?}",                    port);
-                    DrawEndpointRow("POST",   "/api/gameobjects/components",       "body:{path,type}",                           port);
-                    DrawEndpointRow("DELETE", "/api/gameobjects/components",       "?path=&type=",                               port);
-                    DrawEndpointRow("PATCH",  "/api/gameobjects/components",       "?path=&type=  body:{properties:{}}",         port);
-                }
+                list.Add(endpoint);
             }
 
-            EditorGUILayout.Space(2);
-
-            using (new EditorGUI.DisabledScope(!assetWriteEnabled))
+            if (categories.Count == 0)
             {
-                var newShowAsset = EditorGUILayout.Foldout(_showAssetWriteEndpoints, "Endpoints (Asset Write — requires Enable Asset Write API)", true);
-                if (newShowAsset != _showAssetWriteEndpoints)
-                {
-                    _showAssetWriteEndpoints = newShowAsset;
-                    EditorPrefs.SetBool(PrefKeyAssetWriteFold, _showAssetWriteEndpoints);
-                }
-                if (_showAssetWriteEndpoints)
-                {
-                    DrawEndpointRow("POST",   "/api/scene/save",                   null,                                         port);
-                    DrawEndpointRow("POST",   "/api/editor/refresh",               null,                                         port);
-                    DrawEndpointRow("POST",   "/api/assets/prefabs",               "body:{goPath,assetPath,mode?}",              port);
-                    DrawEndpointRow("POST",   "/api/assets/prefabs/apply",         "body:{goPath}",                              port);
-                    DrawEndpointRow("POST",   "/api/assets/prefabs/revert",        "body:{goPath}",                              port);
-                    DrawEndpointRow("POST",   "/api/assets/materials",             "body:{assetPath,shader?}",                   port);
-                    DrawEndpointRow("PATCH",  "/api/assets/materials",             "?guid=  body:{properties:{}}",               port);
-                    DrawEndpointRow("DELETE", "/api/assets/<guid>",                null,                                         port);
-                    DrawEndpointRow("POST",   "/api/assets/move",                  "body:{guid,newPath}",                        port);
-                }
+                EditorGUILayout.HelpBox("No custom handlers discovered. Add an Editor class in another assembly with UnionAirControllerAttribute and UnionAirEndpointAttribute.", MessageType.Info);
+                return;
             }
 
-            EditorGUILayout.Space(2);
-
-            using (new EditorGUI.DisabledScope(!playModeEnabled))
+            foreach (var pair in categories)
             {
-                var newShowPlay = EditorGUILayout.Foldout(_showPlayModeEndpoints, "Endpoints (Play Mode — requires Enable Play Mode API)", true);
-                if (newShowPlay != _showPlayModeEndpoints)
+                var category = FindCategory(UnionAirRouteSource.Custom, pair.Key);
+                DrawCategoryHeader(category);
+
+                var controllers = new SortedDictionary<string, List<UnionAirEndpointDescriptor>>();
+                foreach (var endpoint in pair.Value)
                 {
-                   _showPlayModeEndpoints = newShowPlay;
-                   EditorPrefs.SetBool(PrefKeyPlayModeFold, _showPlayModeEndpoints);
+                    if (!controllers.TryGetValue(endpoint.ControllerRoute, out var endpoints))
+                    {
+                        endpoints = new List<UnionAirEndpointDescriptor>();
+                        controllers[endpoint.ControllerRoute] = endpoints;
+                    }
+                    endpoints.Add(endpoint);
                 }
-                if (_showPlayModeEndpoints)
+
+                foreach (var controller in controllers)
                 {
-                   DrawEndpointRow("POST",   "/api/editor/play",                  null,                                         port);
-                   DrawEndpointRow("POST",   "/api/editor/stop",                  null,                                         port);
-                   DrawEndpointRow("POST",   "/api/editor/pause",                 "[body:{paused:bool}  omit=toggle]",           port);
-                   DrawEndpointRow("POST",   "/api/editor/step",                  "[requires isPaused]",                        port);
+                    EditorGUILayout.LabelField($"/api/custom/{controller.Key}", EditorStyles.miniBoldLabel);
+                    controller.Value.Sort(CompareEndpointsForDisplay);
+                    foreach (var endpoint in controller.Value)
+                    {
+                        DrawEndpointRow(endpoint);
+                        if (!string.IsNullOrEmpty(endpoint.Error))
+                            EditorGUILayout.HelpBox(endpoint.Error, MessageType.Error);
+                    }
                 }
+
+                if (category != null && !string.IsNullOrEmpty(category.Error))
+                    EditorGUILayout.HelpBox(category.Error, MessageType.Warning);
+                EditorGUILayout.Space(4);
             }
+        }
 
-            EditorGUILayout.Space(6);
-
-            // ── Request Log ──────────────────────────────────────────────────────
+        private void DrawRequestLog()
+        {
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUILayout.LabelField("Request Log", EditorStyles.boldLabel);
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button("Clear", GUILayout.Width(50)))
+                if (GUILayout.Button("Clear", GUILayout.Width(60)))
                     _log.Clear();
             }
 
@@ -283,15 +220,121 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorGUILayout.EndScrollView();
         }
 
-        private static void DrawEndpointRow(string method, string path, string hint, int port)
+        private static void DrawEndpointGroup(UnionAirCategoryDefinition category)
+        {
+            DrawCategoryHeader(category);
+            if (category == null)
+                return;
+
+            var endpoints = new List<UnionAirEndpointDescriptor>();
+            foreach (var endpoint in UnionAirRouteRegistry.Descriptors)
+            {
+                if (endpoint.Source == category.Source && endpoint.Category == category.Id)
+                    endpoints.Add(endpoint);
+            }
+
+            endpoints.Sort(CompareEndpointsForDisplay);
+            foreach (var endpoint in endpoints)
+                DrawEndpointRow(endpoint);
+
+            EditorGUILayout.Space(6);
+        }
+
+        private static UnionAirCategoryDefinition FindCategory(UnionAirRouteSource source, string id)
+        {
+            foreach (var category in UnionAirRouteRegistry.Categories)
+            {
+                if (category.Source == source && category.Id == id)
+                    return category;
+            }
+            return null;
+        }
+
+        private static void DrawCategoryHeader(UnionAirCategoryDefinition category)
+        {
+            if (category == null)
+                return;
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                var canToggle = category.CanDisable &&
+                                (category.Source != UnionAirRouteSource.Custom ||
+                                 UnionAirSettings.CustomHandlersEnabled);
+                using (new EditorGUI.DisabledScope(!canToggle))
+                {
+                    var newEnabled = EditorGUILayout.ToggleLeft(
+                        $"{category.DisplayName} ({RiskLabel(category.Risk)})",
+                        category.Enabled,
+                        EditorStyles.boldLabel);
+                    if (newEnabled != category.Enabled)
+                    {
+                        UnionAirSettings.SetCategoryEnabled(
+                            category.Key,
+                            newEnabled,
+                            category.EnabledByDefault);
+                        UnionAirRouteRegistry.Refresh();
+                    }
+                }
+            }
+        }
+
+        private static int CompareEndpointsForDisplay(UnionAirEndpointDescriptor left, UnionAirEndpointDescriptor right)
+        {
+            var result = string.Compare(left.Path, right.Path, System.StringComparison.Ordinal);
+            if (result != 0) return result;
+
+            result = MethodRank(left.Method).CompareTo(MethodRank(right.Method));
+            if (result != 0) return result;
+
+            return string.Compare(left.Method, right.Method, System.StringComparison.Ordinal);
+        }
+
+        private static int MethodRank(string method)
+        {
+            switch (method)
+            {
+                case "GET": return 0;
+                case "POST": return 1;
+                case "PATCH": return 2;
+                case "DELETE": return 3;
+                default: return 4;
+            }
+        }
+
+        private static void DrawEndpointRow(UnionAirEndpointDescriptor endpoint)
         {
             using (new EditorGUILayout.HorizontalScope())
             {
-                var label = hint != null ? $"{method,-6} {path}  {hint}" : $"{method,-6} {path}";
-                EditorGUILayout.LabelField(label, EditorStyles.miniLabel);
-                if (GUILayout.Button("⧉", EditorStyles.miniButton, GUILayout.Width(22)))
-                    GUIUtility.systemCopyBuffer = $"http://localhost:{port}{path}";
+                var state = endpoint.Enabled ? "" : " [disabled]";
+                EditorGUILayout.LabelField($"{endpoint.Method,-6} {endpoint.Path}{state}", EditorStyles.miniLabel);
+                if (GUILayout.Button("Copy", EditorStyles.miniButton, GUILayout.Width(46)))
+                    GUIUtility.systemCopyBuffer = $"http://localhost:{UnionAirSettings.Port}{endpoint.Path}";
             }
+        }
+
+        private static string RiskLabel(UnionAirEndpointRisk risk)
+        {
+            if (risk == UnionAirEndpointRisk.None)
+                return "read-only";
+
+            var label = "";
+            AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.SceneUpdate, "scene");
+            AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.AssetUpdate, "asset");
+            AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.PlayMode, "play mode");
+            AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.Custom, "custom");
+            return label;
+        }
+
+        private static void AppendRiskLabel(
+            ref string label,
+            UnionAirEndpointRisk risk,
+            UnionAirEndpointRisk flag,
+            string value)
+        {
+            if ((risk & flag) == 0)
+                return;
+
+            label = string.IsNullOrEmpty(label) ? value : label + ", " + value;
         }
     }
 }

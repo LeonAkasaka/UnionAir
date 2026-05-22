@@ -38,7 +38,7 @@ curl "http://localhost:8765/api/gameobjects?path=Main Camera"
 # All assets of type Texture2D
 curl "http://localhost:8765/api/assets?type=Texture2D"
 
-# Create a new empty GameObject (requires Write API enabled)
+# Create a new empty GameObject (requires the Scene Write category to be enabled)
 curl -X POST http://localhost:8765/api/gameobjects \
   -H "Content-Type: application/json" \
   -d '{"name":"MyObject","parentPath":"Canvas"}'

@@ -18,12 +18,23 @@ namespace LeonAkasaka.UnionAir.Editor
         private ConcurrentQueue<HttpListenerContext> _pending;
         private RestRouter _router;
 
+        /// <summary>
+        /// Gets whether the HTTP listener is currently running.
+        /// </summary>
         public bool IsRunning => _listener != null && _listener.IsListening;
+
+        /// <summary>
+        /// Gets the port currently assigned to the server.
+        /// </summary>
         public int Port { get; private set; }
 
         /// <summary>Raised on the main thread for each incoming request path.</summary>
         public event Action<string> OnRequest;
 
+        /// <summary>
+        /// Starts the HTTP listener on <c>localhost</c>.
+        /// </summary>
+        /// <param name="port">TCP port to bind, usually from <see cref="UnionAirSettings.Port"/>.</param>
         public void Start(int port)
         {
             if (IsRunning) Stop();
@@ -32,32 +43,6 @@ namespace LeonAkasaka.UnionAir.Editor
             _pending = new ConcurrentQueue<HttpListenerContext>();
 
             _router = new RestRouter();
-            _router.Register(new HealthHandler());
-            _router.Register(new EditorStatusHandler());
-            _router.Register(new EditorRefreshHandler());
-            _router.Register(new EditorPlayHandler());
-            _router.Register(new EditorLogsHandler());
-            _router.Register(new CameraHandler());
-            _router.Register(new SceneHandler());
-            _router.Register(new SceneStatsHandler());
-            _router.Register(new SceneSaveHandler());
-            _router.Register(new PrefabCreateHandler());      // before AssetHandler (/api/assets/prefabs)
-            _router.Register(new PrefabOverrideHandler());    // before AssetHandler (/api/assets/prefabs/...)
-            _router.Register(new MaterialWriteHandler());     // before AssetHandler (/api/assets/materials)
-            _router.Register(new AssetDeleteHandler());       // before AssetHandler (DELETE /api/assets/<guid>)
-            _router.Register(new AssetMoveHandler());         // before AssetHandler (/api/assets/move)
-            _router.Register(new GameObjectDuplicateHandler()); // before GameObjectWriteHandler (more specific path)
-            _router.Register(new GameObjectReparentHandler());  // before GameObjectWriteHandler (more specific path)
-            _router.Register(new GameObjectPrimitiveHandler()); // before GameObjectWriteHandler (more specific path)
-            _router.Register(new GameObjectInstantiateHandler()); // before GameObjectWriteHandler (more specific path)
-            _router.Register(new GameObjectBatchHandler());      // before GameObjectWriteHandler (/api/gameobjects/batch)
-            _router.Register(new ComponentWriteHandler());      // before GameObjectWriteHandler (/api/gameobjects/components)
-            _router.Register(new GameObjectWriteHandler());
-            _router.Register(new GameObjectHandler());
-            _router.Register(new AssetDependentsHandler()); // must be before AssetHandler (more specific path)
-            _router.Register(new AssetHandler());
-            _router.Register(new SearchGameObjectsHandler());
-            _router.Register(new SearchAssetRefsHandler());
 
             _listener = new HttpListener();
             _listener.Prefixes.Add($"http://localhost:{port}/");
@@ -126,6 +111,9 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
+        /// <summary>
+        /// Stops the HTTP listener and detaches pending request processing from the Unity editor update loop.
+        /// </summary>
         public void Stop()
         {
             EditorApplication.update -= ProcessPending;

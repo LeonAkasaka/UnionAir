@@ -18,12 +18,22 @@ namespace LeonAkasaka.UnionAir.Editor
 
         internal struct LogEntry
         {
+            /// <summary>Console log message text.</summary>
             public string Message;
+
+            /// <summary>Stack trace captured with the log message.</summary>
             public string StackTrace;
+
+            /// <summary>Normalized log type: log, warning, error, exception, or assert.</summary>
             public string Type;      // "log" | "warning" | "error" | "exception" | "assert"
+
+            /// <summary>Local timestamp when the log entry was captured.</summary>
             public DateTime Timestamp;
         }
 
+        /// <summary>
+        /// Begins capturing Unity console log messages into the in-memory buffer.
+        /// </summary>
         public static void StartCapturing()
         {
             if (_capturing) return;
@@ -31,6 +41,9 @@ namespace LeonAkasaka.UnionAir.Editor
             _capturing = true;
         }
 
+        /// <summary>
+        /// Stops capturing Unity console log messages.
+        /// </summary>
         public static void StopCapturing()
         {
             if (!_capturing) return;
@@ -71,6 +84,10 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Returns entries from newest to oldest, applying optional filters.
         /// </summary>
+        /// <param name="type">Log type filter, or <c>all</c> to include every type.</param>
+        /// <param name="search">Optional case-insensitive message substring filter.</param>
+        /// <param name="limit">Maximum number of entries to return.</param>
+        /// <returns>Matching log entries from newest to oldest.</returns>
         public static List<LogEntry> GetLogs(string type, string search, int limit)
         {
             var result = new List<LogEntry>(Math.Min(limit, MaxEntries));
@@ -95,6 +112,9 @@ namespace LeonAkasaka.UnionAir.Editor
             return result;
         }
 
+        /// <summary>
+        /// Gets the current number of entries stored in the log buffer.
+        /// </summary>
         public static int TotalCount
         {
             get { lock (_lock) { return _buffer.Count; } }

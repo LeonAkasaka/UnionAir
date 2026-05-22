@@ -8,6 +8,118 @@ Non-finite floating-point values (`NaN`, `Infinity`, `-Infinity`) are emitted as
 
 ---
 
+## GET /api/help
+
+Returns a compact API manifest for LLMs, MCP bridges, and other tools that cannot access this documentation directly. The endpoint list is generated from `[UnionAirController]` and `[UnionAirEndpoint]` route metadata.
+
+### Response
+
+```json
+{
+  "name": "com.leonakasaka.unionair",
+  "displayName": "UnionAir - Unity REST Bridge",
+  "version": "0.1.0",
+  "baseUrl": "http://localhost:8765/api",
+  "description": "UnionAir exposes Unity Editor state and selected Editor operations as a local REST API.",
+  "categories": [
+    {
+      "id": "read",
+      "displayName": "Read",
+      "source": "builtin",
+      "enabled": true,
+      "canDisable": false,
+      "enabledByDefault": true,
+      "risk": ["readOnly"]
+    }
+  ],
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "routeTemplate": "/api/health",
+      "source": "builtin",
+      "enabled": true,
+      "category": "read",
+      "summary": "Checks whether the server is running.",
+      "risk": ["readOnly"],
+      "pathParams": [],
+      "requiredQuery": [],
+      "optionalQuery": [],
+      "requiredBody": [],
+      "optionalBody": []
+    }
+  ]
+}
+```
+
+Each endpoint item includes the HTTP method, path, category, short summary, risk metadata, and compact parameter/body field lists. Category items describe API grouping, current enablement, and the risk profile for endpoints in that category.
+
+| Field | Type | Description |
+|-----------|-----|------|
+| `categories[].id` | string | Stable category ID referenced by endpoints |
+| `categories[].displayName` | string | Human-readable category label |
+| `categories[].source` | string | `builtin` or `custom` |
+| `categories[].enabled` | bool | Whether endpoints in the category are currently enabled |
+| `categories[].canDisable` | bool | Whether the category can be disabled in the EditorWindow |
+| `categories[].enabledByDefault` | bool | Whether the category starts enabled before user overrides |
+| `categories[].risk` | string[] | `readOnly`, `sceneUpdate`, `assetUpdate`, `playMode`, or `custom` |
+| `endpoints[].source` | string | `builtin` or `custom` |
+| `endpoints[].enabled` | bool | Whether the endpoint is currently enabled |
+| `endpoints[].routeTemplate` | string | Route template used by the attribute router |
+| `endpoints[].category` | string | Category used for discovery/UI grouping. Built-in constants include `read`, `sceneWrite`, `assetWrite`, `playMode`, and `custom`; custom endpoints may use any stable category string. |
+| `endpoints[].risk` | string[] | Risk inherited from the endpoint category |
+| `endpoints[].requiredQuery` | string[] | Required query string parameters |
+| `endpoints[].optionalQuery` | string[] | Optional query string parameters |
+| `endpoints[].requiredBody` | string[] | Required JSON body fields |
+| `endpoints[].optionalBody` | string[] | Optional JSON body fields |
+
+### Query Parameters
+
+| Parameter | Default | Description |
+|-------------|-----------|------|
+| `includeDisabled` | `false` | When `true`, includes disabled custom categories/endpoints and endpoints with route conflicts. Built-in categories/endpoints are always listed with their current `enabled` state. |
+| `source` | `all` | `builtin`, `custom`, or `all` |
+
+> This endpoint is intentionally a lightweight discovery manifest, not a full OpenAPI schema. Use this document for detailed request and response examples. When adding or changing an endpoint, update its `[UnionAirEndpoint]` metadata so `/api/help`, routing, and the EditorWindow endpoint list stay in sync.
+
+---
+
+## Custom Handlers
+
+Custom handlers can be added from other Editor assemblies by declaring a controller. Controllers in UnionAir's own assembly are treated as built-in; controllers in other assemblies are treated as custom. Custom routes are namespaced under `/api/custom/` so they do not collide with UnionAir's built-in API.
+
+```csharp
+using LeonAkasaka.UnionAir.Editor;
+
+[UnionAirController("my-tool")]
+[UnionAirCategory(
+    "debug",
+    DisplayName = "Debug Tools",
+    Risk = UnionAirEndpointRisk.Custom,
+    CanDisable = true,
+    EnabledByDefault = false)]
+public class MyToolController
+{
+    [UnionAirEndpoint(
+        "GET",
+        "status",
+        Category = "debug",
+        Summary = "Returns custom tool status")]
+    public void Status(UnionAirRequestContext ctx)
+    {
+        RestResponse.Send(ctx.Response, "{\"status\":\"ok\"}");
+    }
+}
+```
+
+This example registers `GET /api/custom/my-tool/status`.
+
+Custom handlers are disabled by default. Enable them in **Window > UnionAir > REST Bridge > Custom Handlers**. Custom categories can also be enabled or disabled independently.
+
+`Category` is a string so custom extensions can define their own grouping labels in `/api/help` and the EditorWindow. Built-in endpoints use `UnionAirEndpointCategories.Read`, `SceneWrite`, `AssetWrite`, and `PlayMode`. Category metadata controls enablement and risk reporting. `Risk` is descriptive metadata for tools and LLMs; category enablement controls whether requests are accepted.
+
+---
+
 ## GET /api/health
 
 Checks whether the server is running.
@@ -83,7 +195,7 @@ Returns Unity Console logs. Includes logs recorded since the editor started (or 
 }
 ```
 
-> Logs are returned in newest-first order (`timestamp` descending).  
+> Logs are returned in newest-first order (`timestamp` descending).
 > Because `StopCapturing()` is called before a domain reload, logs are not retained across reloads.
 
 ### Examples
@@ -131,7 +243,7 @@ Returns a list of all Camera components in the scene.
 
 ## GET /api/cameras/capture
 
-Runs `camera.Render()` with the specified camera and returns the result as a base64-encoded image.  
+Runs `camera.Render()` with the specified camera and returns the result as a base64-encoded image.
 Works in both Edit mode and Play mode.
 
 ### Query Parameters
@@ -185,7 +297,7 @@ The response `mimeType` and `data` fields can be converted directly into an MCP 
 
 ## GET /api/cameras/capture/image
 
-With the same parameters as `/api/cameras/capture`, returns the binary image directly.  
+With the same parameters as `/api/cameras/capture`, returns the binary image directly.
 If opened in a browser, it displays as-is, and you can save it to a file with `curl -o`.
 
 ### Query Parameters
@@ -334,7 +446,7 @@ Returns detailed information for the GameObject at the specified path (including
 }
 ```
 
-`components[].properties` are properties obtained via `SerializedObject`.  
+`components[].properties` are properties obtained via `SerializedObject`.
 Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Color`, `Vector2/3/4`, `Rect`, `ObjectReference`. Other types are `null`.
 
 ### Errors
@@ -586,15 +698,15 @@ Returns aggregate statistics for the current scene.
 }
 ```
 
-> `Transform` / `RectTransform` are excluded from `componentCounts` because they would be noise.  
+> `Transform` / `RectTransform` are excluded from `componentCounts` because they would be noise.
 > The keys in `layerCounts` are layer names (or numeric IDs for unnamed layers).
 
 ---
 
-## Write API — Common Notes
+## Scene Write category — Common Notes
 
-> **Security:** Write endpoints are **disabled** by default.  
-> Enable them using the toggles under **Window > UnionAir > REST Bridge**.  
+> **Security:** Write endpoints are **disabled** by default.
+> Enable them using the toggles under **Window > UnionAir > REST Bridge**.
 > All write operations can be undone with Unity Editor Undo (Ctrl+Z).
 
 ---
@@ -632,7 +744,7 @@ Creates a new empty GameObject in the scene.
 |-----------|------|
 | 400 | `name` is missing |
 | 404 | `parentPath` does not exist |
-| 403 | Write API is disabled |
+| 403 | Scene Write category is disabled |
 
 ---
 
@@ -670,7 +782,50 @@ Creates a primitive-type GameObject.
 | Status | Cause |
 |-----------|------|
 | 400 | `type` is missing or invalid |
-| 403 | Write API is disabled |
+| 403 | Scene Write category is disabled |
+
+---
+
+## POST /api/gameobjects/instantiate
+
+Instantiates a prefab asset into the active scene while preserving the prefab connection.
+
+### Request Body (JSON)
+
+```json
+{
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Prefabs/Player.prefab",
+  "name": "PlayerInstance",
+  "parentPath": "Stage"
+}
+```
+
+| Field | Required | Description |
+|-----------|------|------|
+| `guid` | Conditional | GUID of the prefab asset. Takes precedence over `assetPath` when both are provided |
+| `assetPath` | Conditional | Prefab asset path. Required when `guid` is omitted |
+| `name` | ❌ | Optional name for the created instance |
+| `parentPath` | ❌ | Path of the parent GameObject. If omitted, the scene root |
+
+### Response
+
+```json
+{
+  "name": "PlayerInstance",
+  "path": "Stage/PlayerInstance",
+  "prefabAssetPath": "Assets/Prefabs/Player.prefab",
+  "components": ["Transform", "MeshRenderer"]
+}
+```
+
+### Errors
+
+| Status | Cause |
+|-----------|------|
+| 400 | `guid` and `assetPath` are both missing, or the asset is not a prefab/GameObject |
+| 404 | `guid` or `parentPath` does not exist |
+| 403 | Scene Write category is disabled |
 
 ---
 
@@ -696,7 +851,7 @@ Deletes the GameObject at the specified path from the scene.
 |-----------|------|
 | 400 | `path` is missing |
 | 404 | The specified path does not exist |
-| 403 | Write API is disabled |
+| 403 | Scene Write category is disabled |
 
 ---
 
@@ -740,7 +895,7 @@ All fields are optional. Omitted fields are not changed. Each subfield of `trans
 |-----------|------|
 | 400 | `path` is missing |
 | 404 | The specified path does not exist |
-| 403 | Write API is disabled |
+| 403 | Scene Write category is disabled |
 
 ---
 
@@ -766,7 +921,7 @@ Duplicates the GameObject at the specified path.
 |-----------|------|
 | 400 | `path` is missing |
 | 404 | The specified path does not exist |
-| 403 | Write API is disabled |
+| 403 | Scene Write category is disabled |
 
 ---
 
@@ -800,7 +955,7 @@ Moves a GameObject to a different parent.
 |-----------|------|
 | 400 | `path` is missing |
 | 404 | `path` or `parentPath` does not exist |
-| 403 | Write API is disabled |
+| 403 | Scene Write category is disabled |
 
 ---
 
@@ -854,7 +1009,7 @@ Even if one operation fails, the remaining operations continue. All successful o
 | Status | Cause |
 |-----------|------|
 | 400 | `operations` is missing or empty |
-| 403 | Write API is disabled |
+| 403 | Scene Write category is disabled |
 
 ---
 
@@ -889,7 +1044,7 @@ Adds a component to the specified GameObject.
 | 400 | `path` or `type` is missing |
 | 404 | The specified path does not exist |
 | 422 | The type name cannot be resolved, or adding the component failed |
-| 403 | Write API is disabled |
+| 403 | Scene Write category is disabled |
 
 ---
 
@@ -916,7 +1071,7 @@ Removes a component from the specified GameObject.
 |-----------|------|
 | 400 | `path` or `type` is missing |
 | 404 | The specified path does not exist, or the component does not exist |
-| 403 | Write API is disabled |
+| 403 | Scene Write category is disabled |
 
 ---
 
@@ -956,7 +1111,7 @@ Each key in `properties` is a `SerializedProperty` property path (a `SerializedO
 |-----------|------|
 | 400 | `path` / `type` / `properties` is missing |
 | 404 | The GameObject or component does not exist |
-| 403 | Write API is disabled |
+| 403 | Scene Write category is disabled |
 
 ---
 
@@ -964,7 +1119,7 @@ Each key in `properties` is a `SerializedProperty` property path (a `SerializedO
 
 Saves the current scene to disk.
 
-> Can be called only when the Asset Write API is enabled.
+> Can be called only when the Asset Write category is enabled.
 
 ### Response
 
@@ -978,7 +1133,7 @@ Saves the current scene to disk.
 
 Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and assets.
 
-> Can be called only when the Asset Write API is enabled.
+> Can be called only when the Asset Write category is enabled.
 
 ### Response
 
@@ -999,7 +1154,7 @@ Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and asset
 
 Creates a prefab from a GameObject in the scene.
 
-> Can be called only when the Asset Write API is enabled.
+> Can be called only when the Asset Write category is enabled.
 
 ### Request Body (JSON)
 
@@ -1029,7 +1184,7 @@ Creates a prefab from a GameObject in the scene.
 |-----------|------|
 | 400 | Required fields are missing, or `mode` is invalid |
 | 404 | `goPath` does not exist |
-| 403 | Asset Write API is disabled |
+| 403 | Asset Write category is disabled |
 
 ---
 
@@ -1037,7 +1192,7 @@ Creates a prefab from a GameObject in the scene.
 
 Applies prefab instance overrides to the prefab asset.
 
-> Can be called only when the Asset Write API is enabled.
+> Can be called only when the Asset Write category is enabled.
 
 ### Request Body (JSON)
 
@@ -1057,7 +1212,7 @@ Applies prefab instance overrides to the prefab asset.
 
 Reverts a prefab instance to the state of the prefab asset.
 
-> Can be called only when the Asset Write API is enabled.
+> Can be called only when the Asset Write category is enabled.
 
 ### Request Body (JSON)
 
@@ -1077,7 +1232,7 @@ Reverts a prefab instance to the state of the prefab asset.
 
 Creates a new material asset.
 
-> Can be called only when the Asset Write API is enabled.
+> Can be called only when the Asset Write category is enabled.
 
 ### Request Body (JSON)
 
@@ -1105,7 +1260,7 @@ Creates a new material asset.
 |-----------|------|
 | 400 | Required fields are missing |
 | 422 | Shader not found |
-| 403 | Asset Write API is disabled |
+| 403 | Asset Write category is disabled |
 
 ---
 
@@ -1113,7 +1268,7 @@ Creates a new material asset.
 
 Updates material properties.
 
-> Can be called only when the Asset Write API is enabled.
+> Can be called only when the Asset Write category is enabled.
 
 ### Query Parameters
 
@@ -1154,7 +1309,7 @@ Types of values in `properties`:
 |-----------|------|
 | 400 | `guid` is missing |
 | 404 | No matching material exists |
-| 403 | Asset Write API is disabled |
+| 403 | Asset Write category is disabled |
 
 ---
 
@@ -1162,7 +1317,7 @@ Types of values in `properties`:
 
 Deletes the asset and its `.meta` file.
 
-> Can be called only when the Asset Write API is enabled.
+> Can be called only when the Asset Write category is enabled.
 
 ### Path Parameters
 
@@ -1182,7 +1337,7 @@ Deletes the asset and its `.meta` file.
 |-----------|------|
 | 400 | GUID is empty |
 | 404 | No matching asset exists |
-| 403 | Asset Write API is disabled |
+| 403 | Asset Write category is disabled |
 
 ---
 
@@ -1190,7 +1345,7 @@ Deletes the asset and its `.meta` file.
 
 Moves/renames an asset. Its GUID and references within the project are preserved.
 
-> Can be called only when the Asset Write API is enabled.
+> Can be called only when the Asset Write category is enabled.
 
 ### Request Body (JSON)
 
@@ -1219,7 +1374,7 @@ Moves/renames an asset. Its GUID and references within the project are preserved
 | 400 | `guid` or `newPath` is missing |
 | 404 | No matching asset exists |
 | 422 | Move operation failed (duplicate path, etc.) |
-| 403 | Asset Write API is disabled |
+| 403 | Asset Write category is disabled |
 
 ---
 
@@ -1227,7 +1382,7 @@ Moves/renames an asset. Its GUID and references within the project are preserved
 
 Enters Play mode (`EditorApplication.isPlaying = true`).
 
-> Can be called only when the Play Mode API is enabled.  
+> Can be called only when the Play Mode category is enabled.
 > If a domain reload occurs, the HTTP server will restart temporarily. Poll `GET /api/editor/status` and wait until `isPlaying: true`.
 
 ### Response
@@ -1242,7 +1397,7 @@ Enters Play mode (`EditorApplication.isPlaying = true`).
 
 Exits Play mode (`EditorApplication.isPlaying = false`).
 
-> Can be called only when the Play Mode API is enabled.
+> Can be called only when the Play Mode category is enabled.
 
 ### Response
 
@@ -1256,7 +1411,7 @@ Exits Play mode (`EditorApplication.isPlaying = false`).
 
 Sets the paused state. If the body is omitted, toggles the current state.
 
-> Can be called only when the Play Mode API is enabled.
+> Can be called only when the Play Mode category is enabled.
 
 ### Request Body (JSON, optional)
 
@@ -1276,7 +1431,7 @@ Sets the paused state. If the body is omitted, toggles the current state.
 
 Advances by one frame. Valid only when `isPaused: true`.
 
-> Can be called only when the Play Mode API is enabled.
+> Can be called only when the Play Mode category is enabled.
 
 ### Response
 
@@ -1289,4 +1444,4 @@ Advances by one frame. Valid only when `isPaused: true`.
 | Status | Cause |
 |-----------|------|
 | 400 | Not in Play mode, or not paused |
-| 403 | Play Mode API is disabled |
+| 403 | Play Mode category is disabled |

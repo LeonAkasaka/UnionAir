@@ -14,6 +14,8 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Returns a flat list of every GameObject in the scene together with its
         /// root-relative slash-separated path (e.g. "Canvas/Panel/Button").
         /// </summary>
+        /// <param name="scene">Scene to traverse.</param>
+        /// <returns>All GameObjects in the scene with their hierarchy paths.</returns>
         public static List<(GameObject go, string path)> GetAllGameObjects(Scene scene)
         {
             var result = new List<(GameObject, string)>();
@@ -40,6 +42,9 @@ namespace LeonAkasaka.UnionAir.Editor
         /// whose referenced asset GUID matches <paramref name="assetGuid"/>.
         /// Returns an empty list when no match is found or on serialization errors.
         /// </summary>
+        /// <param name="component">Component whose serialized object references should be inspected.</param>
+        /// <param name="assetGuid">Asset GUID to search for.</param>
+        /// <returns>Serialized property names that reference the asset.</returns>
         public static List<string> FindAssetRefsInComponent(Component component, string assetGuid)
         {
             var matches = new List<string>();
@@ -78,6 +83,9 @@ namespace LeonAkasaka.UnionAir.Editor
         /// pointing to the asset identified by <paramref name="assetGuid"/>.
         /// Cheaper than <see cref="FindAssetRefsInComponent"/> when only presence matters.
         /// </summary>
+        /// <param name="component">Component whose serialized object references should be inspected.</param>
+        /// <param name="assetGuid">Asset GUID to search for.</param>
+        /// <returns>True when at least one serialized property references the asset.</returns>
         public static bool ComponentReferencesAsset(Component component, string assetGuid)
         {
             if (component == null || string.IsNullOrEmpty(assetGuid)) return false;

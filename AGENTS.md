@@ -30,7 +30,8 @@ All implementation lives under `Editor/` and is excluded from runtime builds via
 **Whenever an API endpoint is added, changed, or removed, update the following in the same commit:**
 
 1. **`Documentation~/api-reference.md`** — add or update the relevant endpoint section
-2. **`CHANGELOG.md`** — record the change under `[Unreleased]`
+2. **`[UnionAirEndpoint]` on the controller method** — keep routing, `GET /api/help`, and the EditorWindow endpoint list in sync
+3. **`CHANGELOG.md`** — record the change under `[Unreleased]`
 
 Update `README.md` only for overview-level changes (e.g., a new capability being introduced).
 
@@ -38,7 +39,10 @@ Update `README.md` only for overview-level changes (e.g., a new capability being
 
 - **Namespace**: `LeonAkasaka.UnionAir.Editor`
 - **Assembly**: `Editor/com.leonakasaka.unionair.editor.asmdef` (Editor-only, no external references)
-- Add new endpoints as classes in `Editor/Handlers/` implementing `IRequestHandler`, then register them in `RestHttpServer`
+- Add new built-in endpoints as controller methods in `Editor/Controllers/`; keep reusable implementation helpers in `Editor/Handlers/` or `Editor/Utils/`
+- Declare built-in API routes with `[UnionAirController]` and `[UnionAirEndpoint]`; public paths must be explicit attribute strings
+- Set `[UnionAirEndpoint]` metadata deliberately: `Category` must reference built-in category constants or custom `[UnionAirCategory]` metadata that controls enablement and risk reporting
+- Controllers in UnionAir's own assembly are built-in; controllers in other assemblies are custom and are exposed under `/api/custom/...`
 - Do not add external NuGet dependencies — the HTTP server is intentionally `HttpListener`-based with no third-party runtime dependencies
 
 ## Versioning

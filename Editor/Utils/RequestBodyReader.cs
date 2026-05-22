@@ -7,9 +7,17 @@ namespace LeonAkasaka.UnionAir.Editor
     /// <summary>
     /// Utility for reading and lightly parsing HTTP request bodies.
     /// </summary>
-    internal static class RequestBodyReader
+    /// <remarks>
+    /// This helper intentionally supports the simple JSON shapes used by UnionAir handlers. It is not a
+    /// general-purpose JSON parser.
+    /// </remarks>
+    public static class RequestBodyReader
     {
-        /// <summary>Reads the entire request body as a UTF-8 string.</summary>
+        /// <summary>
+        /// Reads the entire request body as a string using the request encoding.
+        /// </summary>
+        /// <param name="request">HTTP request whose body should be read.</param>
+        /// <returns>The request body, or an empty string when the request has no body.</returns>
         public static string ReadString(HttpListenerRequest request)
         {
             if (request.ContentLength64 == 0) return string.Empty;
@@ -22,6 +30,9 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Handles simple cases: <c>"key": "value"</c> and <c>"key": null</c>.
         /// Returns null when the key is absent.
         /// </summary>
+        /// <param name="json">JSON object text to inspect.</param>
+        /// <param name="key">Field name to read.</param>
+        /// <returns>The string value, a raw scalar token, or null when absent/null.</returns>
         public static string GetString(string json, string key)
         {
             var token = FindToken(json, key);
@@ -39,6 +50,9 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Extracts a bool value from a flat JSON object body.
         /// Returns null when the key is absent or the value is not a JSON boolean.
         /// </summary>
+        /// <param name="json">JSON object text to inspect.</param>
+        /// <param name="key">Field name to read.</param>
+        /// <returns>The boolean value, or null when absent or invalid.</returns>
         public static bool? GetBool(string json, string key)
         {
             var token = FindToken(json, key);
@@ -53,6 +67,9 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Extracts an int value from a flat JSON object body.
         /// Returns null when the key is absent or the value cannot be parsed.
         /// </summary>
+        /// <param name="json">JSON object text to inspect.</param>
+        /// <param name="key">Field name to read.</param>
+        /// <returns>The integer value, or null when absent or invalid.</returns>
         public static int? GetInt(string json, string key)
         {
             var token = FindToken(json, key);
@@ -65,6 +82,9 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Extracts a float value from a flat JSON object body.
         /// Returns null when the key is absent or the value cannot be parsed.
         /// </summary>
+        /// <param name="json">JSON object text to inspect.</param>
+        /// <param name="key">Field name to read.</param>
+        /// <returns>The floating-point value, or null when absent or invalid.</returns>
         public static float? GetFloat(string json, string key)
         {
             var token = FindToken(json, key);
@@ -79,6 +99,9 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Extracts a nested JSON object as a raw substring from a flat JSON body.
         /// Returns null when the key is absent.
         /// </summary>
+        /// <param name="json">JSON object text to inspect.</param>
+        /// <param name="key">Field name to read.</param>
+        /// <returns>The nested object as raw JSON, or null when absent.</returns>
         public static string GetObject(string json, string key)
         {
             if (string.IsNullOrEmpty(json)) return null;
@@ -108,6 +131,9 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Extracts a JSON array value for the given key and returns each element as a raw JSON string.
         /// Handles nested objects/arrays. Returns an empty list when the key is absent or not an array.
         /// </summary>
+        /// <param name="json">JSON object text to inspect.</param>
+        /// <param name="key">Field name to read.</param>
+        /// <returns>Raw JSON strings for object elements in the array.</returns>
         public static List<string> GetArray(string json, string key)
         {
             var result = new List<string>();

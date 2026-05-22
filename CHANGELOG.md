@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `GET /api/help` — attribute-generated API manifest for LLMs, MCP bridges, and tools that cannot access the documentation directly
+- ASP.NET-style attribute routing with `[UnionAirController]` and `[UnionAirEndpoint]` as the source of truth for routing, help, category state, and the EditorWindow endpoint list
+- Custom handler discovery under `/api/custom/...`, managed separately in the UnionAir EditorWindow
+- Category-level API enablement metadata and endpoint risk reporting for built-in and custom API discovery
+
 ### Fixed
 
 - Hardened JSON string escaping in API responses to correctly encode control characters and prevent malformed JSON output from string fields.

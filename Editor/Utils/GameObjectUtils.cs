@@ -12,6 +12,8 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Finds a GameObject in the active scene by its slash-separated hierarchy path
         /// (e.g. "Canvas/Panel/Button"). Returns null if not found.
         /// </summary>
+        /// <param name="path">Slash-separated hierarchy path in the active scene.</param>
+        /// <returns>The matching GameObject, or null when no object exists at the path.</returns>
         public static GameObject FindByPath(string path)
         {
             if (string.IsNullOrEmpty(path)) return null;
@@ -41,6 +43,8 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Returns the slash-separated hierarchy path of a GameObject
         /// (e.g. "Canvas/Panel/Button").
         /// </summary>
+        /// <param name="go">GameObject whose hierarchy path should be returned.</param>
+        /// <returns>Slash-separated hierarchy path, or an empty string when <paramref name="go"/> is null.</returns>
         public static string GetPath(GameObject go)
         {
             if (go == null) return string.Empty;
