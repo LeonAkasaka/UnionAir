@@ -213,7 +213,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.SceneWrite,
-            Summary = "Updates serialized component properties.",
+            Summary = "Updates serialized component properties, including object references.",
             RequiredQuery = new string[] { "path", "type" },
             RequiredBody = new string[] { "properties" })]
         private void Update(UnionAirRequestContext ctx)

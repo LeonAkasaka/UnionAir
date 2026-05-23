@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - ASP.NET-style attribute routing with `[UnionAirController]` and `[UnionAirEndpoint]` as the source of truth for routing, help, category state, and the EditorWindow endpoint list
 - Custom handler discovery under `/api/custom/...`, managed separately in the UnionAir EditorWindow
 - Category-level API enablement metadata and endpoint risk reporting for built-in and custom API discovery
+- `PATCH /api/gameobjects/components` can now set and clear serialized object references, including scene GameObjects, Components, and assets such as TextAsset.
 
 ### Fixed
 

@@ -1077,7 +1077,7 @@ Removes a component from the specified GameObject.
 
 ## PATCH /api/gameobjects/components
 
-Updates serialized properties of the specified component.
+Updates serialized properties of the specified component, including object reference fields.
 
 ### Query Parameters
 
@@ -1092,12 +1092,27 @@ Updates serialized properties of the specified component.
 {
   "properties": {
     "m_Intensity": 2.0,
-    "m_Color": { "r": 1, "g": 0.9, "b": 0.8, "a": 1 }
+    "m_Color": { "r": 1, "g": 0.9, "b": 0.8, "a": 1 },
+    "target": { "scenePath": "Canvas/Button" },
+    "textAsset": { "assetPath": "Assets/Data/config.txt", "type": "UnityEngine.TextAsset" },
+    "optionalTarget": null
   }
 }
 ```
 
-Each key in `properties` is a `SerializedProperty` property path (a `SerializedObject` field name).
+Each key in `properties` is a `SerializedProperty.propertyPath`. Top-level field names are still accepted for compatibility.
+
+Supported object reference values:
+
+| Shape | Description |
+|------|-------------|
+| `null` | Clears the reference |
+| `{ "scenePath": "Canvas/Button" }` | Assigns a scene GameObject |
+| `{ "scenePath": "Canvas/Button", "component": "UnityEngine.UI.Text" }` | Assigns a component on a scene GameObject |
+| `{ "assetGuid": "...", "type": "UnityEngine.TextAsset" }` | Assigns an asset by GUID |
+| `{ "assetPath": "Assets/Data/config.txt", "type": "UnityEngine.TextAsset" }` | Assigns an asset by path |
+
+`type` is optional for asset references. When provided, it must resolve to a `UnityEngine.Object` type and the resolved object must be assignable to both that type and the serialized field type.
 
 ### Response
 
@@ -1110,7 +1125,9 @@ Each key in `properties` is a `SerializedProperty` property path (a `SerializedO
 | Status | Cause |
 |-----------|------|
 | 400 | `path` / `type` / `properties` is missing |
-| 404 | The GameObject or component does not exist |
+| 400 | An object reference payload is malformed, or a requested type cannot be resolved |
+| 404 | The GameObject, component, or asset does not exist |
+| 422 | The resolved object is not assignable to the requested type or field type |
 | 403 | Scene Write category is disabled |
 
 ---
