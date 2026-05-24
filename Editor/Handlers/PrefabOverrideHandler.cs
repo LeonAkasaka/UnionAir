@@ -32,21 +32,17 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var body   = RequestBodyReader.ReadString(request);
             var goPath = RequestBodyReader.GetString(body, "goPath");
+            var globalObjectId = RequestBodyReader.GetString(body, "globalObjectId");
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
-            if (string.IsNullOrEmpty(goPath))
+            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, goPath, "prefab instance", out var go, out var error, out var statusCode))
             {
-                RestResponse.SendError(response, "Missing required field: goPath", 400);
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
-
-            var go = GameObjectUtils.FindByPath(scene, goPath);
-            if (go == null)
-            {
-                RestResponse.SendNotFound(response, $"GameObject not found at path: {goPath}");
-                return;
-            }
+            scene = go.scene;
+            goPath = GameObjectUtils.GetPath(go);
 
             if (!PrefabUtility.IsPartOfAnyPrefab(go))
             {
@@ -71,6 +67,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             RestResponse.Send(response,
                 $"{{\"applied\":\"{RestResponse.EscapeJson(goPath)}\"," +
+                $"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\"," +
                 $"\"prefabAssetPath\":\"{RestResponse.EscapeJson(prefabAssetPath)}\"}}");
         }
 
@@ -82,6 +79,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             RestResponse.Send(response,
                 $"{{\"reverted\":\"{RestResponse.EscapeJson(goPath)}\"," +
+                $"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\"," +
                 $"\"prefabAssetPath\":\"{RestResponse.EscapeJson(prefabAssetPath)}\"}}");
         }
     }

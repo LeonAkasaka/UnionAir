@@ -39,6 +39,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(scene.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(scene.path)}\",");
+            sb.Append($"\"guid\":\"{RestResponse.EscapeJson(UnityEditor.AssetDatabase.AssetPathToGUID(scene.path))}\",");
             sb.Append($"\"isDirty\":{BoolStr(scene.isDirty)},");
             sb.Append($"\"isLoaded\":{BoolStr(scene.isLoaded)},");
             sb.Append($"\"rootCount\":{scene.rootCount}");
@@ -132,6 +133,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(go.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(path)}\",");
+            sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
             sb.Append($"\"isActive\":{BoolStr(go.activeInHierarchy)},");
 
             if (compact)

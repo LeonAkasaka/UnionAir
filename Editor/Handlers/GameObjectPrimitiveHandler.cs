@@ -35,6 +35,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var typeName = RequestBodyReader.GetString(body, "type");
             var name     = RequestBodyReader.GetString(body, "name");
             var parentPath = RequestBodyReader.GetString(body, "parentPath");
+            var parentGlobalObjectId = RequestBodyReader.GetString(body, "parentGlobalObjectId");
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
@@ -62,15 +63,15 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!string.IsNullOrEmpty(name))
                 go.name = name;
 
-            if (!string.IsNullOrEmpty(parentPath))
+            if (!string.IsNullOrEmpty(parentGlobalObjectId) || !string.IsNullOrEmpty(parentPath))
             {
-                var parent = GameObjectUtils.FindByPath(scene, parentPath);
-                if (parent == null)
+                if (!GameObjectUtils.TryResolveTarget(scene, parentGlobalObjectId, parentPath, "parent", out var parent, out var error, out var statusCode))
                 {
                     Undo.DestroyObjectImmediate(go);
-                    RestResponse.SendError(response, $"Parent not found: {parentPath}", 404);
+                    RestResponse.SendError(response, error, statusCode);
                     return;
                 }
+                scene = parent.scene;
                 go.transform.SetParent(parent.transform, false);
             }
 
@@ -83,6 +84,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(go.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(goPath)}\",");
+            sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
             sb.Append($"\"primitiveType\":\"{RestResponse.EscapeJson(primitiveType.ToString())}\",");
             sb.Append("\"components\":[");
             for (int i = 0; i < components.Length; i++)

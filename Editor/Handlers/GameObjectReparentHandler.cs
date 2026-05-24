@@ -31,33 +31,31 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var body = RequestBodyReader.ReadString(request);
             var path = RequestBodyReader.GetString(body, "path");
-            if (string.IsNullOrEmpty(path))
-            {
-                RestResponse.SendError(response, "Missing required field: path", 400);
-                return;
-            }
+            var globalObjectId = RequestBodyReader.GetString(body, "globalObjectId");
 
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
-            var go = GameObjectUtils.FindByPath(scene, path);
-            if (go == null)
+            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "target", out var go, out var error, out var statusCode))
             {
-                RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
+            scene = go.scene;
+            var originalScene = go.scene;
 
             var parentPath = RequestBodyReader.GetString(body, "parentPath");
+            var parentGlobalObjectId = RequestBodyReader.GetString(body, "parentGlobalObjectId");
             Transform newParent = null;
 
-            if (!string.IsNullOrEmpty(parentPath))
+            if (!string.IsNullOrEmpty(parentGlobalObjectId) || !string.IsNullOrEmpty(parentPath))
             {
-                var parentGo = GameObjectUtils.FindByPath(scene, parentPath);
-                if (parentGo == null)
+                if (!GameObjectUtils.TryResolveTarget(scene, parentGlobalObjectId, parentPath, "parent", out var parentGo, out error, out statusCode))
                 {
-                    RestResponse.SendNotFound(response, $"Parent not found: {parentPath}");
+                    RestResponse.SendError(response, error, statusCode);
                     return;
                 }
+                scene = parentGo.scene;
                 newParent = parentGo.transform;
             }
 
@@ -68,10 +66,12 @@ namespace LeonAkasaka.UnionAir.Editor
                 SceneManager.MoveGameObjectToScene(go, scene);
             Undo.CollapseUndoOperations(group);
 
+            if (originalScene != scene)
+                EditorSceneManager.MarkSceneDirty(originalScene);
             EditorSceneManager.MarkSceneDirty(scene);
 
             var newGoPath = GameObjectUtils.GetPath(go);
-            RestResponse.Send(response, $"{{\"path\":\"{RestResponse.EscapeJson(newGoPath)}\"}}");
+            RestResponse.Send(response, $"{{\"path\":\"{RestResponse.EscapeJson(newGoPath)}\",\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\"}}");
         }
     }
 }

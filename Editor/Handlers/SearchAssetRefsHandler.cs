@@ -65,7 +65,9 @@ namespace LeonAkasaka.UnionAir.Editor
                         if (refCount > 0) sb.Append(",");
                         sb.Append("{");
                         sb.Append($"\"gameObjectPath\":\"{RestResponse.EscapeJson(goPath)}\",");
+                        sb.Append($"\"gameObjectGlobalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
                         sb.Append($"\"componentType\":\"{RestResponse.EscapeJson(comp.GetType().FullName)}\",");
+                        sb.Append($"\"componentGlobalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(comp))}\",");
                         sb.Append($"\"propertyName\":\"{RestResponse.EscapeJson(propName)}\"");
                         sb.Append("}");
                         refCount++;

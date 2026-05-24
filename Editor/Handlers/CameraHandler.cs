@@ -64,6 +64,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 var (cam, path) = cameras[i];
                 sb.Append("{");
                 sb.Append($"\"path\":\"{RestResponse.EscapeJson(path)}\",");
+                sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(cam.gameObject))}\",");
+                sb.Append($"\"componentGlobalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(cam))}\",");
                 sb.Append($"\"name\":\"{RestResponse.EscapeJson(cam.name)}\",");
                 sb.Append($"\"enabled\":{Bool(cam.enabled)},");
                 sb.Append($"\"depth\":{F(cam.depth)},");
@@ -85,9 +87,10 @@ namespace LeonAkasaka.UnionAir.Editor
 
             // --- path (required) ---
             var path = query["path"] ?? "";
-            if (string.IsNullOrEmpty(path))
+            var globalObjectId = query["globalObjectId"] ?? "";
+            if (string.IsNullOrEmpty(path) && string.IsNullOrEmpty(globalObjectId))
             {
-                RestResponse.SendError(response, "Query parameter 'path' is required.", 400);
+                RestResponse.SendError(response, "Query parameter 'path' or 'globalObjectId' is required.", 400);
                 return;
             }
 
@@ -101,13 +104,12 @@ namespace LeonAkasaka.UnionAir.Editor
             int quality = ParseClamp(query["quality"], 85, 1, 100);
 
             // --- find camera ---
-            Camera camera = FindCamera(path);
+            Camera camera = FindCamera(path, globalObjectId, response);
             if (camera == null)
             {
-                RestResponse.SendError(response,
-                    $"No Camera component found at path '{path}'.", 404);
                 return;
             }
+            path = GameObjectUtils.GetPath(camera.gameObject);
 
             // --- render ---
             byte[] bytes;
@@ -127,6 +129,8 @@ namespace LeonAkasaka.UnionAir.Editor
             var sb = new StringBuilder();
             sb.Append("{");
             sb.Append($"\"cameraPath\":\"{RestResponse.EscapeJson(path)}\",");
+            sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(camera.gameObject))}\",");
+            sb.Append($"\"componentGlobalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(camera))}\",");
             sb.Append($"\"width\":{width},");
             sb.Append($"\"height\":{height},");
             sb.Append($"\"format\":\"{RestResponse.EscapeJson(format)}\",");
@@ -141,9 +145,10 @@ namespace LeonAkasaka.UnionAir.Editor
             var query = request.QueryString;
 
             var path = query["path"] ?? "";
-            if (string.IsNullOrEmpty(path))
+            var globalObjectId = query["globalObjectId"] ?? "";
+            if (string.IsNullOrEmpty(path) && string.IsNullOrEmpty(globalObjectId))
             {
-                RestResponse.SendError(response, "Query parameter 'path' is required.", 400);
+                RestResponse.SendError(response, "Query parameter 'path' or 'globalObjectId' is required.", 400);
                 return;
             }
 
@@ -154,11 +159,9 @@ namespace LeonAkasaka.UnionAir.Editor
             if (format != "png" && format != "jpeg") format = "jpeg";
             int quality = ParseClamp(query["quality"], 85, 1, 100);
 
-            Camera camera = FindCamera(path);
+            Camera camera = FindCamera(path, globalObjectId, response);
             if (camera == null)
             {
-                RestResponse.SendError(response,
-                    $"No Camera component found at path '{path}'.", 404);
                 return;
             }
 
@@ -177,14 +180,41 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.SendBinary(response, bytes, mimeType);
         }
 
-        private static Camera FindCamera(string path)
+        private static Camera FindCamera(string path, string globalObjectId, HttpListenerResponse response)
         {
+            if (!string.IsNullOrEmpty(globalObjectId))
+            {
+                if (!ObjectIdUtils.TryResolveGameObjectOrComponent(globalObjectId, out var go, out var component, out var error, out var statusCode))
+                {
+                    RestResponse.SendError(response, error, statusCode);
+                    return null;
+                }
+
+                var camera = component as Camera;
+                if (camera != null) return camera;
+
+                if (go != null)
+                    camera = go.GetComponent<Camera>();
+
+                if (camera == null)
+                    RestResponse.SendError(response, $"No Camera component found for globalObjectId '{globalObjectId}'.", 404);
+
+                return camera;
+            }
+
             var scene = EditorSceneManager.GetActiveScene();
             foreach (var (go, goPath) in SceneUtils.GetAllGameObjects(scene))
             {
                 if (goPath == path)
-                    return go.GetComponent<Camera>();
+                {
+                    var camera = go.GetComponent<Camera>();
+                    if (camera == null)
+                        RestResponse.SendError(response, $"No Camera component found at path '{path}'.", 404);
+                    return camera;
+                }
             }
+
+            RestResponse.SendError(response, $"No Camera component found at path '{path}'.", 404);
             return null;
         }
 

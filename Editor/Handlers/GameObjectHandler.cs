@@ -24,21 +24,17 @@ namespace LeonAkasaka.UnionAir.Editor
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var path = request.QueryString["path"];
-            if (string.IsNullOrEmpty(path))
-            {
-                RestResponse.SendError(response, "Missing required query parameter: path", 400);
-                return;
-            }
+            var globalObjectId = request.QueryString["globalObjectId"];
 
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            var go = GameObjectUtils.FindByPath(scene, path);
-            if (go == null)
+            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "query parameter", out var go, out var error, out var statusCode))
             {
-                RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
+            path = GameObjectUtils.GetPath(go);
 
             var sb = new StringBuilder();
             var t = go.transform;
@@ -49,6 +45,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(go.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(path)}\",");
+            sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
             sb.Append($"\"isActive\":{Bool(go.activeInHierarchy)},");
             sb.Append($"\"tag\":\"{RestResponse.EscapeJson(go.tag)}\",");
             sb.Append($"\"layer\":{go.layer},");
@@ -79,6 +76,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             sb.Append("{");
             sb.Append($"\"type\":\"{RestResponse.EscapeJson(component.GetType().FullName)}\",");
+            sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(component))}\",");
             sb.Append("\"properties\":{");
 
             try
@@ -148,7 +146,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     break;
                 case SerializedPropertyType.ObjectReference:
                     if (prop.objectReferenceValue != null)
-                        sb.Append($"{{\"type\":\"{RestResponse.EscapeJson(prop.objectReferenceValue.GetType().Name)}\",\"name\":\"{RestResponse.EscapeJson(prop.objectReferenceValue.name)}\"}}");
+                        sb.Append($"{{\"type\":\"{RestResponse.EscapeJson(prop.objectReferenceValue.GetType().Name)}\",\"name\":\"{RestResponse.EscapeJson(prop.objectReferenceValue.name)}\",\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(prop.objectReferenceValue))}\"}}");
                     else
                         sb.Append("null");
                     break;

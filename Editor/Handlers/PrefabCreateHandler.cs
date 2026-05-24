@@ -30,16 +30,12 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var body      = RequestBodyReader.ReadString(request);
             var goPath    = RequestBodyReader.GetString(body, "goPath");
+            var globalObjectId = RequestBodyReader.GetString(body, "globalObjectId");
             var assetPath = RequestBodyReader.GetString(body, "assetPath");
             var mode      = RequestBodyReader.GetString(body, "mode") ?? "new";
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
-            if (string.IsNullOrEmpty(goPath))
-            {
-                RestResponse.SendError(response, "Missing required field: goPath", 400);
-                return;
-            }
             if (string.IsNullOrEmpty(assetPath))
             {
                 RestResponse.SendError(response, "Missing required field: assetPath", 400);
@@ -51,12 +47,12 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = GameObjectUtils.FindByPath(scene, goPath);
-            if (go == null)
+            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, goPath, "source GameObject", out var go, out var error, out var statusCode))
             {
-                RestResponse.SendNotFound(response, $"GameObject not found at path: {goPath}");
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
+            scene = go.scene;
 
             // Ensure parent directory exists
             var dir = System.IO.Path.GetDirectoryName(assetPath).Replace('\\', '/');
@@ -95,7 +91,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var guid = AssetDatabase.AssetPathToGUID(assetPath);
             RestResponse.Send(response,
-                $"{{\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",\"guid\":\"{RestResponse.EscapeJson(guid)}\"}}", 201);
+                $"{{\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",\"guid\":\"{RestResponse.EscapeJson(guid)}\",\"sourceGlobalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\"}}", 201);
         }
     }
 }

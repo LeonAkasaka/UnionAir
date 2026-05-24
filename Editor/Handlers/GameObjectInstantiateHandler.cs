@@ -35,6 +35,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var assetPath  = RequestBodyReader.GetString(body, "assetPath");
             var name       = RequestBodyReader.GetString(body, "name");
             var parentPath = RequestBodyReader.GetString(body, "parentPath");
+            var parentGlobalObjectId = RequestBodyReader.GetString(body, "parentGlobalObjectId");
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
@@ -67,14 +68,14 @@ namespace LeonAkasaka.UnionAir.Editor
 
             // Resolve optional parent transform
             Transform parentTransform = null;
-            if (!string.IsNullOrEmpty(parentPath))
+            if (!string.IsNullOrEmpty(parentGlobalObjectId) || !string.IsNullOrEmpty(parentPath))
             {
-                var parentGo = GameObjectUtils.FindByPath(scene, parentPath);
-                if (parentGo == null)
+                if (!GameObjectUtils.TryResolveTarget(scene, parentGlobalObjectId, parentPath, "parent", out var parentGo, out var error, out var statusCode))
                 {
-                    RestResponse.SendNotFound(response, $"Parent not found: {parentPath}");
+                    RestResponse.SendError(response, error, statusCode);
                     return;
                 }
+                scene = parentGo.scene;
                 parentTransform = parentGo.transform;
             }
 
@@ -107,6 +108,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(instance.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(instancePath)}\",");
+            sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(instance))}\",");
             sb.Append($"\"prefabAssetPath\":\"{RestResponse.EscapeJson(assetPath)}\",");
             sb.Append("\"components\":[");
             for (int i = 0; i < components.Length; i++)

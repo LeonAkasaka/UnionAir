@@ -80,7 +80,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "capture",
             Category = UnionAirEndpointCategories.Read,
             Summary = "Renders a camera and returns a base64 image.",
-            RequiredQuery = new string[] { "path" },
+            RequiredQuery = new string[] { "path or globalObjectId" },
             OptionalQuery = new string[] { "width", "height", "format", "quality" })]
         private void Capture(UnionAirRequestContext ctx)
             => new CameraHandler().Handle(ctx.Request, ctx.Response);
@@ -88,7 +88,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "capture/image",
             Category = UnionAirEndpointCategories.Read,
             Summary = "Renders a camera and returns binary image data.",
-            RequiredQuery = new string[] { "path" },
+            RequiredQuery = new string[] { "path or globalObjectId" },
             OptionalQuery = new string[] { "width", "height", "format", "quality" })]
         private void CaptureImage(UnionAirRequestContext ctx)
             => new CameraHandler().Handle(ctx.Request, ctx.Response);
@@ -171,7 +171,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "",
             Category = UnionAirEndpointCategories.Read,
             Summary = "Returns GameObject details including components.",
-            RequiredQuery = new string[] { "path" },
+            RequiredQuery = new string[] { "path or globalObjectId" },
             OptionalQuery = new string[] { "scenePath" })]
         private void Detail(UnionAirRequestContext ctx)
             => new GameObjectHandler().Handle(ctx.Request, ctx.Response);
@@ -180,14 +180,14 @@ namespace LeonAkasaka.UnionAir.Editor
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Creates an empty GameObject.",
             RequiredBody = new string[] { "name" },
-            OptionalBody = new string[] { "parentPath", "scenePath" })]
+            OptionalBody = new string[] { "parentPath", "parentGlobalObjectId", "scenePath" })]
         private void Create(UnionAirRequestContext ctx)
             => new GameObjectWriteHandler().Handle(ctx.Request, ctx.Response);
 
         [UnionAirEndpoint("DELETE", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Deletes a GameObject.",
-            RequiredQuery = new string[] { "path" },
+            RequiredQuery = new string[] { "path or globalObjectId" },
             OptionalQuery = new string[] { "scenePath" })]
         private void Delete(UnionAirRequestContext ctx)
             => new GameObjectWriteHandler().Handle(ctx.Request, ctx.Response);
@@ -195,7 +195,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Updates GameObject properties.",
-            RequiredQuery = new string[] { "path" },
+            RequiredQuery = new string[] { "path or globalObjectId" },
             OptionalQuery = new string[] { "scenePath" },
             OptionalBody = new string[] { "name", "isActive", "tag", "layer", "transform" })]
         private void Update(UnionAirRequestContext ctx)
@@ -205,7 +205,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Creates a primitive GameObject.",
             RequiredBody = new string[] { "type" },
-            OptionalBody = new string[] { "name", "parentPath", "scenePath" })]
+            OptionalBody = new string[] { "name", "parentPath", "parentGlobalObjectId", "scenePath" })]
         private void Primitive(UnionAirRequestContext ctx)
             => new GameObjectPrimitiveHandler().Handle(ctx.Request, ctx.Response);
 
@@ -213,14 +213,14 @@ namespace LeonAkasaka.UnionAir.Editor
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Instantiates a prefab asset into the scene.",
             RequiredBody = new string[] { "guid or assetPath" },
-            OptionalBody = new string[] { "name", "parentPath", "scenePath" })]
+            OptionalBody = new string[] { "name", "parentPath", "parentGlobalObjectId", "scenePath" })]
         private void Instantiate(UnionAirRequestContext ctx)
             => new GameObjectInstantiateHandler().Handle(ctx.Request, ctx.Response);
 
         [UnionAirEndpoint("POST", "duplicate",
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Duplicates a GameObject.",
-            RequiredQuery = new string[] { "path" },
+            RequiredQuery = new string[] { "path or globalObjectId" },
             OptionalQuery = new string[] { "scenePath" })]
         private void Duplicate(UnionAirRequestContext ctx)
             => new GameObjectDuplicateHandler().Handle(ctx.Request, ctx.Response);
@@ -228,8 +228,8 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "reparent",
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Moves a GameObject to a new parent.",
-            RequiredBody = new string[] { "path" },
-            OptionalBody = new string[] { "parentPath", "scenePath" })]
+            RequiredBody = new string[] { "path or globalObjectId" },
+            OptionalBody = new string[] { "parentPath", "parentGlobalObjectId", "scenePath" })]
         private void Reparent(UnionAirRequestContext ctx)
             => new GameObjectReparentHandler().Handle(ctx.Request, ctx.Response);
 
@@ -237,7 +237,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Runs multiple GameObject operations in one Undo group.",
             RequiredBody = new string[] { "operations" },
-            OptionalBody = new string[] { "scenePath" })]
+            OptionalBody = new string[] { "scenePath", "globalObjectId", "parentGlobalObjectId" })]
         private void Batch(UnionAirRequestContext ctx)
             => new GameObjectBatchHandler().Handle(ctx.Request, ctx.Response);
     }
@@ -248,7 +248,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Adds a component to a GameObject.",
-            RequiredBody = new string[] { "path", "type" },
+            RequiredBody = new string[] { "path or globalObjectId", "type" },
             OptionalBody = new string[] { "scenePath" })]
         private void Add(UnionAirRequestContext ctx)
             => new ComponentWriteHandler().Handle(ctx.Request, ctx.Response);
@@ -256,16 +256,16 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("DELETE", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Removes a component from a GameObject.",
-            RequiredQuery = new string[] { "path", "type" },
-            OptionalQuery = new string[] { "scenePath" })]
+            RequiredQuery = new string[] { "path or globalObjectId" },
+            OptionalQuery = new string[] { "scenePath", "type" })]
         private void Remove(UnionAirRequestContext ctx)
             => new ComponentWriteHandler().Handle(ctx.Request, ctx.Response);
 
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             Summary = "Updates serialized component properties, including object references.",
-            RequiredQuery = new string[] { "path", "type" },
-            OptionalQuery = new string[] { "scenePath" },
+            RequiredQuery = new string[] { "path or globalObjectId" },
+            OptionalQuery = new string[] { "scenePath", "type" },
             RequiredBody = new string[] { "properties" })]
         private void Update(UnionAirRequestContext ctx)
             => new ComponentWriteHandler().Handle(ctx.Request, ctx.Response);
@@ -316,7 +316,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "",
             Category = UnionAirEndpointCategories.AssetWrite,
             Summary = "Creates a prefab from a scene GameObject.",
-            RequiredBody = new string[] { "goPath", "assetPath", "mode" },
+            RequiredBody = new string[] { "goPath or globalObjectId", "assetPath", "mode" },
             OptionalBody = new string[] { "scenePath" })]
         private void Create(UnionAirRequestContext ctx)
             => new PrefabCreateHandler().Handle(ctx.Request, ctx.Response);
@@ -324,7 +324,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "apply",
             Category = UnionAirEndpointCategories.AssetWrite,
             Summary = "Applies prefab instance overrides.",
-            RequiredBody = new string[] { "goPath" },
+            RequiredBody = new string[] { "goPath or globalObjectId" },
             OptionalBody = new string[] { "scenePath" })]
         private void Apply(UnionAirRequestContext ctx)
             => new PrefabOverrideHandler().Handle(ctx.Request, ctx.Response);
@@ -332,7 +332,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "revert",
             Category = UnionAirEndpointCategories.AssetWrite,
             Summary = "Reverts a prefab instance.",
-            RequiredBody = new string[] { "goPath" },
+            RequiredBody = new string[] { "goPath or globalObjectId" },
             OptionalBody = new string[] { "scenePath" })]
         private void Revert(UnionAirRequestContext ctx)
             => new PrefabOverrideHandler().Handle(ctx.Request, ctx.Response);

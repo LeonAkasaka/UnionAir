@@ -51,6 +51,44 @@ namespace LeonAkasaka.UnionAir.Editor
             return current;
         }
 
+        public static bool TryResolveTarget(
+            Scene scene,
+            string globalObjectId,
+            string path,
+            string targetLabel,
+            out GameObject go,
+            out string error,
+            out int statusCode)
+        {
+            go = null;
+            error = null;
+            statusCode = 400;
+
+            if (!string.IsNullOrEmpty(globalObjectId))
+            {
+                if (!ObjectIdUtils.TryResolveGameObject(globalObjectId, out go, out error, out statusCode))
+                    return false;
+
+                return true;
+            }
+
+            if (string.IsNullOrEmpty(path))
+            {
+                error = $"Missing required {targetLabel}: path or globalObjectId.";
+                return false;
+            }
+
+            go = FindByPath(scene, path);
+            if (go == null)
+            {
+                error = $"GameObject not found at path: {path}";
+                statusCode = 404;
+                return false;
+            }
+
+            return true;
+        }
+
         /// <summary>
         /// Returns the slash-separated hierarchy path of a GameObject
         /// (e.g. "Canvas/Panel/Button").

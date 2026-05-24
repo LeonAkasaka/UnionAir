@@ -129,6 +129,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(go.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(path)}\",");
+            sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
             sb.Append($"\"isActive\":{Bool(go.activeInHierarchy)},");
             sb.Append($"\"tag\":\"{RestResponse.EscapeJson(go.tag)}\",");
             sb.Append($"\"layer\":{go.layer},");
@@ -148,7 +149,10 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (comp == null) continue;
                     if (!firstComp) sb.Append(",");
                     firstComp = false;
-                    sb.Append($"{{\"type\":\"{RestResponse.EscapeJson(comp.GetType().FullName)}\"}}");
+                    sb.Append("{");
+                    sb.Append($"\"type\":\"{RestResponse.EscapeJson(comp.GetType().FullName)}\",");
+                    sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(comp))}\"");
+                    sb.Append("}");
                 }
                 sb.Append("]");
             }

@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Multi-scene API support: `GET /api/scenes`, `POST /api/scenes/new`, `POST /api/scenes/open`, `POST /api/scenes/unload`, and `POST /api/scenes/active`.
 - Existing scene, search, GameObject, component, and prefab APIs now accept optional `scenePath` targeting for loaded scenes.
 - Scene object reference payloads can now include `sceneAssetPath` to resolve references across loaded scenes.
+- Scene GameObject and Component APIs now expose `globalObjectId` values and accept them as stable target identifiers.
 
 ### Fixed
 

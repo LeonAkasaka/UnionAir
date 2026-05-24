@@ -58,6 +58,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             var parentPath = RequestBodyReader.GetString(body, "parentPath");
+            var parentGlobalObjectId = RequestBodyReader.GetString(body, "parentGlobalObjectId");
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
@@ -65,14 +66,15 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = Undo.GetCurrentGroup();
 
             GameObject go;
-            if (!string.IsNullOrEmpty(parentPath))
+            if (!string.IsNullOrEmpty(parentGlobalObjectId) || !string.IsNullOrEmpty(parentPath))
             {
-                var parent = GameObjectUtils.FindByPath(scene, parentPath);
-                if (parent == null)
+                if (!GameObjectUtils.TryResolveTarget(scene, parentGlobalObjectId, parentPath, "parent", out var parent, out var error, out var statusCode))
                 {
-                    RestResponse.SendError(response, $"Parent not found: {parentPath}", 404);
+                    RestResponse.SendError(response, error, statusCode);
                     return;
                 }
+
+                scene = parent.scene;
                 go = new GameObject(name);
                 Undo.RegisterCreatedObjectUndo(go, "UnionAir: Create GameObject");
                 go.transform.SetParent(parent.transform, false);
@@ -89,7 +91,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var fullPath = GameObjectUtils.GetPath(go);
             RestResponse.Send(response,
-                $"{{\"name\":\"{RestResponse.EscapeJson(go.name)}\",\"path\":\"{RestResponse.EscapeJson(fullPath)}\"}}", 201);
+                $"{{\"name\":\"{RestResponse.EscapeJson(go.name)}\",\"path\":\"{RestResponse.EscapeJson(fullPath)}\",\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\"}}", 201);
         }
 
         // ── DELETE /api/gameobjects?path= ─────────────────────────────────────
@@ -97,27 +99,25 @@ namespace LeonAkasaka.UnionAir.Editor
         private static void HandleDelete(HttpListenerRequest request, HttpListenerResponse response)
         {
             var path = request.QueryString["path"];
-            if (string.IsNullOrEmpty(path))
-            {
-                RestResponse.SendError(response, "Missing required query parameter: path", 400);
-                return;
-            }
+            var globalObjectId = request.QueryString["globalObjectId"];
 
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            var go = GameObjectUtils.FindByPath(scene, path);
-            if (go == null)
+            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "query parameter", out var go, out var error, out var statusCode))
             {
-                RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
 
+            var deletedPath = GameObjectUtils.GetPath(go);
+            var deletedId = ObjectIdUtils.GetGlobalObjectId(go);
+            scene = go.scene;
             Undo.SetCurrentGroupName("UnionAir: Delete GameObject");
             Undo.DestroyObjectImmediate(go);
             EditorSceneManager.MarkSceneDirty(scene);
 
-            RestResponse.Send(response, $"{{\"deleted\":\"{RestResponse.EscapeJson(path)}\"}}");
+            RestResponse.Send(response, $"{{\"deleted\":\"{RestResponse.EscapeJson(deletedPath)}\",\"globalObjectId\":\"{RestResponse.EscapeJson(deletedId)}\"}}");
         }
 
         // ── PATCH /api/gameobjects?path= ──────────────────────────────────────
@@ -125,21 +125,17 @@ namespace LeonAkasaka.UnionAir.Editor
         private static void HandleUpdate(HttpListenerRequest request, HttpListenerResponse response)
         {
             var path = request.QueryString["path"];
-            if (string.IsNullOrEmpty(path))
-            {
-                RestResponse.SendError(response, "Missing required query parameter: path", 400);
-                return;
-            }
+            var globalObjectId = request.QueryString["globalObjectId"];
 
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            var go = GameObjectUtils.FindByPath(scene, path);
-            if (go == null)
+            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "query parameter", out var go, out var error, out var statusCode))
             {
-                RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
+            scene = go.scene;
 
             var body = RequestBodyReader.ReadString(request);
 
@@ -180,6 +176,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(go.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(updatedPath)}\",");
+            sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
             sb.Append($"\"isActive\":{(go.activeInHierarchy ? "true" : "false")},");
             sb.Append($"\"tag\":\"{RestResponse.EscapeJson(go.tag)}\",");
             sb.Append($"\"layer\":{go.layer},");

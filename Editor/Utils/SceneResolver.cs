@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Text;
+using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 
@@ -117,6 +118,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(scene.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(scene.path)}\",");
+            sb.Append($"\"guid\":\"{RestResponse.EscapeJson(AssetDatabase.AssetPathToGUID(scene.path))}\",");
             sb.Append($"\"buildIndex\":{scene.buildIndex},");
             sb.Append($"\"isDirty\":{Bool(scene.isDirty)},");
             sb.Append($"\"isLoaded\":{Bool(scene.isLoaded)},");

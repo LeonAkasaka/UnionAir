@@ -28,21 +28,17 @@ namespace LeonAkasaka.UnionAir.Editor
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var path = request.QueryString["path"];
-            if (string.IsNullOrEmpty(path))
-            {
-                RestResponse.SendError(response, "Missing required query parameter: path", 400);
-                return;
-            }
+            var globalObjectId = request.QueryString["globalObjectId"];
 
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            var go = GameObjectUtils.FindByPath(scene, path);
-            if (go == null)
+            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "query parameter", out var go, out var error, out var statusCode))
             {
-                RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
+            scene = go.scene;
 
             Undo.SetCurrentGroupName("UnionAir: Duplicate GameObject");
             var group = Undo.GetCurrentGroup();
@@ -56,7 +52,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var newPath = GameObjectUtils.GetPath(copy);
             RestResponse.Send(response,
-                $"{{\"name\":\"{RestResponse.EscapeJson(copy.name)}\",\"path\":\"{RestResponse.EscapeJson(newPath)}\"}}", 201);
+                $"{{\"name\":\"{RestResponse.EscapeJson(copy.name)}\",\"path\":\"{RestResponse.EscapeJson(newPath)}\",\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(copy))}\"}}", 201);
         }
     }
 }

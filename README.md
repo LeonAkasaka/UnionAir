@@ -21,6 +21,7 @@ UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making i
 | **Play Mode** | Enter/exit/pause/step play mode | Disabled by default |
 
 > All write operations are Undo-able in the Unity Editor (Ctrl+Z).  
+> Scene GameObjects and Components include `globalObjectId` values in read responses and can be targeted by those IDs in write requests.
 > See **[API Reference](Documentation~/api-reference.md)** for the full endpoint list and request/response details.
 
 ## Quick Example
