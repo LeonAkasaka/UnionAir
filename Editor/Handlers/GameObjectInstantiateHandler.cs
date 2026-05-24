@@ -35,6 +35,8 @@ namespace LeonAkasaka.UnionAir.Editor
             var assetPath  = RequestBodyReader.GetString(body, "assetPath");
             var name       = RequestBodyReader.GetString(body, "name");
             var parentPath = RequestBodyReader.GetString(body, "parentPath");
+            if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
+                return;
 
             // Resolve asset path from guid or assetPath
             if (!string.IsNullOrEmpty(guid))
@@ -67,7 +69,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Transform parentTransform = null;
             if (!string.IsNullOrEmpty(parentPath))
             {
-                var parentGo = GameObjectUtils.FindByPath(parentPath);
+                var parentGo = GameObjectUtils.FindByPath(scene, parentPath);
                 if (parentGo == null)
                 {
                     RestResponse.SendNotFound(response, $"Parent not found: {parentPath}");
@@ -82,8 +84,7 @@ namespace LeonAkasaka.UnionAir.Editor
             // InstantiatePrefab maintains the prefab connection (unlike Instantiate)
             var instance = parentTransform != null
                 ? (GameObject)PrefabUtility.InstantiatePrefab(prefab, parentTransform)
-                : (GameObject)PrefabUtility.InstantiatePrefab(prefab,
-                      EditorSceneManager.GetActiveScene());
+                : (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
 
             if (instance == null)
             {
@@ -97,7 +98,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 instance.name = name;
 
             Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             var instancePath = GameObjectUtils.GetPath(instance);
             var components   = instance.GetComponents<Component>();

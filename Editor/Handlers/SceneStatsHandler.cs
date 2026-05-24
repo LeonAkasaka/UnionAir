@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Text;
-using UnityEditor.SceneManagement;
 using UnityEngine;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -27,7 +26,9 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <param name="response">HTTP response to write.</param>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
-            var scene  = EditorSceneManager.GetActiveScene();
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
+
             var allGos = SceneUtils.GetAllGameObjects(scene);
 
             int total  = 0;

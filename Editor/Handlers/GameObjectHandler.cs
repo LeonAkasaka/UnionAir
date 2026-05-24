@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using UnityEditor;
-using UnityEditor.SceneManagement;
 using UnityEngine;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -31,7 +30,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = FindByPath(path);
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
+
+            var go = GameObjectUtils.FindByPath(scene, path);
             if (go == null)
             {
                 RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
@@ -154,30 +156,6 @@ namespace LeonAkasaka.UnionAir.Editor
                     sb.Append("null");
                     break;
             }
-        }
-
-        private static GameObject FindByPath(string path)
-        {
-            var scene = EditorSceneManager.GetActiveScene();
-            var parts = path.Split('/');
-            if (parts.Length == 0) return null;
-
-            GameObject current = null;
-            foreach (var root in scene.GetRootGameObjects())
-            {
-                if (root.name == parts[0]) { current = root; break; }
-            }
-
-            if (current == null) return null;
-
-            for (int i = 1; i < parts.Length; i++)
-            {
-                var child = current.transform.Find(parts[i]);
-                if (child == null) return null;
-                current = child.gameObject;
-            }
-
-            return current;
         }
 
         private static string F(float v) => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("G", CultureInfo.InvariantCulture);

@@ -334,7 +334,13 @@ curl -o hd.jpg \
 
 ## GET /api/scene
 
-Returns metadata for the currently open scene.
+Returns metadata for a loaded scene. If `scenePath` is omitted, the active scene is used.
+
+### Query Parameters
+
+| Parameter | Default | Description |
+|-------------|-----------|------|
+| `scenePath` | active scene | Loaded scene asset path, such as `Assets/Scenes/Level_A.unity`. A scene name is accepted only when unambiguous. |
 
 ### Response
 
@@ -360,7 +366,17 @@ Returns metadata for the currently open scene.
 
 ## GET /api/scene/hierarchy
 
-Returns the GameObject tree for the entire scene.
+Returns the GameObject tree for the entire scene. If `scenePath` is omitted, the active scene is used.
+
+### Query Parameters
+
+| Parameter | Default | Description |
+|-------------|-----------|------|
+| `scenePath` | active scene | Loaded scene asset path, such as `Assets/Scenes/Level_A.unity`. A scene name is accepted only when unambiguous. |
+| `depth` | unlimited | Maximum recursion depth |
+| `compact` | `false` | When `true`, omits transform/tag/layer details and includes child counts |
+| `limit` | `500` | Maximum number of GameObjects returned |
+| `path` | scene roots | Optional subtree root path |
 
 ### Response
 
@@ -407,15 +423,151 @@ Returns the GameObject tree for the entire scene.
 
 ---
 
+## GET /api/scenes
+
+Lists all loaded scenes and identifies the active scene.
+
+### Response
+
+```json
+{
+  "activeScene": "Assets/Scenes/Main.unity",
+  "scenes": [
+    {
+      "name": "Main",
+      "path": "Assets/Scenes/Main.unity",
+      "buildIndex": 0,
+      "isDirty": false,
+      "isLoaded": true,
+      "isActive": true,
+      "rootCount": 4
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+## POST /api/scenes/new
+
+Creates a new scene.
+
+> Can be called only when the Scene Write category is enabled.
+
+### Request Body (JSON)
+
+```json
+{
+  "mode": "single",
+  "setup": "default",
+  "discardUnsaved": false
+}
+```
+
+| Field | Required | Description |
+|-----------|------|------|
+| `mode` | ❌ | `single` or `additive`. Defaults to `single` |
+| `setup` | ❌ | `default` or `empty`. Defaults to `default` |
+| `discardUnsaved` | ❌ | Required as `true` for `single` mode when any loaded scene is dirty |
+
+### Response
+
+```json
+{
+  "created": {
+    "name": "Untitled",
+    "path": "",
+    "buildIndex": -1,
+    "isDirty": false,
+    "isLoaded": true,
+    "isActive": true,
+    "rootCount": 2
+  }
+}
+```
+
+---
+
+## POST /api/scenes/open
+
+Opens an existing scene asset.
+
+> Can be called only when the Scene Write category is enabled.
+
+### Request Body (JSON)
+
+```json
+{
+  "path": "Assets/Scenes/Level_A.unity",
+  "mode": "additive",
+  "discardUnsaved": false
+}
+```
+
+| Field | Required | Description |
+|-----------|------|------|
+| `path` | ✅ | Scene asset path |
+| `mode` | ❌ | `single` or `additive`. Defaults to `single` |
+| `discardUnsaved` | ❌ | Required as `true` for `single` mode when any loaded scene is dirty |
+
+---
+
+## POST /api/scenes/unload
+
+Unloads a loaded scene.
+
+> Can be called only when the Scene Write category is enabled.
+
+### Request Body (JSON)
+
+```json
+{
+  "path": "Assets/Scenes/Level_A.unity",
+  "discardUnsaved": false
+}
+```
+
+| Field | Required | Description |
+|-----------|------|------|
+| `path` | Conditional | Loaded scene asset path. Required when `name` is omitted |
+| `name` | Conditional | Loaded scene name. Accepted only when unambiguous |
+| `discardUnsaved` | ❌ | Required as `true` when the target scene is dirty |
+
+---
+
+## POST /api/scenes/active
+
+Sets the active scene.
+
+> Can be called only when the Scene Write category is enabled.
+
+### Request Body (JSON)
+
+```json
+{
+  "path": "Assets/Scenes/Level_A.unity"
+}
+```
+
+| Field | Required | Description |
+|-----------|------|------|
+| `path` | Conditional | Loaded scene asset path. Required when `name` is omitted |
+| `name` | Conditional | Loaded scene name. Accepted only when unambiguous |
+
+---
+
 ## GET /api/gameobjects
 
 Returns detailed information for the GameObject at the specified path (including components).
+If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Required | Description |
 |-------------|------|------|
 | `path` | ✅ | `/`-separated path from the root (example: `Canvas/Panel/Button`) |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -533,12 +685,13 @@ Returns detailed information about an asset specified by GUID.
 
 ## GET /api/search/gameobjects
 
-Searches GameObjects in the scene using multiple AND conditions. All parameters are optional.
+Searches GameObjects in the scene using multiple AND conditions. All parameters are optional. If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Type | Description |
 |-------------|-----|------|
+| `scenePath` | string | Loaded scene asset path or unambiguous scene name |
 | `name` | string | Case-insensitive partial match on the name |
 | `component` | string | Partial match on the component type name (example: `Camera`, `MeshRenderer`) |
 | `tag` | string | Exact match on the tag |
@@ -588,13 +741,14 @@ curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false
 
 ## GET /api/search/asset-refs
 
-Lists places where components in the scene reference a specific asset.
+Lists places where components in the scene reference a specific asset. If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Required | Description |
 |-------------|------|------|
 | `guid` | ✅ | GUID of the asset to search for |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -670,7 +824,13 @@ Returns assets that depend on the specified asset (reverse dependencies).
 
 ## GET /api/scene/stats
 
-Returns aggregate statistics for the current scene.
+Returns aggregate statistics for a loaded scene. If `scenePath` is omitted, the active scene is used.
+
+### Query Parameters
+
+| Parameter | Default | Description |
+|-------------|-----------|------|
+| `scenePath` | active scene | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -714,13 +874,15 @@ Returns aggregate statistics for the current scene.
 ## POST /api/gameobjects
 
 Creates a new empty GameObject in the scene.
+If `scenePath` is omitted, the active scene is used.
 
 ### Request Body (JSON)
 
 ```json
 {
   "name": "MyObject",
-  "parentPath": "Canvas"
+  "parentPath": "Canvas",
+  "scenePath": "Assets/Scenes/Level_A.unity"
 }
 ```
 
@@ -728,6 +890,7 @@ Creates a new empty GameObject in the scene.
 |-----------|------|------|
 | `name` | ✅ | Name of the GameObject to create |
 | `parentPath` | ❌ | Path of the parent GameObject. If omitted, it is placed at the scene root |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -751,6 +914,7 @@ Creates a new empty GameObject in the scene.
 ## POST /api/gameobjects/primitive
 
 Creates a primitive-type GameObject.
+If `scenePath` is omitted, the active scene is used.
 
 ### Request Body (JSON)
 
@@ -758,7 +922,8 @@ Creates a primitive-type GameObject.
 {
   "type": "Cube",
   "name": "MyCube",
-  "parentPath": "Stage"
+  "parentPath": "Stage",
+  "scenePath": "Assets/Scenes/Level_A.unity"
 }
 ```
 
@@ -767,6 +932,7 @@ Creates a primitive-type GameObject.
 | `type` | ✅ | `Cube` \| `Sphere` \| `Capsule` \| `Cylinder` \| `Plane` \| `Quad` |
 | `name` | ❌ | If omitted, the type name is used as-is |
 | `parentPath` | ❌ | Path of the parent GameObject. If omitted, the scene root |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -789,6 +955,7 @@ Creates a primitive-type GameObject.
 ## POST /api/gameobjects/instantiate
 
 Instantiates a prefab asset into the active scene while preserving the prefab connection.
+If `scenePath` is omitted, the active scene is used.
 
 ### Request Body (JSON)
 
@@ -797,7 +964,8 @@ Instantiates a prefab asset into the active scene while preserving the prefab co
   "guid": "a1b2c3...",
   "assetPath": "Assets/Prefabs/Player.prefab",
   "name": "PlayerInstance",
-  "parentPath": "Stage"
+  "parentPath": "Stage",
+  "scenePath": "Assets/Scenes/Level_A.unity"
 }
 ```
 
@@ -807,6 +975,7 @@ Instantiates a prefab asset into the active scene while preserving the prefab co
 | `assetPath` | Conditional | Prefab asset path. Required when `guid` is omitted |
 | `name` | ❌ | Optional name for the created instance |
 | `parentPath` | ❌ | Path of the parent GameObject. If omitted, the scene root |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -832,12 +1001,14 @@ Instantiates a prefab asset into the active scene while preserving the prefab co
 ## DELETE /api/gameobjects
 
 Deletes the GameObject at the specified path from the scene.
+If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Required | Description |
 |-------------|------|------|
 | `path` | ✅ | Path of the GameObject to delete |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -858,12 +1029,14 @@ Deletes the GameObject at the specified path from the scene.
 ## PATCH /api/gameobjects
 
 Updates the properties of the GameObject at the specified path.
+If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Required | Description |
 |-------------|------|------|
 | `path` | ✅ | Path of the target GameObject |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Request Body (JSON)
 
@@ -902,12 +1075,14 @@ All fields are optional. Omitted fields are not changed. Each subfield of `trans
 ## POST /api/gameobjects/duplicate
 
 Duplicates the GameObject at the specified path.
+If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Required | Description |
 |-------------|------|------|
 | `path` | ✅ | Path of the source GameObject to duplicate |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -928,13 +1103,15 @@ Duplicates the GameObject at the specified path.
 ## POST /api/gameobjects/reparent
 
 Moves a GameObject to a different parent.
+If `scenePath` is omitted, the active scene is used.
 
 ### Request Body (JSON)
 
 ```json
 {
   "path": "Canvas/Panel/Button",
-  "parentPath": "Canvas/NewPanel"
+  "parentPath": "Canvas/NewPanel",
+  "scenePath": "Assets/Scenes/Level_A.unity"
 }
 ```
 
@@ -942,6 +1119,7 @@ Moves a GameObject to a different parent.
 |-----------|------|------|
 | `path` | ✅ | Path of the GameObject to move |
 | `parentPath` | ❌ | Path of the new parent. If omitted, moves to the scene root |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -962,6 +1140,7 @@ Moves a GameObject to a different parent.
 ## POST /api/gameobjects/batch
 
 Executes multiple create / update / delete operations together as **a single Undo group**.
+If `scenePath` is omitted, the active scene is used. A top-level `scenePath` applies to all operations, and each operation may override it with its own `scenePath`.
 
 ### Request Body (JSON)
 
@@ -984,6 +1163,8 @@ Executes multiple create / update / delete operations together as **a single Und
 | `create_primitive` | `type` (`Cube`\|`Sphere`\|`Capsule`\|`Cylinder`\|`Plane`\|`Quad`) | `name`, `parentPath`, `transform` |
 | `update` | `path` | `name`, `isActive`, `tag`, `layer`, `transform` |
 | `delete` | `path` | — |
+
+All operation types also accept optional `scenePath`.
 
 `transform` shape: `{"position":{"x":0,"y":0,"z":0},"rotation":{...},"scale":{...}}`
 
@@ -1016,13 +1197,15 @@ Even if one operation fails, the remaining operations continue. All successful o
 ## POST /api/gameobjects/components
 
 Adds a component to the specified GameObject.
+If `scenePath` is omitted, the active scene is used.
 
 ### Request Body (JSON)
 
 ```json
 {
   "path": "Canvas/MyObject",
-  "type": "UnityEngine.BoxCollider"
+  "type": "UnityEngine.BoxCollider",
+  "scenePath": "Assets/Scenes/Level_A.unity"
 }
 ```
 
@@ -1030,6 +1213,7 @@ Adds a component to the specified GameObject.
 |-----------|------|------|
 | `path` | ✅ | Path of the target GameObject |
 | `type` | ✅ | Fully qualified type name of the component to add |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -1051,6 +1235,7 @@ Adds a component to the specified GameObject.
 ## DELETE /api/gameobjects/components
 
 Removes a component from the specified GameObject.
+If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
@@ -1058,6 +1243,7 @@ Removes a component from the specified GameObject.
 |-------------|------|------|
 | `path` | ✅ | Path of the target GameObject |
 | `type` | ✅ | Fully qualified type name of the component to remove |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -1078,6 +1264,7 @@ Removes a component from the specified GameObject.
 ## PATCH /api/gameobjects/components
 
 Updates serialized properties of the specified component, including object reference fields.
+If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
@@ -1085,6 +1272,7 @@ Updates serialized properties of the specified component, including object refer
 |-------------|------|------|
 | `path` | ✅ | Path of the target GameObject |
 | `type` | ✅ | Fully qualified type name of the target component |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Request Body (JSON)
 
@@ -1093,7 +1281,7 @@ Updates serialized properties of the specified component, including object refer
   "properties": {
     "m_Intensity": 2.0,
     "m_Color": { "r": 1, "g": 0.9, "b": 0.8, "a": 1 },
-    "target": { "scenePath": "Canvas/Button" },
+    "target": { "sceneAssetPath": "Assets/Scenes/Level_A.unity", "scenePath": "Canvas/Button" },
     "textAsset": { "assetPath": "Assets/Data/config.txt", "type": "UnityEngine.TextAsset" },
     "optionalTarget": null
   }
@@ -1109,6 +1297,7 @@ Supported object reference values:
 | `null` | Clears the reference |
 | `{ "scenePath": "Canvas/Button" }` | Assigns a scene GameObject |
 | `{ "scenePath": "Canvas/Button", "component": "UnityEngine.UI.Text" }` | Assigns a component on a scene GameObject |
+| `{ "sceneAssetPath": "Assets/Scenes/Level_A.unity", "scenePath": "Canvas/Button" }` | Assigns a GameObject from a loaded scene |
 | `{ "assetGuid": "...", "type": "UnityEngine.TextAsset" }` | Assigns an asset by GUID |
 | `{ "assetPath": "Assets/Data/config.txt", "type": "UnityEngine.TextAsset" }` | Assigns an asset by path |
 
@@ -1170,6 +1359,7 @@ Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and asset
 ## POST /api/assets/prefabs
 
 Creates a prefab from a GameObject in the scene.
+If `scenePath` is omitted, the active scene is used.
 
 > Can be called only when the Asset Write category is enabled.
 
@@ -1179,7 +1369,8 @@ Creates a prefab from a GameObject in the scene.
 {
   "goPath": "Stage/Player",
   "assetPath": "Assets/Prefabs/Player.prefab",
-  "mode": "new"
+  "mode": "new",
+  "scenePath": "Assets/Scenes/Level_A.unity"
 }
 ```
 
@@ -1188,6 +1379,7 @@ Creates a prefab from a GameObject in the scene.
 | `goPath` | ✅ | Path of the source GameObject |
 | `assetPath` | ✅ | Destination asset path (a `.prefab` file starting with `Assets/`) |
 | `mode` | ✅ | `new` (create while connecting the instance) or `replace` (overwrite an existing prefab) |
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
 
@@ -1208,13 +1400,14 @@ Creates a prefab from a GameObject in the scene.
 ## POST /api/assets/prefabs/apply
 
 Applies prefab instance overrides to the prefab asset.
+If `scenePath` is omitted, the active scene is used.
 
 > Can be called only when the Asset Write category is enabled.
 
 ### Request Body (JSON)
 
 ```json
-{ "goPath": "Stage/Player" }
+{ "goPath": "Stage/Player", "scenePath": "Assets/Scenes/Level_A.unity" }
 ```
 
 ### Response
@@ -1228,13 +1421,14 @@ Applies prefab instance overrides to the prefab asset.
 ## POST /api/assets/prefabs/revert
 
 Reverts a prefab instance to the state of the prefab asset.
+If `scenePath` is omitted, the active scene is used.
 
 > Can be called only when the Asset Write category is enabled.
 
 ### Request Body (JSON)
 
 ```json
-{ "goPath": "Stage/Player" }
+{ "goPath": "Stage/Player", "scenePath": "Assets/Scenes/Level_A.unity" }
 ```
 
 ### Response

@@ -32,6 +32,8 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var body   = RequestBodyReader.ReadString(request);
             var goPath = RequestBodyReader.GetString(body, "goPath");
+            if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
+                return;
 
             if (string.IsNullOrEmpty(goPath))
             {
@@ -39,7 +41,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = GameObjectUtils.FindByPath(goPath);
+            var go = GameObjectUtils.FindByPath(scene, goPath);
             if (go == null)
             {
                 RestResponse.SendNotFound(response, $"GameObject not found at path: {goPath}");
@@ -56,16 +58,16 @@ namespace LeonAkasaka.UnionAir.Editor
             var prefabAssetPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(go);
 
             if (request.Url.AbsolutePath == "/api/assets/prefabs/apply")
-                HandleApply(go, goPath, prefabAssetPath, response);
+                HandleApply(go, goPath, prefabAssetPath, scene, response);
             else
-                HandleRevert(go, goPath, prefabAssetPath, response);
+                HandleRevert(go, goPath, prefabAssetPath, scene, response);
         }
 
         private static void HandleApply(
-            GameObject go, string goPath, string prefabAssetPath, HttpListenerResponse response)
+            GameObject go, string goPath, string prefabAssetPath, UnityEngine.SceneManagement.Scene scene, HttpListenerResponse response)
         {
             PrefabUtility.ApplyPrefabInstance(go, InteractionMode.AutomatedAction);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             RestResponse.Send(response,
                 $"{{\"applied\":\"{RestResponse.EscapeJson(goPath)}\"," +
@@ -73,10 +75,10 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         private static void HandleRevert(
-            GameObject go, string goPath, string prefabAssetPath, HttpListenerResponse response)
+            GameObject go, string goPath, string prefabAssetPath, UnityEngine.SceneManagement.Scene scene, HttpListenerResponse response)
         {
             PrefabUtility.RevertPrefabInstance(go, InteractionMode.AutomatedAction);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             RestResponse.Send(response,
                 $"{{\"reverted\":\"{RestResponse.EscapeJson(goPath)}\"," +

@@ -4,6 +4,7 @@ using System.Net;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -57,6 +58,8 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             var parentPath = RequestBodyReader.GetString(body, "parentPath");
+            if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
+                return;
 
             Undo.SetCurrentGroupName("UnionAir: Create GameObject");
             var group = Undo.GetCurrentGroup();
@@ -64,7 +67,7 @@ namespace LeonAkasaka.UnionAir.Editor
             GameObject go;
             if (!string.IsNullOrEmpty(parentPath))
             {
-                var parent = GameObjectUtils.FindByPath(parentPath);
+                var parent = GameObjectUtils.FindByPath(scene, parentPath);
                 if (parent == null)
                 {
                     RestResponse.SendError(response, $"Parent not found: {parentPath}", 404);
@@ -78,10 +81,11 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 go = new GameObject(name);
                 Undo.RegisterCreatedObjectUndo(go, "UnionAir: Create GameObject");
+                SceneManager.MoveGameObjectToScene(go, scene);
             }
 
             Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             var fullPath = GameObjectUtils.GetPath(go);
             RestResponse.Send(response,
@@ -99,7 +103,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = GameObjectUtils.FindByPath(path);
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
+
+            var go = GameObjectUtils.FindByPath(scene, path);
             if (go == null)
             {
                 RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
@@ -108,7 +115,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             Undo.SetCurrentGroupName("UnionAir: Delete GameObject");
             Undo.DestroyObjectImmediate(go);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             RestResponse.Send(response, $"{{\"deleted\":\"{RestResponse.EscapeJson(path)}\"}}");
         }
@@ -124,7 +131,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = GameObjectUtils.FindByPath(path);
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
+
+            var go = GameObjectUtils.FindByPath(scene, path);
             if (go == null)
             {
                 RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
@@ -157,7 +167,7 @@ namespace LeonAkasaka.UnionAir.Editor
             ApplyTransform(go.transform, body);
 
             Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             // Return updated GameObject info reusing the existing read handler's data
             var sb = new System.Text.StringBuilder();

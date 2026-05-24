@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
-using UnityEditor.SceneManagement;
 using UnityEngine;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -28,12 +27,14 @@ namespace LeonAkasaka.UnionAir.Editor
             if (request.Url.AbsolutePath == "/api/scene/hierarchy")
                 HandleHierarchy(request, response);
             else
-                HandleSceneInfo(response);
+                HandleSceneInfo(request, response);
         }
 
-        private static void HandleSceneInfo(HttpListenerResponse response)
+        private static void HandleSceneInfo(HttpListenerRequest request, HttpListenerResponse response)
         {
-            var scene = EditorSceneManager.GetActiveScene();
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
+
             var sb = new StringBuilder();
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(scene.name)}\",");
@@ -63,7 +64,9 @@ namespace LeonAkasaka.UnionAir.Editor
             // ?path=<path> — subtree root (null = scene roots)
             var subtreePath = qs["path"];
 
-            var scene = EditorSceneManager.GetActiveScene();
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
+
             var sb = new StringBuilder();
             var counter = new int[1]; // use array for ref-in-lambda compatibility
             bool truncated = false;
@@ -82,7 +85,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!string.IsNullOrEmpty(subtreePath))
             {
                 // Return children of a specific node as top-level objects
-                var root = GameObjectUtils.FindByPath(subtreePath);
+                var root = GameObjectUtils.FindByPath(scene, subtreePath);
                 if (root == null)
                 {
                     RestResponse.SendNotFound(response, $"GameObject not found at path: {subtreePath}");

@@ -1,5 +1,6 @@
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -16,9 +17,20 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <returns>The matching GameObject, or null when no object exists at the path.</returns>
         public static GameObject FindByPath(string path)
         {
-            if (string.IsNullOrEmpty(path)) return null;
-
             var scene = EditorSceneManager.GetActiveScene();
+            return FindByPath(scene, path);
+        }
+
+        /// <summary>
+        /// Finds a GameObject in the given scene by its slash-separated hierarchy path.
+        /// </summary>
+        /// <param name="scene">Loaded scene to search.</param>
+        /// <param name="path">Slash-separated hierarchy path in the scene.</param>
+        /// <returns>The matching GameObject, or null when no object exists at the path.</returns>
+        public static GameObject FindByPath(Scene scene, string path)
+        {
+            if (string.IsNullOrEmpty(path) || !scene.IsValid() || !scene.isLoaded) return null;
+
             var parts = path.Split('/');
 
             GameObject current = null;

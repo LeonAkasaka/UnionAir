@@ -51,6 +51,8 @@ namespace LeonAkasaka.UnionAir.Editor
             var body = RequestBodyReader.ReadString(request);
             var path = RequestBodyReader.GetString(body, "path");
             var typeName = RequestBodyReader.GetString(body, "type");
+            if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
+                return;
 
             if (string.IsNullOrEmpty(path))
             {
@@ -63,7 +65,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = GameObjectUtils.FindByPath(path);
+            var go = GameObjectUtils.FindByPath(scene, path);
             if (go == null)
             {
                 RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
@@ -93,7 +95,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
             RestResponse.Send(response,
                 $"{{\"path\":\"{RestResponse.EscapeJson(path)}\",\"type\":\"{RestResponse.EscapeJson(typeName)}\"}}", 201);
         }
@@ -104,6 +106,8 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var path     = request.QueryString["path"];
             var typeName = request.QueryString["type"];
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
 
             if (string.IsNullOrEmpty(path))
             {
@@ -116,7 +120,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = GameObjectUtils.FindByPath(path);
+            var go = GameObjectUtils.FindByPath(scene, path);
             if (go == null)
             {
                 RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
@@ -140,7 +144,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             Undo.SetCurrentGroupName("UnionAir: Remove Component");
             Undo.DestroyObjectImmediate(comp);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             RestResponse.Send(response,
                 $"{{\"deleted\":\"{RestResponse.EscapeJson(typeName)}\",\"from\":\"{RestResponse.EscapeJson(path)}\"}}");
@@ -152,6 +156,8 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var path     = request.QueryString["path"];
             var typeName = request.QueryString["type"];
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
 
             if (string.IsNullOrEmpty(path))
             {
@@ -164,7 +170,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = GameObjectUtils.FindByPath(path);
+            var go = GameObjectUtils.FindByPath(scene, path);
             if (go == null)
             {
                 RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
@@ -228,7 +234,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             so.ApplyModifiedProperties();
             Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             var sb = new StringBuilder();
             sb.Append("{");
@@ -392,11 +398,12 @@ namespace LeonAkasaka.UnionAir.Editor
             if (error != null) return false;
 
             var scenePath = RequestBodyReader.GetString(rawValue, "scenePath");
+            var sceneAssetPath = RequestBodyReader.GetString(rawValue, "sceneAssetPath");
             var assetGuid = RequestBodyReader.GetString(rawValue, "assetGuid");
             var assetPath = RequestBodyReader.GetString(rawValue, "assetPath");
 
             if (!string.IsNullOrEmpty(scenePath))
-                return TryResolveSceneReference(rawValue, jsonKey, scenePath, expectedType, requestedType,
+                return TryResolveSceneReference(rawValue, jsonKey, sceneAssetPath, scenePath, expectedType, requestedType,
                     out value, out error, out statusCode);
 
             if (!string.IsNullOrEmpty(assetGuid) || !string.IsNullOrEmpty(assetPath))
@@ -408,14 +415,17 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         private static bool TryResolveSceneReference(
-            string rawValue, string jsonKey, string scenePath, Type expectedType, Type requestedType,
+            string rawValue, string jsonKey, string sceneAssetPath, string scenePath, Type expectedType, Type requestedType,
             out UnityEngine.Object value, out string error, out int statusCode)
         {
             value = null;
             error = null;
             statusCode = 400;
 
-            var go = GameObjectUtils.FindByPath(scenePath);
+            if (!TryResolveReferenceScene(sceneAssetPath, out var scene, out error, out statusCode))
+                return false;
+
+            var go = GameObjectUtils.FindByPath(scene, scenePath);
             if (go == null)
             {
                 error = $"GameObject not found for property {jsonKey}: {scenePath}";
@@ -453,6 +463,25 @@ namespace LeonAkasaka.UnionAir.Editor
 
             value = go;
             return ValidateObjectReferenceType(jsonKey, value, expectedType, requestedType, out error, out statusCode);
+        }
+
+        private static bool TryResolveReferenceScene(
+            string sceneAssetPath, out UnityEngine.SceneManagement.Scene scene, out string error, out int statusCode)
+        {
+            error = null;
+            statusCode = 400;
+
+            if (string.IsNullOrEmpty(sceneAssetPath))
+            {
+                scene = EditorSceneManager.GetActiveScene();
+                return true;
+            }
+
+            var status = SceneResolver.ResolveLoaded(sceneAssetPath, out scene, out error);
+            if (status == ResolveStatus.Found) return true;
+
+            statusCode = status == ResolveStatus.Ambiguous ? 409 : 404;
+            return false;
         }
 
         private static bool TryResolveAssetReference(

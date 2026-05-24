@@ -6,6 +6,7 @@ using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -51,6 +52,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var body = RequestBodyReader.ReadString(request);
             var ops  = RequestBodyReader.GetArray(body, "operations");
+            var defaultScenePath = RequestBodyReader.GetString(body, "scenePath");
 
             if (ops.Count == 0)
             {
@@ -62,6 +64,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = Undo.GetCurrentGroup();
 
             var results  = new List<(int index, bool success, string pathOrError)>();
+            var dirtyScenes = new List<Scene>();
             int failures = 0;
 
             for (int i = 0; i < ops.Count; i++)
@@ -74,16 +77,16 @@ namespace LeonAkasaka.UnionAir.Editor
                     switch (opName)
                     {
                         case "create":
-                            results.Add((i, true, ExecuteCreate(op)));
+                            results.Add((i, true, ExecuteCreate(op, defaultScenePath, dirtyScenes)));
                             break;
                         case "create_primitive":
-                            results.Add((i, true, ExecuteCreatePrimitive(op)));
+                            results.Add((i, true, ExecuteCreatePrimitive(op, defaultScenePath, dirtyScenes)));
                             break;
                         case "update":
-                            results.Add((i, true, ExecuteUpdate(op)));
+                            results.Add((i, true, ExecuteUpdate(op, defaultScenePath, dirtyScenes)));
                             break;
                         case "delete":
-                            results.Add((i, true, ExecuteDelete(op)));
+                            results.Add((i, true, ExecuteDelete(op, defaultScenePath, dirtyScenes)));
                             break;
                         default:
                             failures++;
@@ -99,7 +102,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            MarkDirtyScenes(dirtyScenes);
 
             var sb = new StringBuilder();
             sb.Append("{");
@@ -125,8 +128,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── Operation implementations ────────────────────────────────────────────
 
-        private static string ExecuteCreate(string op)
+        private static string ExecuteCreate(string op, string defaultScenePath, List<Scene> dirtyScenes)
         {
+            var scene = ResolveSceneForOp(op, defaultScenePath);
             var name = RequestBodyReader.GetString(op, "name");
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("Missing required field: name");
 
@@ -135,7 +139,7 @@ namespace LeonAkasaka.UnionAir.Editor
             GameObject go;
             if (!string.IsNullOrEmpty(parentPath))
             {
-                var parent = GameObjectUtils.FindByPath(parentPath)
+                var parent = GameObjectUtils.FindByPath(scene, parentPath)
                     ?? throw new ArgumentException($"Parent not found: {parentPath}");
                 go = new GameObject(name);
                 Undo.RegisterCreatedObjectUndo(go, "UnionAir: Batch Create");
@@ -145,14 +149,17 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 go = new GameObject(name);
                 Undo.RegisterCreatedObjectUndo(go, "UnionAir: Batch Create");
+                SceneManager.MoveGameObjectToScene(go, scene);
             }
 
             ApplyTransformFromOp(go.transform, op);
+            AddDirtyScene(dirtyScenes, scene);
             return GameObjectUtils.GetPath(go);
         }
 
-        private static string ExecuteCreatePrimitive(string op)
+        private static string ExecuteCreatePrimitive(string op, string defaultScenePath, List<Scene> dirtyScenes)
         {
+            var scene = ResolveSceneForOp(op, defaultScenePath);
             var typeName = RequestBodyReader.GetString(op, "type");
             if (string.IsNullOrEmpty(typeName)) throw new ArgumentException("Missing required field: type");
 
@@ -164,13 +171,14 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var go = GameObject.CreatePrimitive(primitiveType);
             Undo.RegisterCreatedObjectUndo(go, "UnionAir: Batch CreatePrimitive");
+            SceneManager.MoveGameObjectToScene(go, scene);
 
             if (!string.IsNullOrEmpty(name))
                 go.name = name;
 
             if (!string.IsNullOrEmpty(parentPath))
             {
-                var parent = GameObjectUtils.FindByPath(parentPath);
+                var parent = GameObjectUtils.FindByPath(scene, parentPath);
                 if (parent == null)
                 {
                     Undo.DestroyObjectImmediate(go);
@@ -180,15 +188,17 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             ApplyTransformFromOp(go.transform, op);
+            AddDirtyScene(dirtyScenes, scene);
             return GameObjectUtils.GetPath(go);
         }
 
-        private static string ExecuteUpdate(string op)
+        private static string ExecuteUpdate(string op, string defaultScenePath, List<Scene> dirtyScenes)
         {
+            var scene = ResolveSceneForOp(op, defaultScenePath);
             var path = RequestBodyReader.GetString(op, "path");
             if (string.IsNullOrEmpty(path)) throw new ArgumentException("Missing required field: path");
 
-            var go = GameObjectUtils.FindByPath(path)
+            var go = GameObjectUtils.FindByPath(scene, path)
                 ?? throw new ArgumentException($"GameObject not found: {path}");
 
             Undo.RecordObject(go, "UnionAir: Batch Update");
@@ -207,20 +217,47 @@ namespace LeonAkasaka.UnionAir.Editor
             if (layer.HasValue) go.layer = layer.Value;
 
             ApplyTransformFromOp(go.transform, op);
+            AddDirtyScene(dirtyScenes, scene);
             return GameObjectUtils.GetPath(go);
         }
 
-        private static string ExecuteDelete(string op)
+        private static string ExecuteDelete(string op, string defaultScenePath, List<Scene> dirtyScenes)
         {
+            var scene = ResolveSceneForOp(op, defaultScenePath);
             var path = RequestBodyReader.GetString(op, "path");
             if (string.IsNullOrEmpty(path)) throw new ArgumentException("Missing required field: path");
 
-            var go = GameObjectUtils.FindByPath(path)
+            var go = GameObjectUtils.FindByPath(scene, path)
                 ?? throw new ArgumentException($"GameObject not found: {path}");
 
             var deletedPath = GameObjectUtils.GetPath(go);
             Undo.DestroyObjectImmediate(go);
+            AddDirtyScene(dirtyScenes, scene);
             return deletedPath;
+        }
+
+        private static Scene ResolveSceneForOp(string op, string defaultScenePath)
+        {
+            var scenePath = RequestBodyReader.GetString(op, "scenePath") ?? defaultScenePath;
+            if (string.IsNullOrEmpty(scenePath))
+                return EditorSceneManager.GetActiveScene();
+
+            var status = SceneResolver.ResolveLoaded(scenePath, out var scene, out var error);
+            if (status == ResolveStatus.Found) return scene;
+
+            throw new ArgumentException(error);
+        }
+
+        private static void AddDirtyScene(List<Scene> dirtyScenes, Scene scene)
+        {
+            if (!dirtyScenes.Contains(scene))
+                dirtyScenes.Add(scene);
+        }
+
+        private static void MarkDirtyScenes(List<Scene> dirtyScenes)
+        {
+            foreach (var scene in dirtyScenes)
+                EditorSceneManager.MarkSceneDirty(scene);
         }
 
         private static void ApplyTransformFromOp(Transform t, string op)

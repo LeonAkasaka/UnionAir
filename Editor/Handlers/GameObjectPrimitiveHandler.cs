@@ -3,6 +3,7 @@ using System.Net;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -34,6 +35,8 @@ namespace LeonAkasaka.UnionAir.Editor
             var typeName = RequestBodyReader.GetString(body, "type");
             var name     = RequestBodyReader.GetString(body, "name");
             var parentPath = RequestBodyReader.GetString(body, "parentPath");
+            if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
+                return;
 
             if (string.IsNullOrEmpty(typeName))
             {
@@ -54,13 +57,14 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var go = GameObject.CreatePrimitive(primitiveType);
             Undo.RegisterCreatedObjectUndo(go, $"UnionAir: Create {primitiveType}");
+            SceneManager.MoveGameObjectToScene(go, scene);
 
             if (!string.IsNullOrEmpty(name))
                 go.name = name;
 
             if (!string.IsNullOrEmpty(parentPath))
             {
-                var parent = GameObjectUtils.FindByPath(parentPath);
+                var parent = GameObjectUtils.FindByPath(scene, parentPath);
                 if (parent == null)
                 {
                     Undo.DestroyObjectImmediate(go);
@@ -71,7 +75,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             var goPath = GameObjectUtils.GetPath(go);
             var components = go.GetComponents<Component>();

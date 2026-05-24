@@ -15,8 +15,8 @@ UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making i
 
 | Group | Scope | Security |
 |-------|-------|----------|
-| **Read** | Scene hierarchy, GameObjects, assets, cameras, logs, search | Always enabled |
-| **Scene Write** | Create/update/delete GameObjects and components, save scene | Disabled by default |
+| **Read** | Scene hierarchy, loaded scenes, GameObjects, assets, cameras, logs, search | Always enabled |
+| **Scene Write** | Create/open/unload scenes, create/update/delete GameObjects and components | Disabled by default |
 | **Asset Write** | Prefabs, materials, asset files, AssetDatabase refresh | Disabled by default |
 | **Play Mode** | Enter/exit/pause/step play mode | Disabled by default |
 
@@ -31,6 +31,9 @@ curl http://localhost:8765/api/health
 
 # Scene hierarchy
 curl http://localhost:8765/api/scene/hierarchy
+
+# Loaded scenes
+curl http://localhost:8765/api/scenes
 
 # Specific GameObject
 curl "http://localhost:8765/api/gameobjects?path=Main Camera"

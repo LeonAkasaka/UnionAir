@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using UnityEditor;
-using UnityEditor.SceneManagement;
 using UnityEngine;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -42,7 +41,9 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             var assetTypeName = AssetDatabase.GetMainAssetTypeAtPath(assetPath)?.Name ?? "Unknown";
-            var scene         = EditorSceneManager.GetActiveScene();
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
+
             var allGos        = SceneUtils.GetAllGameObjects(scene);
 
             var sb = new StringBuilder();

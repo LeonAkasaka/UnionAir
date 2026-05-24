@@ -32,6 +32,8 @@ namespace LeonAkasaka.UnionAir.Editor
             var goPath    = RequestBodyReader.GetString(body, "goPath");
             var assetPath = RequestBodyReader.GetString(body, "assetPath");
             var mode      = RequestBodyReader.GetString(body, "mode") ?? "new";
+            if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
+                return;
 
             if (string.IsNullOrEmpty(goPath))
             {
@@ -49,7 +51,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = GameObjectUtils.FindByPath(goPath);
+            var go = GameObjectUtils.FindByPath(scene, goPath);
             if (go == null)
             {
                 RestResponse.SendNotFound(response, $"GameObject not found at path: {goPath}");
@@ -89,7 +91,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             var guid = AssetDatabase.AssetPathToGUID(assetPath);
             RestResponse.Send(response,

@@ -2,6 +2,7 @@ using System.Net;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -36,7 +37,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = GameObjectUtils.FindByPath(path);
+            if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
+                return;
+
+            var go = GameObjectUtils.FindByPath(scene, path);
             if (go == null)
             {
                 RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
@@ -48,7 +52,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (!string.IsNullOrEmpty(parentPath))
             {
-                var parentGo = GameObjectUtils.FindByPath(parentPath);
+                var parentGo = GameObjectUtils.FindByPath(scene, parentPath);
                 if (parentGo == null)
                 {
                     RestResponse.SendNotFound(response, $"Parent not found: {parentPath}");
@@ -60,9 +64,11 @@ namespace LeonAkasaka.UnionAir.Editor
             Undo.SetCurrentGroupName("UnionAir: Reparent GameObject");
             var group = Undo.GetCurrentGroup();
             Undo.SetTransformParent(go.transform, newParent, "UnionAir: Reparent GameObject");
+            if (newParent == null)
+                SceneManager.MoveGameObjectToScene(go, scene);
             Undo.CollapseUndoOperations(group);
 
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             var newGoPath = GameObjectUtils.GetPath(go);
             RestResponse.Send(response, $"{{\"path\":\"{RestResponse.EscapeJson(newGoPath)}\"}}");

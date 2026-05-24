@@ -34,7 +34,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var go = GameObjectUtils.FindByPath(path);
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
+
+            var go = GameObjectUtils.FindByPath(scene, path);
             if (go == null)
             {
                 RestResponse.SendNotFound(response, $"GameObject not found at path: {path}");
@@ -49,7 +52,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Undo.RegisterCreatedObjectUndo(copy, "UnionAir: Duplicate GameObject");
 
             Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.MarkSceneDirty(scene);
 
             var newPath = GameObjectUtils.GetPath(copy);
             RestResponse.Send(response,
