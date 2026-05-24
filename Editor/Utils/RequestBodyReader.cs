@@ -105,11 +105,10 @@ namespace LeonAkasaka.UnionAir.Editor
         public static string GetObject(string json, string key)
         {
             if (string.IsNullOrEmpty(json)) return null;
-            var searchKey = $"\"{key}\"";
-            int keyIdx = json.IndexOf(searchKey);
+            int keyIdx = FindTopLevelKey(json, key);
             if (keyIdx < 0) return null;
 
-            int colonIdx = json.IndexOf(':', keyIdx + searchKey.Length);
+            int colonIdx = json.IndexOf(':', keyIdx);
             if (colonIdx < 0) return null;
 
             int start = colonIdx + 1;
@@ -139,11 +138,10 @@ namespace LeonAkasaka.UnionAir.Editor
             var result = new List<string>();
             if (string.IsNullOrEmpty(json)) return result;
 
-            var searchKey = $"\"{key}\"";
-            int keyIdx = json.IndexOf(searchKey);
+            int keyIdx = FindTopLevelKey(json, key);
             if (keyIdx < 0) return result;
 
-            int colonIdx = json.IndexOf(':', keyIdx + searchKey.Length);
+            int colonIdx = json.IndexOf(':', keyIdx);
             if (colonIdx < 0) return result;
 
             int start = colonIdx + 1;
@@ -208,11 +206,10 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (string.IsNullOrEmpty(json)) return null;
 
-            var searchKey = $"\"{key}\"";
-            int keyIdx = json.IndexOf(searchKey);
+            int keyIdx = FindTopLevelKey(json, key);
             if (keyIdx < 0) return null;
 
-            int colonIdx = json.IndexOf(':', keyIdx + searchKey.Length);
+            int colonIdx = json.IndexOf(':', keyIdx);
             if (colonIdx < 0) return null;
 
             int start = colonIdx + 1;
@@ -239,6 +236,47 @@ namespace LeonAkasaka.UnionAir.Editor
                     end++;
                 return json.Substring(start, end - start).Trim();
             }
+        }
+
+        private static int FindTopLevelKey(string json, string key)
+        {
+            int depth = 0;
+            for (int i = 0; i < json.Length; i++)
+            {
+                var c = json[i];
+                if (c == '"')
+                {
+                    int start = i + 1;
+                    int end = start;
+                    while (end < json.Length)
+                    {
+                        if (json[end] == '\\') { end += 2; continue; }
+                        if (json[end] == '"') break;
+                        end++;
+                    }
+
+                    if (depth == 1 && end < json.Length)
+                    {
+                        var candidate = json.Substring(start, end - start);
+                        if (candidate == key)
+                        {
+                            int after = end + 1;
+                            while (after < json.Length && (json[after] == ' ' || json[after] == '\t' || json[after] == '\r' || json[after] == '\n'))
+                                after++;
+                            if (after < json.Length && json[after] == ':')
+                                return start - 1;
+                        }
+                    }
+
+                    i = end;
+                    continue;
+                }
+
+                if (c == '{' || c == '[') depth++;
+                else if (c == '}' || c == ']') depth--;
+            }
+
+            return -1;
         }
     }
 }

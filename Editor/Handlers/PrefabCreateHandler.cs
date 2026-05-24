@@ -8,7 +8,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// <summary>
     /// Handles POST /api/assets/prefabs
     /// Creates or overwrites a prefab asset from a scene GameObject.
-    /// Body: { "goPath": "...", "assetPath": "Assets/Prefabs/Name.prefab", "mode": "new|replace" }
+    /// Body: { "source": {"value": "..."}, "assetPath": "Assets/Prefabs/Name.prefab", "mode": "new|replace" }
     /// </summary>
     internal class PrefabCreateHandler : IRequestHandler
     {
@@ -29,8 +29,6 @@ namespace LeonAkasaka.UnionAir.Editor
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var body      = RequestBodyReader.ReadString(request);
-            var goPath    = RequestBodyReader.GetString(body, "goPath");
-            var globalObjectId = RequestBodyReader.GetString(body, "globalObjectId");
             var assetPath = RequestBodyReader.GetString(body, "assetPath");
             var mode      = RequestBodyReader.GetString(body, "mode") ?? "new";
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
@@ -47,7 +45,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, goPath, "source GameObject", out var go, out var error, out var statusCode))
+            if (!ObjectRefUtils.TryReadBody(body, "source", out var source, out var error, out var statusCode) ||
+                !ObjectRefUtils.TryResolveGameObject(scene, source, "source", out var go, out error, out statusCode))
             {
                 RestResponse.SendError(response, error, statusCode);
                 return;

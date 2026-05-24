@@ -11,7 +11,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// Handles POST /api/gameobjects/primitive
     /// Creates a Unity primitive (Cube, Sphere, Capsule, Cylinder, Plane, Quad)
     /// using GameObject.CreatePrimitive so the mesh and default material are assigned.
-    /// Body: { "type": "Cube", "name": "MyCube", "parentPath": "..." }
+    /// Body: { "type": "Cube", "name": "MyCube", "parent": {"value": "..."} }
     /// </summary>
     internal class GameObjectPrimitiveHandler : IRequestHandler
     {
@@ -34,8 +34,6 @@ namespace LeonAkasaka.UnionAir.Editor
             var body     = RequestBodyReader.ReadString(request);
             var typeName = RequestBodyReader.GetString(body, "type");
             var name     = RequestBodyReader.GetString(body, "name");
-            var parentPath = RequestBodyReader.GetString(body, "parentPath");
-            var parentGlobalObjectId = RequestBodyReader.GetString(body, "parentGlobalObjectId");
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
@@ -63,9 +61,11 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!string.IsNullOrEmpty(name))
                 go.name = name;
 
-            if (!string.IsNullOrEmpty(parentGlobalObjectId) || !string.IsNullOrEmpty(parentPath))
+            var parentJson = RequestBodyReader.GetObject(body, "parent");
+            if (!string.IsNullOrEmpty(parentJson))
             {
-                if (!GameObjectUtils.TryResolveTarget(scene, parentGlobalObjectId, parentPath, "parent", out var parent, out var error, out var statusCode))
+                if (!ObjectRefUtils.TryParse(parentJson, "parent", out var parentRef, out var error, out var statusCode) ||
+                    !ObjectRefUtils.TryResolveGameObject(scene, parentRef, "parent", out var parent, out error, out statusCode))
                 {
                     Undo.DestroyObjectImmediate(go);
                     RestResponse.SendError(response, error, statusCode);

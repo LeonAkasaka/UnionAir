@@ -57,8 +57,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var parentPath = RequestBodyReader.GetString(body, "parentPath");
-            var parentGlobalObjectId = RequestBodyReader.GetString(body, "parentGlobalObjectId");
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
@@ -66,9 +64,11 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = Undo.GetCurrentGroup();
 
             GameObject go;
-            if (!string.IsNullOrEmpty(parentGlobalObjectId) || !string.IsNullOrEmpty(parentPath))
+            var parentJson = RequestBodyReader.GetObject(body, "parent");
+            if (!string.IsNullOrEmpty(parentJson))
             {
-                if (!GameObjectUtils.TryResolveTarget(scene, parentGlobalObjectId, parentPath, "parent", out var parent, out var error, out var statusCode))
+                if (!ObjectRefUtils.TryParse(parentJson, "parent", out var parentRef, out var error, out var statusCode) ||
+                    !ObjectRefUtils.TryResolveGameObject(scene, parentRef, "parent", out var parent, out error, out statusCode))
                 {
                     RestResponse.SendError(response, error, statusCode);
                     return;
@@ -98,13 +98,11 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static void HandleDelete(HttpListenerRequest request, HttpListenerResponse response)
         {
-            var path = request.QueryString["path"];
-            var globalObjectId = request.QueryString["globalObjectId"];
-
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "query parameter", out var go, out var error, out var statusCode))
+            if (!ObjectRefUtils.TryReadQuery(request.QueryString, "target", out var target, out var error, out var statusCode) ||
+                !ObjectRefUtils.TryResolveGameObject(scene, target, "target", out var go, out error, out statusCode))
             {
                 RestResponse.SendError(response, error, statusCode);
                 return;
@@ -124,13 +122,11 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static void HandleUpdate(HttpListenerRequest request, HttpListenerResponse response)
         {
-            var path = request.QueryString["path"];
-            var globalObjectId = request.QueryString["globalObjectId"];
-
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "query parameter", out var go, out var error, out var statusCode))
+            if (!ObjectRefUtils.TryReadQuery(request.QueryString, "target", out var target, out var error, out var statusCode) ||
+                !ObjectRefUtils.TryResolveGameObject(scene, target, "target", out var go, out error, out statusCode))
             {
                 RestResponse.SendError(response, error, statusCode);
                 return;

@@ -9,7 +9,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// Handles prefab override operations on scene instances:
     ///   POST /api/assets/prefabs/apply  — apply all instance overrides to the prefab asset
     ///   POST /api/assets/prefabs/revert — revert instance to match the prefab asset
-    /// Body: { "goPath": "..." }
+    /// Body: { "source": {"value": "..."} }
     /// </summary>
     internal class PrefabOverrideHandler : IRequestHandler
     {
@@ -31,18 +31,17 @@ namespace LeonAkasaka.UnionAir.Editor
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var body   = RequestBodyReader.ReadString(request);
-            var goPath = RequestBodyReader.GetString(body, "goPath");
-            var globalObjectId = RequestBodyReader.GetString(body, "globalObjectId");
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
-            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, goPath, "prefab instance", out var go, out var error, out var statusCode))
+            if (!ObjectRefUtils.TryReadBody(body, "source", out var source, out var error, out var statusCode) ||
+                !ObjectRefUtils.TryResolveGameObject(scene, source, "source", out var go, out error, out statusCode))
             {
                 RestResponse.SendError(response, error, statusCode);
                 return;
             }
             scene = go.scene;
-            goPath = GameObjectUtils.GetPath(go);
+            var goPath = GameObjectUtils.GetPath(go);
 
             if (!PrefabUtility.IsPartOfAnyPrefab(go))
             {

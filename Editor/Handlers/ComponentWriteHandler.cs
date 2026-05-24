@@ -49,8 +49,6 @@ namespace LeonAkasaka.UnionAir.Editor
         private static void HandleAdd(HttpListenerRequest request, HttpListenerResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
-            var path = RequestBodyReader.GetString(body, "path");
-            var globalObjectId = RequestBodyReader.GetString(body, "globalObjectId");
             var typeName = RequestBodyReader.GetString(body, "type");
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
@@ -61,14 +59,15 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "target", out var go, out var error, out var statusCode))
+            if (!ObjectRefUtils.TryReadBody(body, "target", out var target, out var error, out var statusCode) ||
+                !ObjectRefUtils.TryResolveGameObject(scene, target, "target", out var go, out error, out statusCode))
             {
                 RestResponse.SendError(response, error, statusCode);
                 return;
             }
             scene = go.scene;
 
-            var type = ResolveType(typeName);
+            var type = ObjectRefUtils.ResolveType(typeName);
             if (type == null)
             {
                 RestResponse.SendError(response, $"Unknown component type: {typeName}", 400);
@@ -101,19 +100,17 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static void HandleRemove(HttpListenerRequest request, HttpListenerResponse response)
         {
-            var path     = request.QueryString["path"];
-            var globalObjectId = request.QueryString["globalObjectId"];
-            var typeName = request.QueryString["type"];
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            if (!TryResolveComponentTarget(scene, globalObjectId, path, typeName, out var go, out var comp, out var targetError, out var targetStatusCode))
+            if (!ObjectRefUtils.TryReadQuery(request.QueryString, "target", out var target, out var targetError, out var targetStatusCode) ||
+                !ObjectRefUtils.TryResolveComponent(scene, target, "target", out var go, out var comp, out targetError, out targetStatusCode))
             {
                 RestResponse.SendError(response, targetError, targetStatusCode);
                 return;
             }
             scene = go.scene;
-            typeName = comp.GetType().FullName;
+            var typeName = comp.GetType().FullName;
             var goPath = GameObjectUtils.GetPath(go);
             var componentId = ObjectIdUtils.GetGlobalObjectId(comp);
 
@@ -129,20 +126,18 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static void HandleUpdate(HttpListenerRequest request, HttpListenerResponse response)
         {
-            var path     = request.QueryString["path"];
-            var globalObjectId = request.QueryString["globalObjectId"];
-            var typeName = request.QueryString["type"];
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            if (!TryResolveComponentTarget(scene, globalObjectId, path, typeName, out var go, out var comp, out var targetError, out var targetStatusCode))
+            if (!ObjectRefUtils.TryReadQuery(request.QueryString, "target", out var target, out var targetError, out var targetStatusCode) ||
+                !ObjectRefUtils.TryResolveComponent(scene, target, "target", out var go, out var comp, out targetError, out targetStatusCode))
             {
                 RestResponse.SendError(response, targetError, targetStatusCode);
                 return;
             }
             scene = go.scene;
-            typeName = comp.GetType().FullName;
-            path = GameObjectUtils.GetPath(go);
+            var typeName = comp.GetType().FullName;
+            var path = GameObjectUtils.GetPath(go);
 
             var body = RequestBodyReader.ReadString(request);
             var propertiesJson = RequestBodyReader.GetObject(body, "properties");
@@ -205,82 +200,6 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
-
-        private static bool TryResolveComponentTarget(
-            UnityEngine.SceneManagement.Scene scene,
-            string globalObjectId,
-            string path,
-            string typeName,
-            out GameObject go,
-            out Component comp,
-            out string error,
-            out int statusCode)
-        {
-            go = null;
-            comp = null;
-            error = null;
-            statusCode = 400;
-
-            if (!string.IsNullOrEmpty(globalObjectId))
-            {
-                if (!ObjectIdUtils.TryResolveGameObjectOrComponent(globalObjectId, out go, out comp, out error, out statusCode))
-                    return false;
-
-                if (comp != null)
-                {
-                    go = comp.gameObject;
-                    return true;
-                }
-
-                return TryGetComponentByType(go, typeName, out comp, out error, out statusCode);
-            }
-
-            if (!GameObjectUtils.TryResolveTarget(scene, null, path, "target", out go, out error, out statusCode))
-                return false;
-
-            return TryGetComponentByType(go, typeName, out comp, out error, out statusCode);
-        }
-
-        private static bool TryGetComponentByType(
-            GameObject go,
-            string typeName,
-            out Component comp,
-            out string error,
-            out int statusCode)
-        {
-            comp = null;
-            error = null;
-            statusCode = 400;
-
-            if (string.IsNullOrEmpty(typeName))
-            {
-                error = "Missing required type when target globalObjectId does not point to a Component.";
-                return false;
-            }
-
-            var type = ResolveType(typeName);
-            if (type == null)
-            {
-                error = $"Unknown component type: {typeName}";
-                return false;
-            }
-
-            if (!typeof(Component).IsAssignableFrom(type))
-            {
-                error = $"Type is not a Component: {typeName}";
-                return false;
-            }
-
-            comp = go.GetComponent(type);
-            if (comp == null)
-            {
-                error = $"Component {typeName} not found on {GameObjectUtils.GetPath(go)}";
-                statusCode = 404;
-                return false;
-            }
-
-            return true;
-        }
 
         private static string FindPropertyKey(string json, SerializedProperty prop)
         {
@@ -423,106 +342,41 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             var expectedType = GetManagedObjectType(prop);
-            var requestedTypeName = RequestBodyReader.GetString(rawValue, "type");
+            var requestedTypeName = RequestBodyReader.GetString(rawValue, "assetType");
             var requestedType = ResolveOptionalReferenceType(requestedTypeName, jsonKey, out error, out statusCode);
             if (error != null) return false;
 
-            var globalObjectId = RequestBodyReader.GetString(rawValue, "globalObjectId");
-            var scenePath = RequestBodyReader.GetString(rawValue, "scenePath");
-            var sceneAssetPath = RequestBodyReader.GetString(rawValue, "sceneAssetPath");
             var assetGuid = RequestBodyReader.GetString(rawValue, "assetGuid");
             var assetPath = RequestBodyReader.GetString(rawValue, "assetPath");
-
-            if (!string.IsNullOrEmpty(globalObjectId))
-                return TryResolveGlobalObjectReference(jsonKey, globalObjectId, expectedType, requestedType,
-                    out value, out error, out statusCode);
-
-            if (!string.IsNullOrEmpty(scenePath))
-                return TryResolveSceneReference(rawValue, jsonKey, sceneAssetPath, scenePath, expectedType, requestedType,
-                    out value, out error, out statusCode);
 
             if (!string.IsNullOrEmpty(assetGuid) || !string.IsNullOrEmpty(assetPath))
                 return TryResolveAssetReference(jsonKey, assetGuid, assetPath, expectedType, requestedType,
                     out value, out error, out statusCode);
 
-            error = $"Object reference property {jsonKey} requires globalObjectId, scenePath, assetGuid, assetPath, or null.";
-            return false;
-        }
-
-        private static bool TryResolveGlobalObjectReference(
-            string jsonKey, string globalObjectId, Type expectedType, Type requestedType,
-            out UnityEngine.Object value, out string error, out int statusCode)
-        {
-            if (!ObjectIdUtils.TryResolveObject(globalObjectId, out value, out error, out statusCode))
+            if (!TryResolveReferenceScene(RequestBodyReader.GetString(rawValue, "scenePath"), out var scene, out error, out statusCode))
                 return false;
 
-            return ValidateObjectReferenceType(jsonKey, value, expectedType, requestedType, out error, out statusCode);
-        }
-
-        private static bool TryResolveSceneReference(
-            string rawValue, string jsonKey, string sceneAssetPath, string scenePath, Type expectedType, Type requestedType,
-            out UnityEngine.Object value, out string error, out int statusCode)
-        {
-            value = null;
-            error = null;
-            statusCode = 400;
-
-            if (!TryResolveReferenceScene(sceneAssetPath, out var scene, out error, out statusCode))
+            if (!ObjectRefUtils.TryParse(rawValue, jsonKey, out var objectRef, out error, out statusCode))
                 return false;
 
-            var go = GameObjectUtils.FindByPath(scene, scenePath);
-            if (go == null)
-            {
-                error = $"GameObject not found for property {jsonKey}: {scenePath}";
-                statusCode = 404;
+            if (!ObjectRefUtils.TryResolveObject(scene, objectRef, jsonKey, out value, out error, out statusCode))
                 return false;
-            }
-
-            var componentTypeName = RequestBodyReader.GetString(rawValue, "component");
-            if (!string.IsNullOrEmpty(componentTypeName))
-            {
-                var componentType = ResolveType(componentTypeName);
-                if (componentType == null)
-                {
-                    error = $"Unknown component type for property {jsonKey}: {componentTypeName}";
-                    return false;
-                }
-
-                if (!typeof(Component).IsAssignableFrom(componentType))
-                {
-                    error = $"Type is not a Component for property {jsonKey}: {componentTypeName}";
-                    return false;
-                }
-
-                var component = go.GetComponent(componentType);
-                if (component == null)
-                {
-                    error = $"Component {componentTypeName} not found on {scenePath} for property {jsonKey}";
-                    statusCode = 404;
-                    return false;
-                }
-
-                value = component;
-                return ValidateObjectReferenceType(jsonKey, value, expectedType, requestedType, out error, out statusCode);
-            }
-
-            value = go;
             return ValidateObjectReferenceType(jsonKey, value, expectedType, requestedType, out error, out statusCode);
         }
 
         private static bool TryResolveReferenceScene(
-            string sceneAssetPath, out UnityEngine.SceneManagement.Scene scene, out string error, out int statusCode)
+            string scenePath, out UnityEngine.SceneManagement.Scene scene, out string error, out int statusCode)
         {
             error = null;
             statusCode = 400;
 
-            if (string.IsNullOrEmpty(sceneAssetPath))
+            if (string.IsNullOrEmpty(scenePath))
             {
                 scene = EditorSceneManager.GetActiveScene();
                 return true;
             }
 
-            var status = SceneResolver.ResolveLoaded(sceneAssetPath, out scene, out error);
+            var status = SceneResolver.ResolveLoaded(scenePath, out scene, out error);
             if (status == ResolveStatus.Found) return true;
 
             statusCode = status == ResolveStatus.Ambiguous ? 409 : 404;
@@ -573,7 +427,7 @@ namespace LeonAkasaka.UnionAir.Editor
             statusCode = 400;
             if (string.IsNullOrEmpty(typeName)) return null;
 
-            var type = ResolveType(typeName);
+            var type = ObjectRefUtils.ResolveType(typeName);
             if (type != null && typeof(UnityEngine.Object).IsAssignableFrom(type)) return type;
 
             error = type == null
@@ -617,7 +471,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (typeName.StartsWith(prefix, StringComparison.Ordinal) && typeName.EndsWith(">", StringComparison.Ordinal))
                 typeName = typeName.Substring(prefix.Length, typeName.Length - prefix.Length - 1);
 
-            var type = ResolveType(typeName);
+            var type = ObjectRefUtils.ResolveType(typeName);
             return type != null && typeof(UnityEngine.Object).IsAssignableFrom(type) ? type : null;
         }
 
@@ -699,26 +553,5 @@ namespace LeonAkasaka.UnionAir.Editor
             return scalarEnd;
         }
 
-        private static Type ResolveType(string typeName)
-        {
-            // Try direct lookup first
-            var t = Type.GetType(typeName);
-            if (t != null) return t;
-
-            // Search all loaded assemblies
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                t = asm.GetType(typeName);
-                if (t != null) return t;
-
-                // Also try short name matching
-                foreach (var candidate in asm.GetTypes())
-                {
-                    if (candidate.Name == typeName || candidate.FullName == typeName)
-                        return candidate;
-                }
-            }
-            return null;
-        }
     }
 }

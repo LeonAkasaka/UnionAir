@@ -9,7 +9,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// <summary>
     /// Handles POST /api/gameobjects/instantiate
     /// Instantiates a prefab asset into the active scene while maintaining the prefab connection.
-    /// Body: { "guid": "...", "assetPath": "...", "name": "...", "parentPath": "..." }
+    /// Body: { "guid": "...", "assetPath": "...", "name": "...", "parent": {"value": "..."} }
     /// Either "guid" or "assetPath" is required; "guid" takes precedence when both are provided.
     /// </summary>
     internal class GameObjectInstantiateHandler : IRequestHandler
@@ -34,8 +34,6 @@ namespace LeonAkasaka.UnionAir.Editor
             var guid       = RequestBodyReader.GetString(body, "guid");
             var assetPath  = RequestBodyReader.GetString(body, "assetPath");
             var name       = RequestBodyReader.GetString(body, "name");
-            var parentPath = RequestBodyReader.GetString(body, "parentPath");
-            var parentGlobalObjectId = RequestBodyReader.GetString(body, "parentGlobalObjectId");
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
@@ -68,9 +66,11 @@ namespace LeonAkasaka.UnionAir.Editor
 
             // Resolve optional parent transform
             Transform parentTransform = null;
-            if (!string.IsNullOrEmpty(parentGlobalObjectId) || !string.IsNullOrEmpty(parentPath))
+            var parentJson = RequestBodyReader.GetObject(body, "parent");
+            if (!string.IsNullOrEmpty(parentJson))
             {
-                if (!GameObjectUtils.TryResolveTarget(scene, parentGlobalObjectId, parentPath, "parent", out var parentGo, out var error, out var statusCode))
+                if (!ObjectRefUtils.TryParse(parentJson, "parent", out var parentRef, out var error, out var statusCode) ||
+                    !ObjectRefUtils.TryResolveGameObject(scene, parentRef, "parent", out var parentGo, out error, out statusCode))
                 {
                     RestResponse.SendError(response, error, statusCode);
                     return;

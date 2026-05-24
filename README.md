@@ -21,7 +21,7 @@ UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making i
 | **Play Mode** | Enter/exit/pause/step play mode | Disabled by default |
 
 > All write operations are Undo-able in the Unity Editor (Ctrl+Z).  
-> Scene GameObjects and Components include `globalObjectId` values in read responses and can be targeted by those IDs in write requests.
+> Scene GameObjects and Components include `globalObjectId` values in read responses and can be targeted with typed object references in write requests.
 > See **[API Reference](Documentation~/api-reference.md)** for the full endpoint list and request/response details.
 
 ## Quick Example
@@ -37,7 +37,8 @@ curl http://localhost:8765/api/scene/hierarchy
 curl http://localhost:8765/api/scenes
 
 # Specific GameObject
-curl "http://localhost:8765/api/gameobjects?path=Main Camera"
+curl --get "http://localhost:8765/api/gameobjects" \
+  --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 
 # All assets of type Texture2D
 curl "http://localhost:8765/api/assets?type=Texture2D"
@@ -45,7 +46,7 @@ curl "http://localhost:8765/api/assets?type=Texture2D"
 # Create a new empty GameObject (requires the Scene Write category to be enabled)
 curl -X POST http://localhost:8765/api/gameobjects \
   -H "Content-Type: application/json" \
-  -d '{"name":"MyObject","parentPath":"Canvas"}'
+  -d '{"name":"MyObject","parent":{"type":"hierarchyPath","value":"Canvas"}}'
 ```
 
 ## MCP Bridge

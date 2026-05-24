@@ -85,12 +85,12 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var query = request.QueryString;
 
-            // --- path (required) ---
-            var path = query["path"] ?? "";
-            var globalObjectId = query["globalObjectId"] ?? "";
-            if (string.IsNullOrEmpty(path) && string.IsNullOrEmpty(globalObjectId))
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
+
+            if (!ObjectRefUtils.TryReadQuery(query, "target", out var target, out var error, out var statusCode))
             {
-                RestResponse.SendError(response, "Query parameter 'path' or 'globalObjectId' is required.", 400);
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
 
@@ -104,12 +104,12 @@ namespace LeonAkasaka.UnionAir.Editor
             int quality = ParseClamp(query["quality"], 85, 1, 100);
 
             // --- find camera ---
-            Camera camera = FindCamera(path, globalObjectId, response);
-            if (camera == null)
+            if (!ObjectRefUtils.TryResolveCamera(scene, target, out var camera, out error, out statusCode))
             {
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
-            path = GameObjectUtils.GetPath(camera.gameObject);
+            var path = GameObjectUtils.GetPath(camera.gameObject);
 
             // --- render ---
             byte[] bytes;
@@ -144,11 +144,12 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var query = request.QueryString;
 
-            var path = query["path"] ?? "";
-            var globalObjectId = query["globalObjectId"] ?? "";
-            if (string.IsNullOrEmpty(path) && string.IsNullOrEmpty(globalObjectId))
+            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+                return;
+
+            if (!ObjectRefUtils.TryReadQuery(query, "target", out var target, out var error, out var statusCode))
             {
-                RestResponse.SendError(response, "Query parameter 'path' or 'globalObjectId' is required.", 400);
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
 
@@ -159,9 +160,9 @@ namespace LeonAkasaka.UnionAir.Editor
             if (format != "png" && format != "jpeg") format = "jpeg";
             int quality = ParseClamp(query["quality"], 85, 1, 100);
 
-            Camera camera = FindCamera(path, globalObjectId, response);
-            if (camera == null)
+            if (!ObjectRefUtils.TryResolveCamera(scene, target, out var camera, out error, out statusCode))
             {
+                RestResponse.SendError(response, error, statusCode);
                 return;
             }
 
@@ -178,44 +179,6 @@ namespace LeonAkasaka.UnionAir.Editor
 
             string mimeType = format == "png" ? "image/png" : "image/jpeg";
             RestResponse.SendBinary(response, bytes, mimeType);
-        }
-
-        private static Camera FindCamera(string path, string globalObjectId, HttpListenerResponse response)
-        {
-            if (!string.IsNullOrEmpty(globalObjectId))
-            {
-                if (!ObjectIdUtils.TryResolveGameObjectOrComponent(globalObjectId, out var go, out var component, out var error, out var statusCode))
-                {
-                    RestResponse.SendError(response, error, statusCode);
-                    return null;
-                }
-
-                var camera = component as Camera;
-                if (camera != null) return camera;
-
-                if (go != null)
-                    camera = go.GetComponent<Camera>();
-
-                if (camera == null)
-                    RestResponse.SendError(response, $"No Camera component found for globalObjectId '{globalObjectId}'.", 404);
-
-                return camera;
-            }
-
-            var scene = EditorSceneManager.GetActiveScene();
-            foreach (var (go, goPath) in SceneUtils.GetAllGameObjects(scene))
-            {
-                if (goPath == path)
-                {
-                    var camera = go.GetComponent<Camera>();
-                    if (camera == null)
-                        RestResponse.SendError(response, $"No Camera component found at path '{path}'.", 404);
-                    return camera;
-                }
-            }
-
-            RestResponse.SendError(response, $"No Camera component found at path '{path}'.", 404);
-            return null;
         }
 
         private static byte[] RenderCamera(Camera cam, int width, int height, string format, int quality)

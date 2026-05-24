@@ -254,8 +254,8 @@ Works in both Edit mode and Play mode.
 
 | Parameter | Default | Description |
 |-------------|-----------|------|
-| `path` | Conditional | Hierarchical path of the GameObject with the camera attached (example: `Main Camera`) |
-| `globalObjectId` | Conditional | Alternative to `path`; may resolve to a camera GameObject or Camera component |
+| `target` | **Required** | Object reference resolving to a camera GameObject or Camera component |
+| `scenePath` | active scene | Loaded scene asset path or unambiguous scene name for path-based target resolution |
 | `width` | `640` | Output width (px), max 1920 |
 | `height` | `360` | Output height (px), max 1080 |
 | `format` | `jpeg` | `png` or `jpeg` |
@@ -280,8 +280,9 @@ Works in both Edit mode and Play mode.
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `path` and `globalObjectId` are missing |
-| 404 | No Camera component exists at the specified path |
+| 400 | `target` is missing or malformed |
+| 404 | No Camera component exists for `target` |
+| 422 | `target` resolves to an unsupported object type |
 
 ### Examples
 
@@ -290,10 +291,15 @@ Works in both Edit mode and Play mode.
 curl "http://localhost:8765/api/cameras"
 
 # Capture Main Camera at default resolution in JPEG
-curl "http://localhost:8765/api/cameras/capture?path=Main+Camera"
+curl --get "http://localhost:8765/api/cameras/capture" \
+  --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 
 # Capture in PNG at HD resolution
-curl "http://localhost:8765/api/cameras/capture?path=Main+Camera&width=1280&height=720&format=png"
+curl --get "http://localhost:8765/api/cameras/capture" \
+  --data-urlencode 'target={"type":"componentPath","value":"Main Camera:UnityEngine.Camera"}' \
+  --data-urlencode "width=1280" \
+  --data-urlencode "height=720" \
+  --data-urlencode "format=png"
 ```
 
 ### Use with LLM / MCP Bridges
@@ -309,7 +315,7 @@ If opened in a browser, it displays as-is, and you can save it to a file with `c
 
 ### Query Parameters
 
-Same as `/api/cameras/capture` (`path` or `globalObjectId` required; `width` / `height` / `format` / `quality` optional).
+Same as `/api/cameras/capture` (`target` required; `scenePath` / `width` / `height` / `format` / `quality` optional).
 
 ### Response
 
@@ -319,8 +325,9 @@ Same as `/api/cameras/capture` (`path` or `globalObjectId` required; `width` / `
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `path` and `globalObjectId` are missing |
-| 404 | No Camera component exists at the specified path |
+| 400 | `target` is missing or malformed |
+| 404 | No Camera component exists for `target` |
+| 422 | `target` resolves to an unsupported object type |
 
 ### Examples
 
@@ -373,20 +380,23 @@ Returns metadata for a loaded scene. If `scenePath` is omitted, the active scene
 
 ---
 
-## Scene Object IDs
+## Object References
 
-Scene GameObjects and Components expose Unity `GlobalObjectId` strings as `globalObjectId` fields. Use these IDs for stable follow-up API calls when hierarchy paths may change due to rename or reparent operations.
+Scene GameObjects and Components expose Unity `GlobalObjectId` strings in read responses. Write and detail APIs use typed object references for targets, sources, and parents.
 
-Targeting rules:
+Reference shape:
 
-| Field | Description |
-|------|-------------|
-| `globalObjectId` | Preferred target identifier for a scene GameObject or Component |
-| `parentGlobalObjectId` | Preferred parent identifier for create/reparent operations |
-| `path`, `parentPath`, `goPath` | Backward-compatible hierarchy path fields |
-| `scenePath` | Optional loaded scene selector used only when resolving path fields |
+```json
+{ "type": "hierarchyPath", "value": "Canvas/Button" }
+```
 
-When both an ID and a path are supplied for the same target, the ID takes precedence. Scene asset responses use asset `guid` values, not `globalObjectId`.
+| Type | Value |
+|------|-------|
+| `hierarchyPath` | GameObject hierarchy path, such as `Canvas/Button`. This is the default when `type` is omitted |
+| `componentPath` | Component path in `GameObjectPath:ComponentType` form, such as `Canvas/Button:UnityEngine.UI.Text` |
+| `globalObjectId` | Unity GlobalObjectId string for a scene GameObject or Component |
+
+`scenePath` remains a separate loaded scene selector and is used only for `hierarchyPath` and `componentPath` resolution. Scene asset responses use asset `guid` values, not `globalObjectId`.
 
 ---
 
@@ -587,15 +597,14 @@ Sets the active scene.
 
 ## GET /api/gameobjects
 
-Returns detailed information for the GameObject at the specified path (including components).
+Returns detailed information for the specified GameObject (including components).
 If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Required | Description |
 |-------------|------|------|
-| `path` | Conditional | `/`-separated path from the root (example: `Canvas/Panel/Button`) |
-| `globalObjectId` | Conditional | Alternative to `path`; preferred for stable targeting |
+| `target` | ✅ | Object reference. Must resolve to a GameObject |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -636,9 +645,9 @@ Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Co
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `path` and `globalObjectId` are missing, or `globalObjectId` is malformed |
-| 404 | No GameObject exists at the specified path, or no object exists for `globalObjectId` |
-| 422 | `globalObjectId` does not resolve to a GameObject |
+| 400 | `target` is missing or malformed |
+| 404 | No GameObject exists for `target` |
+| 422 | `target` does not resolve to a GameObject |
 
 ---
 
@@ -916,7 +925,7 @@ If `scenePath` is omitted, the active scene is used.
 ```json
 {
   "name": "MyObject",
-  "parentPath": "Canvas",
+  "parent": { "type": "hierarchyPath", "value": "Canvas" },
   "scenePath": "Assets/Scenes/Level_A.unity"
 }
 ```
@@ -924,8 +933,7 @@ If `scenePath` is omitted, the active scene is used.
 | Field | Required | Description |
 |-----------|------|------|
 | `name` | ✅ | Name of the GameObject to create |
-| `parentPath` | ❌ | Path of the parent GameObject. If omitted, it is placed at the scene root |
-| `parentGlobalObjectId` | ❌ | Alternative to `parentPath`; preferred for stable targeting |
+| `parent` | ❌ | Object reference resolving to a parent GameObject. If omitted, the object is placed at the scene root |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -943,7 +951,8 @@ If `scenePath` is omitted, the active scene is used.
 | Status | Cause |
 |-----------|------|
 | 400 | `name` is missing |
-| 404 | `parentPath` or `parentGlobalObjectId` does not exist |
+| 404 | `parent` does not exist |
+| 422 | `parent` does not resolve to a GameObject |
 | 403 | Scene Write category is disabled |
 
 ---
@@ -959,7 +968,7 @@ If `scenePath` is omitted, the active scene is used.
 {
   "type": "Cube",
   "name": "MyCube",
-  "parentPath": "Stage",
+  "parent": { "type": "hierarchyPath", "value": "Stage" },
   "scenePath": "Assets/Scenes/Level_A.unity"
 }
 ```
@@ -968,8 +977,7 @@ If `scenePath` is omitted, the active scene is used.
 |-----------|------|------|
 | `type` | ✅ | `Cube` \| `Sphere` \| `Capsule` \| `Cylinder` \| `Plane` \| `Quad` |
 | `name` | ❌ | If omitted, the type name is used as-is |
-| `parentPath` | ❌ | Path of the parent GameObject. If omitted, the scene root |
-| `parentGlobalObjectId` | ❌ | Alternative to `parentPath`; preferred for stable targeting |
+| `parent` | ❌ | Object reference resolving to a parent GameObject. If omitted, the object is placed at the scene root |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -987,7 +995,8 @@ If `scenePath` is omitted, the active scene is used.
 | Status | Cause |
 |-----------|------|
 | 400 | `type` is missing or invalid |
-| 404 | `parentPath` or `parentGlobalObjectId` does not exist |
+| 404 | `parent` does not exist |
+| 422 | `parent` does not resolve to a GameObject |
 | 403 | Scene Write category is disabled |
 
 ---
@@ -1004,7 +1013,7 @@ If `scenePath` is omitted, the active scene is used.
   "guid": "a1b2c3...",
   "assetPath": "Assets/Prefabs/Player.prefab",
   "name": "PlayerInstance",
-  "parentPath": "Stage",
+  "parent": { "type": "hierarchyPath", "value": "Stage" },
   "scenePath": "Assets/Scenes/Level_A.unity"
 }
 ```
@@ -1014,8 +1023,7 @@ If `scenePath` is omitted, the active scene is used.
 | `guid` | Conditional | GUID of the prefab asset. Takes precedence over `assetPath` when both are provided |
 | `assetPath` | Conditional | Prefab asset path. Required when `guid` is omitted |
 | `name` | ❌ | Optional name for the created instance |
-| `parentPath` | ❌ | Path of the parent GameObject. If omitted, the scene root |
-| `parentGlobalObjectId` | ❌ | Alternative to `parentPath`; preferred for stable targeting |
+| `parent` | ❌ | Object reference resolving to a parent GameObject. If omitted, the scene root |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -1035,22 +1043,22 @@ If `scenePath` is omitted, the active scene is used.
 | Status | Cause |
 |-----------|------|
 | 400 | `guid` and `assetPath` are both missing, or the asset is not a prefab/GameObject |
-| 404 | `guid`, `parentPath`, or `parentGlobalObjectId` does not exist |
+| 404 | `guid` or `parent` does not exist |
+| 422 | `parent` does not resolve to a GameObject |
 | 403 | Scene Write category is disabled |
 
 ---
 
 ## DELETE /api/gameobjects
 
-Deletes the GameObject at the specified path from the scene.
+Deletes the specified GameObject from the scene.
 If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Required | Description |
 |-------------|------|------|
-| `path` | Conditional | Path of the GameObject to delete |
-| `globalObjectId` | Conditional | Alternative to `path`; preferred for stable targeting |
+| `target` | ✅ | Object reference resolving to a GameObject |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -1063,24 +1071,23 @@ If `scenePath` is omitted, the active scene is used.
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `path` and `globalObjectId` are missing, or `globalObjectId` is malformed |
-| 404 | The specified path or `globalObjectId` does not exist |
-| 422 | `globalObjectId` does not resolve to a GameObject |
+| 400 | `target` is missing or malformed |
+| 404 | `target` does not exist |
+| 422 | `target` does not resolve to a GameObject |
 | 403 | Scene Write category is disabled |
 
 ---
 
 ## PATCH /api/gameobjects
 
-Updates the properties of the GameObject at the specified path.
+Updates the properties of the specified GameObject.
 If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Required | Description |
 |-------------|------|------|
-| `path` | Conditional | Path of the target GameObject |
-| `globalObjectId` | Conditional | Alternative to `path`; preferred for stable targeting |
+| `target` | ✅ | Object reference resolving to a GameObject |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Request Body (JSON)
@@ -1111,24 +1118,23 @@ All fields are optional. Omitted fields are not changed. Each subfield of `trans
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `path` and `globalObjectId` are missing, or `globalObjectId` is malformed |
-| 404 | The specified path or `globalObjectId` does not exist |
-| 422 | `globalObjectId` does not resolve to a GameObject |
+| 400 | `target` is missing or malformed |
+| 404 | `target` does not exist |
+| 422 | `target` does not resolve to a GameObject |
 | 403 | Scene Write category is disabled |
 
 ---
 
 ## POST /api/gameobjects/duplicate
 
-Duplicates the GameObject at the specified path.
+Duplicates the specified GameObject.
 If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Required | Description |
 |-------------|------|------|
-| `path` | Conditional | Path of the source GameObject to duplicate |
-| `globalObjectId` | Conditional | Alternative to `path`; preferred for stable targeting |
+| `source` | ✅ | Object reference resolving to a source GameObject |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -1141,9 +1147,9 @@ If `scenePath` is omitted, the active scene is used.
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `path` and `globalObjectId` are missing, or `globalObjectId` is malformed |
-| 404 | The specified path or `globalObjectId` does not exist |
-| 422 | `globalObjectId` does not resolve to a GameObject |
+| 400 | `source` is missing or malformed |
+| 404 | `source` does not exist |
+| 422 | `source` does not resolve to a GameObject |
 | 403 | Scene Write category is disabled |
 
 ---
@@ -1157,18 +1163,16 @@ If `scenePath` is omitted, the active scene is used.
 
 ```json
 {
-  "path": "Canvas/Panel/Button",
-  "parentPath": "Canvas/NewPanel",
+  "target": { "type": "hierarchyPath", "value": "Canvas/Panel/Button" },
+  "parent": { "type": "hierarchyPath", "value": "Canvas/NewPanel" },
   "scenePath": "Assets/Scenes/Level_A.unity"
 }
 ```
 
 | Field | Required | Description |
 |-----------|------|------|
-| `path` | Conditional | Path of the GameObject to move |
-| `globalObjectId` | Conditional | Alternative to `path`; preferred for stable targeting |
-| `parentPath` | ❌ | Path of the new parent. If omitted, moves to the scene root |
-| `parentGlobalObjectId` | ❌ | Alternative to `parentPath`; preferred for stable targeting |
+| `target` | ✅ | Object reference resolving to the GameObject to move |
+| `parent` | ❌ | Object reference resolving to the new parent. If omitted, moves to the scene root |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -1181,9 +1185,9 @@ If `scenePath` is omitted, the active scene is used.
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `path` and `globalObjectId` are missing, or `globalObjectId` is malformed |
-| 404 | `path`, `globalObjectId`, `parentPath`, or `parentGlobalObjectId` does not exist |
-| 422 | `globalObjectId` or `parentGlobalObjectId` does not resolve to a GameObject |
+| 400 | `target` or `parent` is malformed |
+| 404 | `target` or `parent` does not exist |
+| 422 | `target` or `parent` does not resolve to a GameObject |
 | 403 | Scene Write category is disabled |
 
 ---
@@ -1198,10 +1202,10 @@ If `scenePath` is omitted, the active scene is used. A top-level `scenePath` app
 ```json
 {
   "operations": [
-    { "op": "create", "name": "EmptyGO", "parentPath": "Stage" },
+    { "op": "create", "name": "EmptyGO", "parent": { "value": "Stage" } },
     { "op": "create_primitive", "type": "Cube", "name": "Cube_0", "transform": { "position": { "x": 0, "y": 0, "z": 0 } } },
-    { "op": "update", "path": "Stage/OldObject", "isActive": false },
-    { "op": "delete", "path": "Stage/Trash" }
+    { "op": "update", "target": { "value": "Stage/OldObject" }, "isActive": false },
+    { "op": "delete", "target": { "value": "Stage/Trash" } }
   ]
 }
 ```
@@ -1210,12 +1214,12 @@ If `scenePath` is omitted, the active scene is used. A top-level `scenePath` app
 
 | `op` | Required Fields | Optional Fields |
 |------|--------------|------------------|
-| `create` | `name` | `parentPath`, `parentGlobalObjectId`, `transform` |
-| `create_primitive` | `type` (`Cube`\|`Sphere`\|`Capsule`\|`Cylinder`\|`Plane`\|`Quad`) | `name`, `parentPath`, `parentGlobalObjectId`, `transform` |
-| `update` | `path` or `globalObjectId` | `name`, `isActive`, `tag`, `layer`, `transform` |
-| `delete` | `path` or `globalObjectId` | — |
+| `create` | `name` | `parent`, `transform` |
+| `create_primitive` | `type` (`Cube`\|`Sphere`\|`Capsule`\|`Cylinder`\|`Plane`\|`Quad`) | `name`, `parent`, `transform` |
+| `update` | `target` | `name`, `isActive`, `tag`, `layer`, `transform` |
+| `delete` | `target` | — |
 
-All operation types also accept optional `scenePath`. `update` and `delete` accept `globalObjectId`; create operations accept `parentGlobalObjectId`.
+All operation types also accept optional `scenePath`.
 
 `transform` shape: `{"position":{"x":0,"y":0,"z":0},"rotation":{...},"scale":{...}}`
 
@@ -1254,7 +1258,7 @@ If `scenePath` is omitted, the active scene is used.
 
 ```json
 {
-  "path": "Canvas/MyObject",
+  "target": { "type": "hierarchyPath", "value": "Canvas/MyObject" },
   "type": "UnityEngine.BoxCollider",
   "scenePath": "Assets/Scenes/Level_A.unity"
 }
@@ -1262,8 +1266,7 @@ If `scenePath` is omitted, the active scene is used.
 
 | Field | Required | Description |
 |-----------|------|------|
-| `path` | Conditional | Path of the target GameObject |
-| `globalObjectId` | Conditional | Alternative to `path`; must resolve to a GameObject |
+| `target` | ✅ | Object reference resolving to a GameObject |
 | `type` | ✅ | Fully qualified type name of the component to add |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
@@ -1282,25 +1285,23 @@ If `scenePath` is omitted, the active scene is used.
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `path` and `globalObjectId` are missing, `type` is missing, or `globalObjectId` is malformed |
-| 404 | The specified path does not exist |
-| 422 | `globalObjectId` does not resolve to a GameObject, the type name cannot be resolved, or adding the component failed |
+| 400 | `target` is missing or malformed, or `type` is missing |
+| 404 | `target` does not exist |
+| 422 | `target` does not resolve to a GameObject, the component type cannot be resolved, or adding the component failed |
 | 403 | Scene Write category is disabled |
 
 ---
 
 ## DELETE /api/gameobjects/components
 
-Removes a component from the specified GameObject.
+Removes the specified component.
 If `scenePath` is omitted, the active scene is used.
 
 ### Query Parameters
 
 | Parameter | Required | Description |
 |-------------|------|------|
-| `path` | Conditional | Path of the target GameObject |
-| `globalObjectId` | Conditional | Alternative to `path`; may resolve directly to a Component |
-| `type` | Conditional | Component type to remove. Required when the target resolves to a GameObject |
+| `target` | ✅ | Object reference resolving to a Component. Use `componentPath` or a Component `globalObjectId` |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -1318,9 +1319,9 @@ If `scenePath` is omitted, the active scene is used.
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `path` and `globalObjectId` are missing, `type` is missing when required, or `globalObjectId` is malformed |
-| 404 | The specified path, `globalObjectId`, or component does not exist |
-| 422 | `globalObjectId` does not resolve to a GameObject or Component |
+| 400 | `target` is missing or malformed |
+| 404 | `target` does not exist |
+| 422 | `target` does not resolve to a Component |
 | 403 | Scene Write category is disabled |
 
 ---
@@ -1334,9 +1335,7 @@ If `scenePath` is omitted, the active scene is used.
 
 | Parameter | Required | Description |
 |-------------|------|------|
-| `path` | Conditional | Path of the target GameObject |
-| `globalObjectId` | Conditional | Alternative to `path`; may resolve directly to a Component |
-| `type` | Conditional | Component type to update. Required when the target resolves to a GameObject |
+| `target` | ✅ | Object reference resolving to a Component. Use `componentPath` or a Component `globalObjectId` |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Request Body (JSON)
@@ -1346,8 +1345,8 @@ If `scenePath` is omitted, the active scene is used.
   "properties": {
     "m_Intensity": 2.0,
     "m_Color": { "r": 1, "g": 0.9, "b": 0.8, "a": 1 },
-    "target": { "sceneAssetPath": "Assets/Scenes/Level_A.unity", "scenePath": "Canvas/Button" },
-    "textAsset": { "assetPath": "Assets/Data/config.txt", "type": "UnityEngine.TextAsset" },
+    "target": { "type": "componentPath", "value": "Canvas/Button:UnityEngine.UI.Text", "scenePath": "Assets/Scenes/Level_A.unity" },
+    "textAsset": { "assetPath": "Assets/Data/config.txt", "assetType": "UnityEngine.TextAsset" },
     "optionalTarget": null
   }
 }
@@ -1360,14 +1359,14 @@ Supported object reference values:
 | Shape | Description |
 |------|-------------|
 | `null` | Clears the reference |
-| `{ "globalObjectId": "GlobalObjectId_V1-..." }` | Assigns a scene GameObject or Component by GlobalObjectId |
-| `{ "scenePath": "Canvas/Button" }` | Assigns a scene GameObject |
-| `{ "scenePath": "Canvas/Button", "component": "UnityEngine.UI.Text" }` | Assigns a component on a scene GameObject |
-| `{ "sceneAssetPath": "Assets/Scenes/Level_A.unity", "scenePath": "Canvas/Button" }` | Assigns a GameObject from a loaded scene |
-| `{ "assetGuid": "...", "type": "UnityEngine.TextAsset" }` | Assigns an asset by GUID |
-| `{ "assetPath": "Assets/Data/config.txt", "type": "UnityEngine.TextAsset" }` | Assigns an asset by path |
+| `{ "type": "globalObjectId", "value": "GlobalObjectId_V1-..." }` | Assigns a scene GameObject or Component by GlobalObjectId |
+| `{ "type": "hierarchyPath", "value": "Canvas/Button" }` | Assigns a scene GameObject |
+| `{ "type": "componentPath", "value": "Canvas/Button:UnityEngine.UI.Text" }` | Assigns a component on a scene GameObject |
+| `{ "type": "hierarchyPath", "value": "Canvas/Button", "scenePath": "Assets/Scenes/Level_A.unity" }` | Assigns a GameObject from a loaded scene |
+| `{ "assetGuid": "...", "assetType": "UnityEngine.TextAsset" }` | Assigns an asset by GUID |
+| `{ "assetPath": "Assets/Data/config.txt", "assetType": "UnityEngine.TextAsset" }` | Assigns an asset by path |
 
-`type` is optional for asset references. When provided, it must resolve to a `UnityEngine.Object` type and the resolved object must be assignable to both that type and the serialized field type.
+`assetType` is optional for asset references. When provided, it must resolve to a `UnityEngine.Object` type and the resolved object must be assignable to both that type and the serialized field type.
 
 ### Response
 
@@ -1385,10 +1384,10 @@ Supported object reference values:
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `path` and `globalObjectId` are missing, `type` is missing when required, or `properties` is missing |
+| 400 | `target` is missing or malformed, or `properties` is missing |
 | 400 | An object reference payload is malformed, or a requested type cannot be resolved |
 | 404 | The GameObject, component, or asset does not exist |
-| 422 | The resolved object is not assignable to the requested type or field type, or `globalObjectId` resolves to an unsupported object type |
+| 422 | The resolved object is not assignable to the requested type or field type |
 | 403 | Scene Write category is disabled |
 
 ---
@@ -1439,7 +1438,7 @@ If `scenePath` is omitted, the active scene is used.
 
 ```json
 {
-  "goPath": "Stage/Player",
+  "source": { "type": "hierarchyPath", "value": "Stage/Player" },
   "assetPath": "Assets/Prefabs/Player.prefab",
   "mode": "new",
   "scenePath": "Assets/Scenes/Level_A.unity"
@@ -1448,8 +1447,7 @@ If `scenePath` is omitted, the active scene is used.
 
 | Field | Required | Description |
 |-----------|------|------|
-| `goPath` | Conditional | Path of the source GameObject |
-| `globalObjectId` | Conditional | Alternative to `goPath`; preferred for stable targeting |
+| `source` | ✅ | Object reference resolving to the source GameObject |
 | `assetPath` | ✅ | Destination asset path (a `.prefab` file starting with `Assets/`) |
 | `mode` | ✅ | `new` (create while connecting the instance) or `replace` (overwrite an existing prefab) |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
@@ -1469,8 +1467,8 @@ If `scenePath` is omitted, the active scene is used.
 | Status | Cause |
 |-----------|------|
 | 400 | Required fields are missing, or `mode` is invalid |
-| 404 | `goPath` or `globalObjectId` does not exist |
-| 422 | `globalObjectId` does not resolve to a GameObject |
+| 404 | `source` does not exist |
+| 422 | `source` does not resolve to a GameObject |
 | 403 | Asset Write category is disabled |
 
 ---
@@ -1485,13 +1483,12 @@ If `scenePath` is omitted, the active scene is used.
 ### Request Body (JSON)
 
 ```json
-{ "goPath": "Stage/Player", "scenePath": "Assets/Scenes/Level_A.unity" }
+{ "source": { "type": "hierarchyPath", "value": "Stage/Player" }, "scenePath": "Assets/Scenes/Level_A.unity" }
 ```
 
 | Field | Required | Description |
 |-----------|------|------|
-| `goPath` | Conditional | Path of the prefab instance |
-| `globalObjectId` | Conditional | Alternative to `goPath`; preferred for stable targeting |
+| `source` | ✅ | Object reference resolving to the prefab instance |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -1508,9 +1505,9 @@ If `scenePath` is omitted, the active scene is used.
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `goPath` and `globalObjectId` are missing, `globalObjectId` is malformed, or the object is not a prefab instance |
-| 404 | `goPath` or `globalObjectId` does not exist |
-| 422 | `globalObjectId` does not resolve to a GameObject |
+| 400 | `source` is missing or malformed, or the object is not a prefab instance |
+| 404 | `source` does not exist |
+| 422 | `source` does not resolve to a GameObject |
 | 403 | Asset Write category is disabled |
 
 ---
@@ -1525,13 +1522,12 @@ If `scenePath` is omitted, the active scene is used.
 ### Request Body (JSON)
 
 ```json
-{ "goPath": "Stage/Player", "scenePath": "Assets/Scenes/Level_A.unity" }
+{ "source": { "type": "hierarchyPath", "value": "Stage/Player" }, "scenePath": "Assets/Scenes/Level_A.unity" }
 ```
 
 | Field | Required | Description |
 |-----------|------|------|
-| `goPath` | Conditional | Path of the prefab instance |
-| `globalObjectId` | Conditional | Alternative to `goPath`; preferred for stable targeting |
+| `source` | ✅ | Object reference resolving to the prefab instance |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -1548,9 +1544,9 @@ If `scenePath` is omitted, the active scene is used.
 
 | Status | Cause |
 |-----------|------|
-| 400 | Both `goPath` and `globalObjectId` are missing, `globalObjectId` is malformed, or the object is not a prefab instance |
-| 404 | `goPath` or `globalObjectId` does not exist |
-| 422 | `globalObjectId` does not resolve to a GameObject |
+| 400 | `source` is missing or malformed, or the object is not a prefab instance |
+| 404 | `source` does not exist |
+| 422 | `source` does not resolve to a GameObject |
 | 403 | Asset Write category is disabled |
 
 ---

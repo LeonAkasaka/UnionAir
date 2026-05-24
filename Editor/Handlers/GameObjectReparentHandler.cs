@@ -8,8 +8,8 @@ namespace LeonAkasaka.UnionAir.Editor
 {
     /// <summary>
     /// Handles POST /api/gameobjects/reparent
-    /// Moves a GameObject under a new parent (or to the root when parentPath is omitted).
-    /// Body: { "path": "...", "parentPath": "..." }
+    /// Moves a GameObject under a new parent (or to the root when parent is omitted).
+    /// Body: { "target": {"value": "..."}, "parent": {"value": "..."} }
     /// </summary>
     internal class GameObjectReparentHandler : IRequestHandler
     {
@@ -30,13 +30,12 @@ namespace LeonAkasaka.UnionAir.Editor
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
-            var path = RequestBodyReader.GetString(body, "path");
-            var globalObjectId = RequestBodyReader.GetString(body, "globalObjectId");
 
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
-            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "target", out var go, out var error, out var statusCode))
+            if (!ObjectRefUtils.TryReadBody(body, "target", out var target, out var error, out var statusCode) ||
+                !ObjectRefUtils.TryResolveGameObject(scene, target, "target", out var go, out error, out statusCode))
             {
                 RestResponse.SendError(response, error, statusCode);
                 return;
@@ -44,13 +43,13 @@ namespace LeonAkasaka.UnionAir.Editor
             scene = go.scene;
             var originalScene = go.scene;
 
-            var parentPath = RequestBodyReader.GetString(body, "parentPath");
-            var parentGlobalObjectId = RequestBodyReader.GetString(body, "parentGlobalObjectId");
             Transform newParent = null;
 
-            if (!string.IsNullOrEmpty(parentGlobalObjectId) || !string.IsNullOrEmpty(parentPath))
+            var parentJson = RequestBodyReader.GetObject(body, "parent");
+            if (!string.IsNullOrEmpty(parentJson))
             {
-                if (!GameObjectUtils.TryResolveTarget(scene, parentGlobalObjectId, parentPath, "parent", out var parentGo, out error, out statusCode))
+                if (!ObjectRefUtils.TryParse(parentJson, "parent", out var parentRef, out error, out statusCode) ||
+                    !ObjectRefUtils.TryResolveGameObject(scene, parentRef, "parent", out var parentGo, out error, out statusCode))
                 {
                     RestResponse.SendError(response, error, statusCode);
                     return;

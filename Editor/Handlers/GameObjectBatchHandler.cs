@@ -17,12 +17,12 @@ namespace LeonAkasaka.UnionAir.Editor
     /// Body:
     /// {
     ///   "operations": [
-    ///     {"op":"create",           "name":"Empty",   "parentPath":"Parent"},
-    ///     {"op":"create_primitive", "type":"Cube",    "name":"Cube_0", "parentPath":"Map",
+    ///     {"op":"create",           "name":"Empty",   "parent":{"value":"Parent"}},
+    ///     {"op":"create_primitive", "type":"Cube",    "name":"Cube_0", "parent":{"value":"Map"},
     ///      "transform":{"position":{"x":0,"y":0,"z":0}}},
-    ///     {"op":"update",           "path":"Obj",     "isActive":false,
+    ///     {"op":"update",           "target":{"value":"Obj"}, "isActive":false,
     ///      "transform":{"position":{"x":1,"y":0,"z":0}}},
-    ///     {"op":"delete",           "path":"OldObj"}
+    ///     {"op":"delete",           "target":{"value":"OldObj"}}
     ///   ]
     /// }
     ///
@@ -144,13 +144,12 @@ namespace LeonAkasaka.UnionAir.Editor
             var name = RequestBodyReader.GetString(op, "name");
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("Missing required field: name");
 
-            var parentPath = RequestBodyReader.GetString(op, "parentPath");
-            var parentGlobalObjectId = RequestBodyReader.GetString(op, "parentGlobalObjectId");
-
             GameObject go;
-            if (!string.IsNullOrEmpty(parentGlobalObjectId) || !string.IsNullOrEmpty(parentPath))
+            var parentJson = RequestBodyReader.GetObject(op, "parent");
+            if (!string.IsNullOrEmpty(parentJson))
             {
-                if (!GameObjectUtils.TryResolveTarget(scene, parentGlobalObjectId, parentPath, "parent", out var parent, out var error, out _))
+                if (!ObjectRefUtils.TryParse(parentJson, "parent", out var parentRef, out var error, out _) ||
+                    !ObjectRefUtils.TryResolveGameObject(scene, parentRef, "parent", out var parent, out error, out _))
                     throw new ArgumentException(error);
 
                 scene = parent.scene;
@@ -180,9 +179,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 throw new ArgumentException($"Unknown primitive type: {typeName}");
 
             var name       = RequestBodyReader.GetString(op, "name");
-            var parentPath = RequestBodyReader.GetString(op, "parentPath");
-            var parentGlobalObjectId = RequestBodyReader.GetString(op, "parentGlobalObjectId");
-
             var go = GameObject.CreatePrimitive(primitiveType);
             Undo.RegisterCreatedObjectUndo(go, "UnionAir: Batch CreatePrimitive");
             SceneManager.MoveGameObjectToScene(go, scene);
@@ -190,9 +186,11 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!string.IsNullOrEmpty(name))
                 go.name = name;
 
-            if (!string.IsNullOrEmpty(parentGlobalObjectId) || !string.IsNullOrEmpty(parentPath))
+            var parentJson = RequestBodyReader.GetObject(op, "parent");
+            if (!string.IsNullOrEmpty(parentJson))
             {
-                if (!GameObjectUtils.TryResolveTarget(scene, parentGlobalObjectId, parentPath, "parent", out var parent, out var error, out _))
+                if (!ObjectRefUtils.TryParse(parentJson, "parent", out var parentRef, out var error, out _) ||
+                    !ObjectRefUtils.TryResolveGameObject(scene, parentRef, "parent", out var parent, out error, out _))
                 {
                     Undo.DestroyObjectImmediate(go);
                     throw new ArgumentException(error);
@@ -209,10 +207,9 @@ namespace LeonAkasaka.UnionAir.Editor
         private static (string path, string globalObjectId) ExecuteUpdate(string op, string defaultScenePath, List<Scene> dirtyScenes)
         {
             var scene = ResolveSceneForOp(op, defaultScenePath);
-            var path = RequestBodyReader.GetString(op, "path");
-            var globalObjectId = RequestBodyReader.GetString(op, "globalObjectId");
 
-            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "target", out var go, out var error, out _))
+            if (!ObjectRefUtils.TryReadBody(op, "target", out var target, out var error, out _) ||
+                !ObjectRefUtils.TryResolveGameObject(scene, target, "target", out var go, out error, out _))
                 throw new ArgumentException(error);
             scene = go.scene;
 
@@ -239,10 +236,9 @@ namespace LeonAkasaka.UnionAir.Editor
         private static (string path, string globalObjectId) ExecuteDelete(string op, string defaultScenePath, List<Scene> dirtyScenes)
         {
             var scene = ResolveSceneForOp(op, defaultScenePath);
-            var path = RequestBodyReader.GetString(op, "path");
-            var globalObjectId = RequestBodyReader.GetString(op, "globalObjectId");
 
-            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "target", out var go, out var error, out _))
+            if (!ObjectRefUtils.TryReadBody(op, "target", out var target, out var error, out _) ||
+                !ObjectRefUtils.TryResolveGameObject(scene, target, "target", out var go, out error, out _))
                 throw new ArgumentException(error);
             scene = go.scene;
 

@@ -23,18 +23,21 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <param name="response">HTTP response to write.</param>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
-            var path = request.QueryString["path"];
-            var globalObjectId = request.QueryString["globalObjectId"];
-
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            if (!GameObjectUtils.TryResolveTarget(scene, globalObjectId, path, "query parameter", out var go, out var error, out var statusCode))
+            if (!ObjectRefUtils.TryReadQuery(request.QueryString, "target", out var target, out var error, out var statusCode))
             {
                 RestResponse.SendError(response, error, statusCode);
                 return;
             }
-            path = GameObjectUtils.GetPath(go);
+
+            if (!ObjectRefUtils.TryResolveGameObject(scene, target, "target", out var go, out error, out statusCode))
+            {
+                RestResponse.SendError(response, error, statusCode);
+                return;
+            }
+            var path = GameObjectUtils.GetPath(go);
 
             var sb = new StringBuilder();
             var t = go.transform;
