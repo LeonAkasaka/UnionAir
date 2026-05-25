@@ -148,6 +148,8 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append(",");
             AppendRiskArray(sb, "risk", endpoint.Risk);
             sb.Append(",");
+            AppendString(sb, "playModePolicy", PlayModePolicyName(endpoint.PlayModePolicy));
+            sb.Append(",");
             AppendStringArray(sb, "pathParams", endpoint.PathParams);
             sb.Append(",");
             AppendStringArray(sb, "requiredQuery", endpoint.RequiredQuery);
@@ -167,6 +169,19 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static string SourceName(UnionAirRouteSource source)
             => source == UnionAirRouteSource.Custom ? "custom" : "builtin";
+
+        private static string PlayModePolicyName(UnionAirPlayModePolicy policy)
+        {
+            switch (policy)
+            {
+                case UnionAirPlayModePolicy.Blocked:
+                    return "blocked";
+                case UnionAirPlayModePolicy.ExplicitOptIn:
+                    return "explicitOptIn";
+                default:
+                    return "allowed";
+            }
+        }
 
         private static void AppendRiskArray(StringBuilder sb, string key, UnionAirEndpointRisk risk)
         {

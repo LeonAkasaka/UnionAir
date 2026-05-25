@@ -10,6 +10,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private const string PortKey         = "UnionAir.Port";
         private const string AutoStartKey    = "UnionAir.AutoStart";
         private const string CustomHandlersEnabledKey = "UnionAir.CustomHandlersEnabled";
+        private const string AllowPlayModeSceneChangesKey = "UnionAir.AllowPlayModeSceneChanges";
         private const string EnabledCategoriesKey = "UnionAir.EnabledCategories";
         private const string DisabledCategoriesKey = "UnionAir.DisabledCategories";
 
@@ -42,6 +43,15 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             get => EditorPrefs.GetBool(CustomHandlersEnabledKey, false);
             set => EditorPrefs.SetBool(CustomHandlersEnabledKey, value);
+        }
+
+        /// <summary>
+        /// Gets or sets whether scene-object write endpoints may run in Play mode when the request opts in.
+        /// </summary>
+        public static bool AllowPlayModeSceneChanges
+        {
+            get => EditorPrefs.GetBool(AllowPlayModeSceneChangesKey, false);
+            set => EditorPrefs.SetBool(AllowPlayModeSceneChangesKey, value);
         }
 
         /// <summary>

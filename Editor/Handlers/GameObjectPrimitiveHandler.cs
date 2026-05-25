@@ -51,11 +51,17 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            Undo.SetCurrentGroupName($"UnionAir: Create {primitiveType} Primitive");
-            var group = Undo.GetCurrentGroup();
+            var useUndo = !EditorApplication.isPlaying;
+            var group = -1;
+            if (useUndo)
+            {
+                Undo.SetCurrentGroupName($"UnionAir: Create {primitiveType} Primitive");
+                group = Undo.GetCurrentGroup();
+            }
 
             var go = GameObject.CreatePrimitive(primitiveType);
-            Undo.RegisterCreatedObjectUndo(go, $"UnionAir: Create {primitiveType}");
+            if (useUndo)
+                Undo.RegisterCreatedObjectUndo(go, $"UnionAir: Create {primitiveType}");
             SceneManager.MoveGameObjectToScene(go, scene);
 
             if (!string.IsNullOrEmpty(name))
@@ -67,7 +73,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (!ObjectRefUtils.TryParse(parentJson, "parent", out var parentRef, out var error, out var statusCode) ||
                     !ObjectRefUtils.TryResolveGameObject(scene, parentRef, "parent", out var parent, out error, out statusCode))
                 {
-                    Undo.DestroyObjectImmediate(go);
+                    if (EditorApplication.isPlaying)
+                        UnityEngine.Object.Destroy(go);
+                    else
+                        Undo.DestroyObjectImmediate(go);
                     RestResponse.SendError(response, error, statusCode);
                     return;
                 }
@@ -75,8 +84,9 @@ namespace LeonAkasaka.UnionAir.Editor
                 go.transform.SetParent(parent.transform, false);
             }
 
-            Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(scene);
+            if (useUndo)
+                Undo.CollapseUndoOperations(group);
+            SceneUtils.MarkDirtyUnlessPlaying(scene);
 
             var goPath = GameObjectUtils.GetPath(go);
             var components = go.GetComponents<Component>();

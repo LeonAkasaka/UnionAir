@@ -38,15 +38,22 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             scene = go.scene;
 
-            Undo.SetCurrentGroupName("UnionAir: Duplicate GameObject");
-            var group = Undo.GetCurrentGroup();
+            var useUndo = !EditorApplication.isPlaying;
+            var group = -1;
+            if (useUndo)
+            {
+                Undo.SetCurrentGroupName("UnionAir: Duplicate GameObject");
+                group = Undo.GetCurrentGroup();
+            }
 
             var copy = Object.Instantiate(go, go.transform.parent);
             copy.name = GameObjectUtility.GetUniqueNameForSibling(go.transform.parent, go.name);
-            Undo.RegisterCreatedObjectUndo(copy, "UnionAir: Duplicate GameObject");
+            if (useUndo)
+                Undo.RegisterCreatedObjectUndo(copy, "UnionAir: Duplicate GameObject");
 
-            Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(scene);
+            if (useUndo)
+                Undo.CollapseUndoOperations(group);
+            SceneUtils.MarkDirtyUnlessPlaying(scene);
 
             var newPath = GameObjectUtils.GetPath(copy);
             RestResponse.Send(response,

@@ -21,6 +21,7 @@ namespace LeonAkasaka.UnionAir.Editor
             UnionAirRouteSource source,
             string category,
             UnionAirCategoryDefinition categoryDefinition,
+            UnionAirPlayModePolicy playModePolicy,
             string summary,
             string[] pathParams,
             string[] requiredQuery,
@@ -38,6 +39,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Source = source;
             Category = category;
             CategoryDefinition = categoryDefinition;
+            PlayModePolicy = playModePolicy;
             Summary = summary;
             PathParams = pathParams ?? new string[0];
             RequiredQuery = requiredQuery ?? new string[0];
@@ -90,6 +92,11 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Risk metadata inherited from <see cref="CategoryDefinition"/>.
         /// </summary>
         public UnionAirEndpointRisk Risk => CategoryDefinition?.Risk ?? UnionAirEndpointRisk.Custom;
+
+        /// <summary>
+        /// Whether this endpoint may be called while the Unity Editor is in Play mode.
+        /// </summary>
+        public UnionAirPlayModePolicy PlayModePolicy { get; }
 
         /// <summary>
         /// Short help text for the endpoint.

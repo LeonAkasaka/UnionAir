@@ -60,8 +60,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            Undo.SetCurrentGroupName("UnionAir: Batch GameObject Operations");
-            var group = Undo.GetCurrentGroup();
+            var useUndo = !EditorApplication.isPlaying;
+            var group = -1;
+            if (useUndo)
+            {
+                Undo.SetCurrentGroupName("UnionAir: Batch GameObject Operations");
+                group = Undo.GetCurrentGroup();
+            }
 
             var results  = new List<(int index, bool success, string pathOrError, string globalObjectId)>();
             var dirtyScenes = new List<Scene>();
@@ -105,7 +110,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
             }
 
-            Undo.CollapseUndoOperations(group);
+            if (useUndo)
+                Undo.CollapseUndoOperations(group);
             MarkDirtyScenes(dirtyScenes);
 
             var sb = new StringBuilder();
@@ -154,13 +160,15 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 scene = parent.scene;
                 go = new GameObject(name);
-                Undo.RegisterCreatedObjectUndo(go, "UnionAir: Batch Create");
+                if (!EditorApplication.isPlaying)
+                    Undo.RegisterCreatedObjectUndo(go, "UnionAir: Batch Create");
                 go.transform.SetParent(parent.transform, false);
             }
             else
             {
                 go = new GameObject(name);
-                Undo.RegisterCreatedObjectUndo(go, "UnionAir: Batch Create");
+                if (!EditorApplication.isPlaying)
+                    Undo.RegisterCreatedObjectUndo(go, "UnionAir: Batch Create");
                 SceneManager.MoveGameObjectToScene(go, scene);
             }
 
@@ -180,7 +188,8 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var name       = RequestBodyReader.GetString(op, "name");
             var go = GameObject.CreatePrimitive(primitiveType);
-            Undo.RegisterCreatedObjectUndo(go, "UnionAir: Batch CreatePrimitive");
+            if (!EditorApplication.isPlaying)
+                Undo.RegisterCreatedObjectUndo(go, "UnionAir: Batch CreatePrimitive");
             SceneManager.MoveGameObjectToScene(go, scene);
 
             if (!string.IsNullOrEmpty(name))
@@ -192,7 +201,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (!ObjectRefUtils.TryParse(parentJson, "parent", out var parentRef, out var error, out _) ||
                     !ObjectRefUtils.TryResolveGameObject(scene, parentRef, "parent", out var parent, out error, out _))
                 {
-                    Undo.DestroyObjectImmediate(go);
+                    if (EditorApplication.isPlaying)
+                        UnityEngine.Object.Destroy(go);
+                    else
+                        Undo.DestroyObjectImmediate(go);
                     throw new ArgumentException(error);
                 }
                 scene = parent.scene;
@@ -213,8 +225,11 @@ namespace LeonAkasaka.UnionAir.Editor
                 throw new ArgumentException(error);
             scene = go.scene;
 
-            Undo.RecordObject(go, "UnionAir: Batch Update");
-            Undo.RecordObject(go.transform, "UnionAir: Batch Update");
+            if (!EditorApplication.isPlaying)
+            {
+                Undo.RecordObject(go, "UnionAir: Batch Update");
+                Undo.RecordObject(go.transform, "UnionAir: Batch Update");
+            }
 
             var newName = RequestBodyReader.GetString(op, "name");
             if (newName != null) go.name = newName;
@@ -244,7 +259,10 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var deletedPath = GameObjectUtils.GetPath(go);
             var deletedId = ObjectIdUtils.GetGlobalObjectId(go);
-            Undo.DestroyObjectImmediate(go);
+            if (EditorApplication.isPlaying)
+                UnityEngine.Object.Destroy(go);
+            else
+                Undo.DestroyObjectImmediate(go);
             AddDirtyScene(dirtyScenes, scene);
             return (deletedPath, deletedId);
         }
@@ -270,7 +288,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private static void MarkDirtyScenes(List<Scene> dirtyScenes)
         {
             foreach (var scene in dirtyScenes)
-                EditorSceneManager.MarkSceneDirty(scene);
+                SceneUtils.MarkDirtyUnlessPlaying(scene);
         }
 
         private static void ApplyTransformFromOp(Transform t, string op)

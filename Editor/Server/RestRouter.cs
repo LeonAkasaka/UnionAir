@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Reflection;
+using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -51,6 +52,9 @@ namespace LeonAkasaka.UnionAir.Editor
                     return;
                 }
 
+                if (!CanCallInCurrentPlayModeState(descriptor, request, response))
+                    return;
+
                 var routeContext = new UnionAirRequestContext(request, response, routeValues, descriptor);
                 try
                 {
@@ -72,6 +76,58 @@ namespace LeonAkasaka.UnionAir.Editor
 
             RestResponse.SendNotFound(response,
                 $"No handler for {request.HttpMethod} {request.Url.AbsolutePath}");
+        }
+
+        private static bool CanCallInCurrentPlayModeState(
+            UnionAirEndpointDescriptor descriptor,
+            HttpListenerRequest request,
+            HttpListenerResponse response)
+        {
+            if (!EditorApplication.isPlaying ||
+                descriptor.PlayModePolicy == UnionAirPlayModePolicy.Allowed)
+                return true;
+
+            if (descriptor.PlayModePolicy == UnionAirPlayModePolicy.Blocked)
+            {
+                RestResponse.SendError(response,
+                    "This endpoint cannot be used while the Unity Editor is in Play mode.",
+                    409);
+                return false;
+            }
+
+            if (descriptor.PlayModePolicy == UnionAirPlayModePolicy.ExplicitOptIn)
+            {
+                if (!UnionAirSettings.AllowPlayModeSceneChanges)
+                {
+                    RestResponse.SendError(response,
+                        "Play Mode scene changes are disabled in UnionAir settings. Enable Allow Play Mode Scene Changes in the EditorWindow to allow this endpoint.",
+                        409);
+                    return false;
+                }
+
+                if (HasPlayModeOptIn(request))
+                    return true;
+            }
+
+            RestResponse.SendError(response,
+                "This endpoint can change the running scene and requires allowWhilePlaying=true while the Unity Editor is in Play mode.",
+                409);
+            return false;
+        }
+
+        private static bool HasPlayModeOptIn(HttpListenerRequest request)
+        {
+            if (request.HttpMethod == "POST" || request.HttpMethod == "PATCH")
+            {
+                var bodyValue = RequestBodyReader.GetBool(
+                    RequestBodyReader.ReadString(request),
+                    "allowWhilePlaying");
+                if (bodyValue.HasValue)
+                    return bodyValue.Value;
+            }
+
+            var queryValue = request.QueryString["allowWhilePlaying"];
+            return queryValue == "true" || queryValue == "1";
         }
 
     }

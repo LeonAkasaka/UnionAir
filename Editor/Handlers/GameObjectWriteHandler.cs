@@ -60,8 +60,13 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
                 return;
 
-            Undo.SetCurrentGroupName("UnionAir: Create GameObject");
-            var group = Undo.GetCurrentGroup();
+            var useUndo = !EditorApplication.isPlaying;
+            var group = -1;
+            if (useUndo)
+            {
+                Undo.SetCurrentGroupName("UnionAir: Create GameObject");
+                group = Undo.GetCurrentGroup();
+            }
 
             GameObject go;
             var parentJson = RequestBodyReader.GetObject(body, "parent");
@@ -76,18 +81,21 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 scene = parent.scene;
                 go = new GameObject(name);
-                Undo.RegisterCreatedObjectUndo(go, "UnionAir: Create GameObject");
+                if (useUndo)
+                    Undo.RegisterCreatedObjectUndo(go, "UnionAir: Create GameObject");
                 go.transform.SetParent(parent.transform, false);
             }
             else
             {
                 go = new GameObject(name);
-                Undo.RegisterCreatedObjectUndo(go, "UnionAir: Create GameObject");
+                if (useUndo)
+                    Undo.RegisterCreatedObjectUndo(go, "UnionAir: Create GameObject");
                 SceneManager.MoveGameObjectToScene(go, scene);
             }
 
-            Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(scene);
+            if (useUndo)
+                Undo.CollapseUndoOperations(group);
+            SceneUtils.MarkDirtyUnlessPlaying(scene);
 
             var fullPath = GameObjectUtils.GetPath(go);
             RestResponse.Send(response,
@@ -111,9 +119,14 @@ namespace LeonAkasaka.UnionAir.Editor
             var deletedPath = GameObjectUtils.GetPath(go);
             var deletedId = ObjectIdUtils.GetGlobalObjectId(go);
             scene = go.scene;
-            Undo.SetCurrentGroupName("UnionAir: Delete GameObject");
-            Undo.DestroyObjectImmediate(go);
-            EditorSceneManager.MarkSceneDirty(scene);
+            if (EditorApplication.isPlaying)
+                UnityEngine.Object.Destroy(go);
+            else
+            {
+                Undo.SetCurrentGroupName("UnionAir: Delete GameObject");
+                Undo.DestroyObjectImmediate(go);
+            }
+            SceneUtils.MarkDirtyUnlessPlaying(scene);
 
             RestResponse.Send(response, $"{{\"deleted\":\"{RestResponse.EscapeJson(deletedPath)}\",\"globalObjectId\":\"{RestResponse.EscapeJson(deletedId)}\"}}");
         }
@@ -135,10 +148,15 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var body = RequestBodyReader.ReadString(request);
 
-            Undo.SetCurrentGroupName("UnionAir: Update GameObject");
-            var group = Undo.GetCurrentGroup();
-            Undo.RecordObject(go, "UnionAir: Update GameObject");
-            Undo.RecordObject(go.transform, "UnionAir: Update GameObject");
+            var useUndo = !EditorApplication.isPlaying;
+            var group = -1;
+            if (useUndo)
+            {
+                Undo.SetCurrentGroupName("UnionAir: Update GameObject");
+                group = Undo.GetCurrentGroup();
+                Undo.RecordObject(go, "UnionAir: Update GameObject");
+                Undo.RecordObject(go.transform, "UnionAir: Update GameObject");
+            }
 
             var newName = RequestBodyReader.GetString(body, "name");
             if (newName != null) go.name = newName;
@@ -158,8 +176,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
             ApplyTransform(go.transform, body);
 
-            Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(scene);
+            if (useUndo)
+                Undo.CollapseUndoOperations(group);
+            SceneUtils.MarkDirtyUnlessPlaying(scene);
 
             // Return updated GameObject info reusing the existing read handler's data
             var sb = new System.Text.StringBuilder();

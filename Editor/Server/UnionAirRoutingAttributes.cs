@@ -42,6 +42,21 @@ namespace LeonAkasaka.UnionAir.Editor
     }
 
     /// <summary>
+    /// Declares whether an endpoint may be called while the Unity Editor is in Play mode.
+    /// </summary>
+    public enum UnionAirPlayModePolicy
+    {
+        /// <summary>The endpoint may be called in Edit mode or Play mode.</summary>
+        Allowed,
+
+        /// <summary>The endpoint is rejected while the Editor is in Play mode.</summary>
+        Blocked,
+
+        /// <summary>The endpoint is rejected in Play mode unless the request explicitly opts in.</summary>
+        ExplicitOptIn
+    }
+
+    /// <summary>
     /// Built-in category identifiers used by UnionAir endpoint metadata.
     /// </summary>
     public static class UnionAirEndpointCategories
@@ -178,6 +193,11 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Category identifier used for enablement, grouping, risk metadata, and help output.
         /// </summary>
         public string Category { get; set; } = UnionAirEndpointCategories.Read;
+
+        /// <summary>
+        /// Whether this endpoint can be called while the Unity Editor is in Play mode.
+        /// </summary>
+        public UnionAirPlayModePolicy PlayModePolicy { get; set; } = UnionAirPlayModePolicy.Allowed;
 
         /// <summary>
         /// Short description included in <c>GET /api/help</c> and the generated endpoint list.

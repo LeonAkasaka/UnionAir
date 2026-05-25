@@ -79,8 +79,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 parentTransform = parentGo.transform;
             }
 
-            Undo.SetCurrentGroupName($"UnionAir: Instantiate {prefab.name}");
-            var group = Undo.GetCurrentGroup();
+            var useUndo = !EditorApplication.isPlaying;
+            var group = -1;
+            if (useUndo)
+            {
+                Undo.SetCurrentGroupName($"UnionAir: Instantiate {prefab.name}");
+                group = Undo.GetCurrentGroup();
+            }
 
             // InstantiatePrefab maintains the prefab connection (unlike Instantiate)
             var instance = parentTransform != null
@@ -93,13 +98,15 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            Undo.RegisterCreatedObjectUndo(instance, $"UnionAir: Instantiate {prefab.name}");
+            if (useUndo)
+                Undo.RegisterCreatedObjectUndo(instance, $"UnionAir: Instantiate {prefab.name}");
 
             if (!string.IsNullOrEmpty(name))
                 instance.name = name;
 
-            Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(scene);
+            if (useUndo)
+                Undo.CollapseUndoOperations(group);
+            SceneUtils.MarkDirtyUnlessPlaying(scene);
 
             var instancePath = GameObjectUtils.GetPath(instance);
             var components   = instance.GetComponents<Component>();

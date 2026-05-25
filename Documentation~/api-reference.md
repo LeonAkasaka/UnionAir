@@ -42,6 +42,7 @@ Returns a compact API manifest for LLMs, MCP bridges, and other tools that canno
       "category": "read",
       "summary": "Checks whether the server is running.",
       "risk": ["readOnly"],
+      "playModePolicy": "allowed",
       "pathParams": [],
       "requiredQuery": [],
       "optionalQuery": [],
@@ -68,6 +69,7 @@ Each endpoint item includes the HTTP method, path, category, short summary, risk
 | `endpoints[].routeTemplate` | string | Route template used by the attribute router |
 | `endpoints[].category` | string | Category used for discovery/UI grouping. Built-in constants include `read`, `sceneWrite`, `assetWrite`, `playMode`, and `custom`; custom endpoints may use any stable category string. |
 | `endpoints[].risk` | string[] | Risk inherited from the endpoint category |
+| `endpoints[].playModePolicy` | string | `allowed`, `blocked`, or `explicitOptIn`. `blocked` endpoints return `409` in Play mode. `explicitOptIn` endpoints require both the Editor setting and `allowWhilePlaying=true` in Play mode. |
 | `endpoints[].requiredQuery` | string[] | Required query string parameters |
 | `endpoints[].optionalQuery` | string[] | Optional query string parameters |
 | `endpoints[].requiredBody` | string[] | Required JSON body fields |
@@ -117,6 +119,8 @@ This example registers `GET /api/custom/my-tool/status`.
 Custom handlers are disabled by default. Enable them in **Window > UnionAir > REST Bridge > Custom Handlers**. Custom categories can also be enabled or disabled independently.
 
 `Category` is a string so custom extensions can define their own grouping labels in `/api/help` and the EditorWindow. Built-in endpoints use `UnionAirEndpointCategories.Read`, `SceneWrite`, `AssetWrite`, and `PlayMode`. Category metadata controls enablement and risk reporting. `Risk` is descriptive metadata for tools and LLMs; category enablement controls whether requests are accepted.
+
+`PlayModePolicy` controls whether an endpoint can run while `EditorApplication.isPlaying` is `true`. `Allowed` endpoints can run in Play mode, and `Blocked` endpoints return `409 Conflict`. `ExplicitOptIn` endpoints require both the Editor-side **Allow Play Mode Scene Changes** setting and request-side `allowWhilePlaying=true`; otherwise they return `409 Conflict`. For `POST` and `PATCH`, a body value takes precedence over the query string.
 
 ---
 
@@ -492,6 +496,7 @@ Lists all loaded scenes and identifies the active scene.
 Creates a new scene.
 
 > Can be called only when the Scene Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Request Body (JSON)
 
@@ -532,6 +537,7 @@ Creates a new scene.
 Opens an existing scene asset.
 
 > Can be called only when the Scene Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Request Body (JSON)
 
@@ -556,6 +562,7 @@ Opens an existing scene asset.
 Unloads a loaded scene.
 
 > Can be called only when the Scene Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Request Body (JSON)
 
@@ -579,6 +586,7 @@ Unloads a loaded scene.
 Sets the active scene.
 
 > Can be called only when the Scene Write category is enabled.
+> In Play mode, this endpoint requires the Editor-side **Allow Play Mode Scene Changes** setting and `allowWhilePlaying=true` in the body or query string.
 
 ### Request Body (JSON)
 
@@ -592,6 +600,7 @@ Sets the active scene.
 |-----------|------|------|
 | `path` | Conditional | Loaded scene asset path. Required when `name` is omitted |
 | `name` | Conditional | Loaded scene name. Accepted only when unambiguous |
+| `allowWhilePlaying` | ❌ | Required as `true` when calling this endpoint in Play mode, after the Editor-side setting is enabled |
 
 ---
 
@@ -911,7 +920,9 @@ Returns aggregate statistics for a loaded scene. If `scenePath` is omitted, the 
 
 > **Security:** Write endpoints are **disabled** by default.
 > Enable them using the toggles under **Window > UnionAir > REST Bridge**.
-> All write operations can be undone with Unity Editor Undo (Ctrl+Z).
+> Edit mode write operations can be undone with Unity Editor Undo (Ctrl+Z).
+> GameObject and Component write endpoints return `409 Conflict` in Play mode unless **Allow Play Mode Scene Changes** is enabled in the EditorWindow and the request includes `allowWhilePlaying=true` in the JSON body or query string. For `POST` and `PATCH`, a body value takes precedence over the query string.
+> Play mode scene-object writes are transient runtime changes and do not mark scenes dirty or register Undo operations.
 
 ---
 
@@ -1397,6 +1408,7 @@ Supported object reference values:
 Saves the current scene to disk.
 
 > Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Response
 
@@ -1411,6 +1423,7 @@ Saves the current scene to disk.
 Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and assets.
 
 > Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Response
 
@@ -1433,6 +1446,7 @@ Creates a prefab from a GameObject in the scene.
 If `scenePath` is omitted, the active scene is used.
 
 > Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Request Body (JSON)
 
@@ -1479,6 +1493,7 @@ Applies prefab instance overrides to the prefab asset.
 If `scenePath` is omitted, the active scene is used.
 
 > Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Request Body (JSON)
 
@@ -1518,6 +1533,7 @@ Reverts a prefab instance to the state of the prefab asset.
 If `scenePath` is omitted, the active scene is used.
 
 > Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Request Body (JSON)
 
@@ -1556,6 +1572,7 @@ If `scenePath` is omitted, the active scene is used.
 Creates a new material asset.
 
 > Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Request Body (JSON)
 
@@ -1592,6 +1609,7 @@ Creates a new material asset.
 Updates material properties.
 
 > Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Query Parameters
 
@@ -1641,6 +1659,7 @@ Types of values in `properties`:
 Deletes the asset and its `.meta` file.
 
 > Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Path Parameters
 
@@ -1669,6 +1688,7 @@ Deletes the asset and its `.meta` file.
 Moves/renames an asset. Its GUID and references within the project are preserved.
 
 > Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
 
 ### Request Body (JSON)
 

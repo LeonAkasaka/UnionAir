@@ -76,6 +76,8 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var server = UnionAirInit.Server;
             var isRunning = server.IsRunning;
+            var oldLabelWidth = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = 190f;
 
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -96,6 +98,14 @@ namespace LeonAkasaka.UnionAir.Editor
 
             UnionAirSettings.AutoStart =
                 EditorGUILayout.Toggle("Auto Start on Load", UnionAirSettings.AutoStart);
+
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField("Play Mode Safety", EditorStyles.boldLabel);
+            UnionAirSettings.AllowPlayModeSceneChanges =
+                EditorGUILayout.Toggle("Allow Play Mode Scene Changes", UnionAirSettings.AllowPlayModeSceneChanges);
+            EditorGUILayout.HelpBox(
+                "When disabled, scene-object write endpoints are rejected during Play Mode even if the request includes allowWhilePlaying=true.",
+                MessageType.Info);
 
             EditorGUILayout.Space(8);
             using (new EditorGUILayout.HorizontalScope())
@@ -125,6 +135,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             EditorGUILayout.Space(12);
             DrawRequestLog();
+            EditorGUIUtility.labelWidth = oldLabelWidth;
         }
 
         private void DrawBuiltInApiTab()

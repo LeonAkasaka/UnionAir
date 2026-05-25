@@ -58,16 +58,26 @@ namespace LeonAkasaka.UnionAir.Editor
                 newParent = parentGo.transform;
             }
 
-            Undo.SetCurrentGroupName("UnionAir: Reparent GameObject");
-            var group = Undo.GetCurrentGroup();
-            Undo.SetTransformParent(go.transform, newParent, "UnionAir: Reparent GameObject");
+            var useUndo = !EditorApplication.isPlaying;
+            var group = -1;
+            if (useUndo)
+            {
+                Undo.SetCurrentGroupName("UnionAir: Reparent GameObject");
+                group = Undo.GetCurrentGroup();
+                Undo.SetTransformParent(go.transform, newParent, "UnionAir: Reparent GameObject");
+            }
+            else
+            {
+                go.transform.SetParent(newParent, false);
+            }
             if (newParent == null)
                 SceneManager.MoveGameObjectToScene(go, scene);
-            Undo.CollapseUndoOperations(group);
+            if (useUndo)
+                Undo.CollapseUndoOperations(group);
 
             if (originalScene != scene)
-                EditorSceneManager.MarkSceneDirty(originalScene);
-            EditorSceneManager.MarkSceneDirty(scene);
+                SceneUtils.MarkDirtyUnlessPlaying(originalScene);
+            SceneUtils.MarkDirtyUnlessPlaying(scene);
 
             var newGoPath = GameObjectUtils.GetPath(go);
             RestResponse.Send(response, $"{{\"path\":\"{RestResponse.EscapeJson(newGoPath)}\",\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\"}}");

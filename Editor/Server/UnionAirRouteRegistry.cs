@@ -126,6 +126,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 source,
                 category,
                 categoryDefinition,
+                endpoint.PlayModePolicy,
                 endpoint.Summary,
                 endpoint.PathParams,
                 endpoint.RequiredQuery,

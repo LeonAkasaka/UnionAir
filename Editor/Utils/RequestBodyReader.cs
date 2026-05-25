@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Runtime.CompilerServices;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -13,6 +14,9 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </remarks>
     public static class RequestBodyReader
     {
+        private static readonly ConditionalWeakTable<HttpListenerRequest, BodyCache> CachedBodies =
+            new ConditionalWeakTable<HttpListenerRequest, BodyCache>();
+
         /// <summary>
         /// Reads the entire request body as a string using the request encoding.
         /// </summary>
@@ -20,9 +24,27 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <returns>The request body, or an empty string when the request has no body.</returns>
         public static string ReadString(HttpListenerRequest request)
         {
+            BodyCache cached;
+            if (CachedBodies.TryGetValue(request, out cached))
+                return cached.Value;
+
             if (request.ContentLength64 == 0) return string.Empty;
+            string body;
             using (var reader = new StreamReader(request.InputStream, request.ContentEncoding))
-                return reader.ReadToEnd();
+                body = reader.ReadToEnd();
+
+            CachedBodies.Add(request, new BodyCache(body));
+            return body;
+        }
+
+        private sealed class BodyCache
+        {
+            public BodyCache(string value)
+            {
+                Value = value;
+            }
+
+            public string Value { get; }
         }
 
         /// <summary>

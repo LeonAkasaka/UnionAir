@@ -18,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Scene GameObject and Component APIs now expose `globalObjectId` values and accept them as stable target identifiers.
 - GameObject, component, camera, and prefab write APIs now use typed object references (`target`, `parent`, `source`) instead of parallel path and ID fields.
 - Serialized component object reference payloads now use typed `hierarchyPath`, `componentPath`, and `globalObjectId` references.
+- Endpoint metadata now declares Play Mode safety policy, and write APIs are centrally blocked or require both Editor-side Play Mode scene-change permission and `allowWhilePlaying=true` while the Editor is in Play Mode.
+- Play Mode scene-object writes now skip scene dirty marking and Undo registration because they are transient runtime changes.
 
 ### Fixed
 

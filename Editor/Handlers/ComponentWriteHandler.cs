@@ -79,10 +79,18 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            Undo.SetCurrentGroupName("UnionAir: Add Component");
-            var group = Undo.GetCurrentGroup();
-            var added = Undo.AddComponent(go, type);
-            Undo.CollapseUndoOperations(group);
+            Component added;
+            if (EditorApplication.isPlaying)
+            {
+                added = go.AddComponent(type);
+            }
+            else
+            {
+                Undo.SetCurrentGroupName("UnionAir: Add Component");
+                var group = Undo.GetCurrentGroup();
+                added = Undo.AddComponent(go, type);
+                Undo.CollapseUndoOperations(group);
+            }
 
             if (added == null)
             {
@@ -90,7 +98,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            EditorSceneManager.MarkSceneDirty(scene);
+            SceneUtils.MarkDirtyUnlessPlaying(scene);
             var goPath = GameObjectUtils.GetPath(go);
             RestResponse.Send(response,
                 $"{{\"path\":\"{RestResponse.EscapeJson(goPath)}\",\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",\"type\":\"{RestResponse.EscapeJson(typeName)}\",\"componentGlobalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(added))}\"}}", 201);
@@ -114,9 +122,14 @@ namespace LeonAkasaka.UnionAir.Editor
             var goPath = GameObjectUtils.GetPath(go);
             var componentId = ObjectIdUtils.GetGlobalObjectId(comp);
 
-            Undo.SetCurrentGroupName("UnionAir: Remove Component");
-            Undo.DestroyObjectImmediate(comp);
-            EditorSceneManager.MarkSceneDirty(scene);
+            if (EditorApplication.isPlaying)
+                UnityEngine.Object.Destroy(comp);
+            else
+            {
+                Undo.SetCurrentGroupName("UnionAir: Remove Component");
+                Undo.DestroyObjectImmediate(comp);
+            }
+            SceneUtils.MarkDirtyUnlessPlaying(scene);
 
             RestResponse.Send(response,
                 $"{{\"deleted\":\"{RestResponse.EscapeJson(typeName)}\",\"from\":\"{RestResponse.EscapeJson(goPath)}\",\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",\"componentGlobalObjectId\":\"{RestResponse.EscapeJson(componentId)}\"}}");
@@ -147,8 +160,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            Undo.SetCurrentGroupName("UnionAir: Update Component");
-            var group = Undo.GetCurrentGroup();
+            var useUndo = !EditorApplication.isPlaying;
+            var group = -1;
+            if (useUndo)
+            {
+                Undo.SetCurrentGroupName("UnionAir: Update Component");
+                group = Undo.GetCurrentGroup();
+            }
 
             var so = new SerializedObject(comp);
             var updated = new System.Collections.Generic.List<string>();
@@ -180,8 +198,9 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             so.ApplyModifiedProperties();
-            Undo.CollapseUndoOperations(group);
-            EditorSceneManager.MarkSceneDirty(scene);
+            if (useUndo)
+                Undo.CollapseUndoOperations(group);
+            SceneUtils.MarkDirtyUnlessPlaying(scene);
 
             var sb = new StringBuilder();
             sb.Append("{");

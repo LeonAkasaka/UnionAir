@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -10,6 +11,16 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal static class SceneUtils
     {
+        /// <summary>
+        /// Marks a scene dirty in Edit mode. Play mode scene changes are transient and cannot be dirtied.
+        /// </summary>
+        /// <param name="scene">Scene modified by an API operation.</param>
+        public static void MarkDirtyUnlessPlaying(Scene scene)
+        {
+            if (!EditorApplication.isPlaying)
+                EditorSceneManager.MarkSceneDirty(scene);
+        }
+
         /// <summary>
         /// Returns a flat list of every GameObject in the scene together with its
         /// root-relative slash-separated path (e.g. "Canvas/Panel/Button").
