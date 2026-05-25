@@ -53,6 +53,4 @@ Update `README.md` only for overview-level changes (e.g., a new capability being
 ## Branching and Commits
 
 - `main` is the stable branch
-- Develop new features on a feature branch and merge via PR
 - Write commit messages in English, concisely describing the change
-- Include the co-authored-by trailer: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
