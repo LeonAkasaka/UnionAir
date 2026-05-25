@@ -360,17 +360,34 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            var expectedType = GetManagedObjectType(prop);
+            var expectedType = ObjectReferenceResolverUtils.GetManagedObjectType(prop);
             var requestedTypeName = RequestBodyReader.GetString(rawValue, "assetType");
-            var requestedType = ResolveOptionalReferenceType(requestedTypeName, jsonKey, out error, out statusCode);
+            var requestedType = ObjectReferenceResolverUtils.ResolveOptionalReferenceType(
+                requestedTypeName,
+                $"property {jsonKey}",
+                "Unknown object reference type for {0}: {1}",
+                "Type is not a UnityEngine.Object for {0}: {1}",
+                out error,
+                out statusCode);
             if (error != null) return false;
 
             var assetGuid = RequestBodyReader.GetString(rawValue, "assetGuid");
             var assetPath = RequestBodyReader.GetString(rawValue, "assetPath");
 
             if (!string.IsNullOrEmpty(assetGuid) || !string.IsNullOrEmpty(assetPath))
-                return TryResolveAssetReference(jsonKey, assetGuid, assetPath, expectedType, requestedType,
-                    out value, out error, out statusCode);
+                return ObjectReferenceResolverUtils.TryResolveAssetReference(
+                    assetGuid,
+                    assetPath,
+                    expectedType,
+                    requestedType,
+                    $"property {jsonKey}",
+                    "Object reference {0} requires assetGuid or assetPath.",
+                    "Asset not found for {0} with GUID: {1}",
+                    "Asset not found or incompatible for {0}: {1}",
+                    "Resolved object for {0} is not assignable to field type {1}.",
+                    out value,
+                    out error,
+                    out statusCode);
 
             if (!TryResolveReferenceScene(RequestBodyReader.GetString(rawValue, "scenePath"), out var scene, out error, out statusCode))
                 return false;
@@ -380,7 +397,14 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (!ObjectRefUtils.TryResolveObject(scene, objectRef, jsonKey, out value, out error, out statusCode))
                 return false;
-            return ValidateObjectReferenceType(jsonKey, value, expectedType, requestedType, out error, out statusCode);
+            return ObjectReferenceResolverUtils.ValidateObjectReferenceType(
+                $"property {jsonKey}",
+                value,
+                expectedType,
+                requestedType,
+                "Resolved object for {0} is not assignable to field type {1}.",
+                out error,
+                out statusCode);
         }
 
         private static bool TryResolveReferenceScene(
@@ -400,98 +424,6 @@ namespace LeonAkasaka.UnionAir.Editor
 
             statusCode = status == ResolveStatus.Ambiguous ? 409 : 404;
             return false;
-        }
-
-        private static bool TryResolveAssetReference(
-            string jsonKey, string assetGuid, string assetPath, Type expectedType, Type requestedType,
-            out UnityEngine.Object value, out string error, out int statusCode)
-        {
-            value = null;
-            error = null;
-            statusCode = 400;
-
-            if (!string.IsNullOrEmpty(assetGuid))
-            {
-                assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
-                if (string.IsNullOrEmpty(assetPath))
-                {
-                    error = $"Asset not found for property {jsonKey} with GUID: {assetGuid}";
-                    statusCode = 404;
-                    return false;
-                }
-            }
-
-            if (string.IsNullOrEmpty(assetPath))
-            {
-                error = $"Object reference property {jsonKey} requires assetGuid or assetPath.";
-                return false;
-            }
-
-            var loadType = requestedType ?? expectedType ?? typeof(UnityEngine.Object);
-            value = AssetDatabase.LoadAssetAtPath(assetPath, loadType);
-            if (value == null)
-            {
-                error = $"Asset not found or incompatible for property {jsonKey}: {assetPath}";
-                statusCode = 404;
-                return false;
-            }
-
-            return ValidateObjectReferenceType(jsonKey, value, expectedType, requestedType, out error, out statusCode);
-        }
-
-        private static Type ResolveOptionalReferenceType(
-            string typeName, string jsonKey, out string error, out int statusCode)
-        {
-            error = null;
-            statusCode = 400;
-            if (string.IsNullOrEmpty(typeName)) return null;
-
-            var type = ObjectRefUtils.ResolveType(typeName);
-            if (type != null && typeof(UnityEngine.Object).IsAssignableFrom(type)) return type;
-
-            error = type == null
-                ? $"Unknown object reference type for property {jsonKey}: {typeName}"
-                : $"Type is not a UnityEngine.Object for property {jsonKey}: {typeName}";
-            return null;
-        }
-
-        private static bool ValidateObjectReferenceType(
-            string jsonKey, UnityEngine.Object value, Type expectedType, Type requestedType,
-            out string error, out int statusCode)
-        {
-            error = null;
-            statusCode = 400;
-
-            if (value == null) return true;
-
-            if (requestedType != null && !requestedType.IsInstanceOfType(value))
-            {
-                error = $"Resolved object for property {jsonKey} is not assignable to requested type {requestedType.FullName}.";
-                statusCode = 422;
-                return false;
-            }
-
-            if (expectedType != null && !expectedType.IsInstanceOfType(value))
-            {
-                error = $"Resolved object for property {jsonKey} is not assignable to field type {expectedType.FullName}.";
-                statusCode = 422;
-                return false;
-            }
-
-            return true;
-        }
-
-        private static Type GetManagedObjectType(SerializedProperty prop)
-        {
-            var typeName = prop.type;
-            if (string.IsNullOrEmpty(typeName)) return null;
-
-            const string prefix = "PPtr<$";
-            if (typeName.StartsWith(prefix, StringComparison.Ordinal) && typeName.EndsWith(">", StringComparison.Ordinal))
-                typeName = typeName.Substring(prefix.Length, typeName.Length - prefix.Length - 1);
-
-            var type = ObjectRefUtils.ResolveType(typeName);
-            return type != null && typeof(UnityEngine.Object).IsAssignableFrom(type) ? type : null;
         }
 
         private static string FindJsonValue(string json, string key)

@@ -92,6 +92,7 @@ curl "http://localhost:8765/api/assets?path=Assets/UI"
 ## Documentation
 
 - [API Reference](api-reference.md) — Detailed specifications for all endpoints
+- [Custom Controllers](custom-controllers.md) — Extension guide for application-side UnionAir APIs
 
 ---
 

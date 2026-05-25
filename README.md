@@ -58,3 +58,4 @@ To use with an LLM MCP client, run a separate Node.js MCP bridge that calls thes
 
 - **[Getting Started](Documentation~/index.md)** — Setup, EditorWindow guide, lifecycle
 - **[API Reference](Documentation~/api-reference.md)** — Full endpoint reference with request/response examples
+- **[Custom Controllers](Documentation~/custom-controllers.md)** — Extension guide for application-side UnionAir APIs

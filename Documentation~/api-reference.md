@@ -86,41 +86,9 @@ Each endpoint item includes the HTTP method, path, category, short summary, risk
 
 ---
 
-## Custom Handlers
+## Custom Controllers
 
-Custom handlers can be added from other Editor assemblies by declaring a controller. Controllers in UnionAir's own assembly are treated as built-in; controllers in other assemblies are treated as custom. Custom routes are namespaced under `/api/custom/` so they do not collide with UnionAir's built-in API.
-
-```csharp
-using LeonAkasaka.UnionAir.Editor;
-
-[UnionAirController("my-tool")]
-[UnionAirCategory(
-    "debug",
-    DisplayName = "Debug Tools",
-    Risk = UnionAirEndpointRisk.Custom,
-    CanDisable = true,
-    EnabledByDefault = false)]
-public class MyToolController
-{
-    [UnionAirEndpoint(
-        "GET",
-        "status",
-        Category = "debug",
-        Summary = "Returns custom tool status")]
-    public void Status(UnionAirRequestContext ctx)
-    {
-        RestResponse.Send(ctx.Response, "{\"status\":\"ok\"}");
-    }
-}
-```
-
-This example registers `GET /api/custom/my-tool/status`.
-
-Custom handlers are disabled by default. Enable them in **Window > UnionAir > REST Bridge > Custom Handlers**. Custom categories can also be enabled or disabled independently.
-
-`Category` is a string so custom extensions can define their own grouping labels in `/api/help` and the EditorWindow. Built-in endpoints use `UnionAirEndpointCategories.Read`, `SceneWrite`, `AssetWrite`, and `PlayMode`. Category metadata controls enablement and risk reporting. `Risk` is descriptive metadata for tools and LLMs; category enablement controls whether requests are accepted.
-
-`PlayModePolicy` controls whether an endpoint can run while `EditorApplication.isPlaying` is `true`. `Allowed` endpoints can run in Play mode, and `Blocked` endpoints return `409 Conflict`. `ExplicitOptIn` endpoints require both the Editor-side **Allow Play Mode Scene Changes** setting and request-side `allowWhilePlaying=true`; otherwise they return `409 Conflict`. For `POST` and `PATCH`, a body value takes precedence over the query string.
+Application-side Editor assemblies can add custom controllers under `/api/custom/...`. See [Custom Controllers](custom-controllers.md) for controller setup, category metadata, request parsing, reference resolution helpers, Play Mode policy, and security guidance.
 
 ---
 
@@ -401,6 +369,8 @@ Reference shape:
 | `globalObjectId` | Unity GlobalObjectId string for a scene GameObject or Component |
 
 `scenePath` remains a separate loaded scene selector and is used only for `hierarchyPath` and `componentPath` resolution. Scene asset responses use asset `guid` values, not `globalObjectId`.
+
+Custom controllers can parse and resolve this same reference shape with `UnionAirReferenceResolver`; see [Custom Controllers](custom-controllers.md).
 
 ---
 
