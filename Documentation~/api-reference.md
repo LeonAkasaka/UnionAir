@@ -221,7 +221,7 @@ Returns the current Unity Editor selection.
 | `globalObjectId` | Present for scene GameObjects and Components |
 | `scenePath` | Loaded scene path for scene objects |
 | `assetGuid` / `assetPath` | Present for project assets |
-| `instanceId` | Fallback for unsupported Editor object kinds |
+| `entityId` | Fallback for unsupported Editor object kinds when Unity exposes an Editor object entity ID |
 
 ---
 

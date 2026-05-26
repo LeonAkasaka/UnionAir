@@ -1,4 +1,5 @@
 using System.Text;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -184,8 +185,8 @@ namespace LeonAkasaka.UnionAir.Editor
             else
             {
                 sb.Append(",");
-                sb.Append("\"instanceId\":");
-                sb.Append(value.GetInstanceID());
+                sb.Append("\"entityId\":");
+                sb.Append(GetEditorObjectId(value));
             }
 
             sb.Append("}");
@@ -209,6 +210,22 @@ namespace LeonAkasaka.UnionAir.Editor
             return string.Equals(typeName, "hierarchyPath", System.StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(typeName, "componentPath", System.StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(typeName, "globalObjectId", System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static long GetEditorObjectId(UnityEngine.Object value)
+        {
+            var method = typeof(UnityEngine.Object).GetMethod(
+                "GetEntityId",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (method == null)
+                return 0;
+
+            var result = method.Invoke(value, null);
+            if (result is long longValue)
+                return longValue;
+            if (result is int intValue)
+                return intValue;
+            return 0;
         }
 
         private static int FindIndex(UnityEngine.Object[] objects, UnityEngine.Object value)
