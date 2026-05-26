@@ -11,6 +11,7 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         private const int MaxLogLines = 100;
         private const string PrefKeyTab = "UnionAir.UI.Tab";
+        private const string PrefKeyCategoryExpandedPrefix = "UnionAir.UI.CategoryExpanded.";
 
         private readonly List<string> _log = new List<string>();
         private Vector2 _scroll;
@@ -89,7 +90,11 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             if (isRunning)
-                EditorGUILayout.LabelField("Base URL", $"http://localhost:{server.Port}/api/", EditorStyles.miniLabel);
+            {
+                var baseUrl = $"http://localhost:{server.Port}/api/";
+                DrawCopyableUrl("Base URL", baseUrl);
+                DrawCopyableUrl("Help URL", baseUrl + "help");
+            }
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Server", EditorStyles.boldLabel);
@@ -185,7 +190,12 @@ namespace LeonAkasaka.UnionAir.Editor
             foreach (var pair in categories)
             {
                 var category = FindCategory(UnionAirRouteSource.Custom, pair.Key);
-                DrawCategoryHeader(category);
+                var expanded = DrawCategoryHeader(category);
+                if (!expanded)
+                {
+                    EditorGUILayout.Space(4);
+                    continue;
+                }
 
                 var controllers = new SortedDictionary<string, List<UnionAirEndpointDescriptor>>();
                 foreach (var endpoint in pair.Value)
@@ -232,10 +242,20 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorGUILayout.EndScrollView();
         }
 
+        private static void DrawCopyableUrl(string label, string url)
+        {
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField(label, GUILayout.Width(EditorGUIUtility.labelWidth));
+                EditorGUILayout.SelectableLabel(url, EditorStyles.miniLabel, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+                if (GUILayout.Button("Copy", EditorStyles.miniButton, GUILayout.Width(46)))
+                    GUIUtility.systemCopyBuffer = url;
+            }
+        }
+
         private static void DrawEndpointGroup(UnionAirCategoryDefinition category)
         {
-            DrawCategoryHeader(category);
-            if (category == null)
+            if (!DrawCategoryHeader(category))
                 return;
 
             var endpoints = new List<UnionAirEndpointDescriptor>();
@@ -262,22 +282,31 @@ namespace LeonAkasaka.UnionAir.Editor
             return null;
         }
 
-        private static void DrawCategoryHeader(UnionAirCategoryDefinition category)
+        private static bool DrawCategoryHeader(UnionAirCategoryDefinition category)
         {
             if (category == null)
-                return;
+                return false;
 
             using (new EditorGUILayout.HorizontalScope())
             {
+                var prefKey = PrefKeyCategoryExpandedPrefix + category.Key;
+                var expanded = EditorPrefs.GetBool(prefKey, true);
+                var foldoutRect = GUILayoutUtility.GetRect(14f, EditorGUIUtility.singleLineHeight, GUILayout.Width(14));
+                var newExpanded = EditorGUI.Foldout(foldoutRect, expanded, GUIContent.none, true);
+                if (newExpanded != expanded)
+                {
+                    expanded = newExpanded;
+                    EditorPrefs.SetBool(prefKey, expanded);
+                }
+
                 var canToggle = category.CanDisable &&
                                 (category.Source != UnionAirRouteSource.Custom ||
                                  UnionAirSettings.CustomHandlersEnabled);
                 using (new EditorGUI.DisabledScope(!canToggle))
                 {
-                    var newEnabled = EditorGUILayout.ToggleLeft(
-                        $"{category.DisplayName} ({RiskLabel(category.Risk)})",
+                    var newEnabled = EditorGUILayout.Toggle(
                         category.Enabled,
-                        EditorStyles.boldLabel);
+                        GUILayout.Width(18));
                     if (newEnabled != category.Enabled)
                     {
                         UnionAirSettings.SetCategoryEnabled(
@@ -287,6 +316,12 @@ namespace LeonAkasaka.UnionAir.Editor
                         UnionAirRouteRegistry.Refresh();
                     }
                 }
+
+                EditorGUILayout.LabelField(
+                    $"{category.DisplayName} ({RiskLabel(category.Risk)})",
+                    EditorStyles.boldLabel);
+
+                return expanded;
             }
         }
 
