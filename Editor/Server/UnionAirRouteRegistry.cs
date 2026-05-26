@@ -127,6 +127,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 category,
                 categoryDefinition,
                 endpoint.PlayModePolicy,
+                endpoint.UseRiskOverride,
+                endpoint.Risk,
                 endpoint.Summary,
                 endpoint.PathParams,
                 endpoint.RequiredQuery,
@@ -221,6 +223,13 @@ namespace LeonAkasaka.UnionAir.Editor
                     "Play Mode",
                     UnionAirRouteSource.Builtin,
                     UnionAirEndpointRisk.PlayMode,
+                    true,
+                    false),
+                new UnionAirCategoryDefinition(
+                    UnionAirEndpointCategories.EditorActions,
+                    "Editor Actions",
+                    UnionAirRouteSource.Builtin,
+                    UnionAirEndpointRisk.EditorState | UnionAirEndpointRisk.RequestDependent,
                     true,
                     false)
             };

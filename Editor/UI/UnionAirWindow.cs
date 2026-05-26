@@ -144,6 +144,7 @@ namespace LeonAkasaka.UnionAir.Editor
             DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.SceneWrite));
             DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.AssetWrite));
             DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.PlayMode));
+            DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.EditorActions));
         }
 
         private void DrawCustomHandlersTab()
@@ -333,6 +334,8 @@ namespace LeonAkasaka.UnionAir.Editor
             AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.AssetUpdate, "asset");
             AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.PlayMode, "play mode");
             AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.Custom, "custom");
+            AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.RequestDependent, "request-dependent");
+            AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.EditorState, "editor state");
             return label;
         }
 

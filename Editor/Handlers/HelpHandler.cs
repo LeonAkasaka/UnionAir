@@ -199,6 +199,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 AppendRiskName(sb, "playMode", ref first);
             if ((risk & UnionAirEndpointRisk.Custom) != 0)
                 AppendRiskName(sb, "custom", ref first);
+            if ((risk & UnionAirEndpointRisk.RequestDependent) != 0)
+                AppendRiskName(sb, "requestDependent", ref first);
+            if ((risk & UnionAirEndpointRisk.EditorState) != 0)
+                AppendRiskName(sb, "editorState", ref first);
             sb.Append("]");
         }
 

@@ -38,7 +38,13 @@ namespace LeonAkasaka.UnionAir.Editor
         PlayMode = 1 << 2,
 
         /// <summary>The endpoint has a custom or tool-specific risk profile.</summary>
-        Custom = 1 << 3
+        Custom = 1 << 3,
+
+        /// <summary>The endpoint risk depends on request parameters or payload.</summary>
+        RequestDependent = 1 << 4,
+
+        /// <summary>The endpoint may change Unity Editor UI or selection state without directly modifying scene or asset data.</summary>
+        EditorState = 1 << 5
     }
 
     /// <summary>
@@ -72,6 +78,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         /// <summary>Built-in endpoints that may control Play mode.</summary>
         public const string PlayMode = "playMode";
+
+        /// <summary>Built-in endpoints that execute request-dependent Unity Editor actions.</summary>
+        public const string EditorActions = "editorActions";
 
         /// <summary>Default category identifier for custom endpoints when no more specific category is supplied.</summary>
         public const string Custom = "custom";
@@ -198,6 +207,16 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Whether this endpoint can be called while the Unity Editor is in Play mode.
         /// </summary>
         public UnionAirPlayModePolicy PlayModePolicy { get; set; } = UnionAirPlayModePolicy.Allowed;
+
+        /// <summary>
+        /// Optional endpoint-specific risk metadata used when it differs from the category risk.
+        /// </summary>
+        public UnionAirEndpointRisk Risk { get; set; } = UnionAirEndpointRisk.None;
+
+        /// <summary>
+        /// Whether <see cref="Risk"/> should override the endpoint category risk.
+        /// </summary>
+        public bool UseRiskOverride { get; set; }
 
         /// <summary>
         /// Short description included in <c>GET /api/help</c> and the generated endpoint list.

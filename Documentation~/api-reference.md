@@ -63,12 +63,12 @@ Each endpoint item includes the HTTP method, path, category, short summary, risk
 | `categories[].enabled` | bool | Whether endpoints in the category are currently enabled |
 | `categories[].canDisable` | bool | Whether the category can be disabled in the EditorWindow |
 | `categories[].enabledByDefault` | bool | Whether the category starts enabled before user overrides |
-| `categories[].risk` | string[] | `readOnly`, `sceneUpdate`, `assetUpdate`, `playMode`, or `custom` |
+| `categories[].risk` | string[] | `readOnly`, `sceneUpdate`, `assetUpdate`, `playMode`, `custom`, `requestDependent`, or `editorState` |
 | `endpoints[].source` | string | `builtin` or `custom` |
 | `endpoints[].enabled` | bool | Whether the endpoint is currently enabled |
 | `endpoints[].routeTemplate` | string | Route template used by the attribute router |
-| `endpoints[].category` | string | Category used for discovery/UI grouping. Built-in constants include `read`, `sceneWrite`, `assetWrite`, `playMode`, and `custom`; custom endpoints may use any stable category string. |
-| `endpoints[].risk` | string[] | Risk inherited from the endpoint category |
+| `endpoints[].category` | string | Category used for discovery/UI grouping. Built-in constants include `read`, `sceneWrite`, `assetWrite`, `playMode`, `editorActions`, and `custom`; custom endpoints may use any stable category string. |
+| `endpoints[].risk` | string[] | Risk inherited from the endpoint category, unless the endpoint declares a more specific risk override |
 | `endpoints[].playModePolicy` | string | `allowed`, `blocked`, or `explicitOptIn`. `blocked` endpoints return `409` in Play mode. `explicitOptIn` endpoints require both the Editor setting and `allowWhilePlaying=true` in Play mode. |
 | `endpoints[].requiredQuery` | string[] | Required query string parameters |
 | `endpoints[].optionalQuery` | string[] | Optional query string parameters |
@@ -179,6 +179,146 @@ curl "http://localhost:8765/api/editor/logs?type=error&limit=20"
 # Logs containing "NullReference"
 curl "http://localhost:8765/api/editor/logs?search=NullReference"
 ```
+
+---
+
+## GET /api/editor/selection
+
+Returns the current Unity Editor selection.
+
+> Can be called only when the Editor Actions category is enabled.
+> The endpoint risk is `editorState`.
+
+### Response
+
+```json
+{
+  "count": 1,
+  "activeIndex": 0,
+  "active": {
+    "kind": "sceneObject",
+    "name": "Main Camera",
+    "type": "UnityEngine.GameObject",
+    "globalObjectId": "GlobalObjectId_V1-...",
+    "scenePath": "Assets/Scenes/SampleScene.unity"
+  },
+  "objects": [
+    {
+      "kind": "sceneObject",
+      "name": "Main Camera",
+      "type": "UnityEngine.GameObject",
+      "globalObjectId": "GlobalObjectId_V1-...",
+      "scenePath": "Assets/Scenes/SampleScene.unity"
+    }
+  ],
+  "assetGuids": []
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `kind` | `sceneObject`, `asset`, or `unknown` |
+| `globalObjectId` | Present for scene GameObjects and Components |
+| `scenePath` | Loaded scene path for scene objects |
+| `assetGuid` / `assetPath` | Present for project assets |
+| `instanceId` | Fallback for unsupported Editor object kinds |
+
+---
+
+## POST /api/editor/selection
+
+Sets or clears the current Unity Editor selection.
+
+> Can be called only when the Editor Actions category is enabled.
+> The endpoint risk is `editorState`.
+
+### Request Body (JSON)
+
+Set one target:
+
+```json
+{
+  "target": { "type": "hierarchyPath", "value": "Canvas/Button" }
+}
+```
+
+Set multiple targets:
+
+```json
+{
+  "targets": [
+    { "type": "hierarchyPath", "value": "Canvas/Button", "scenePath": "Assets/Scenes/Main.unity" },
+    { "assetPath": "Assets/Textures/Icon.png" }
+  ],
+  "activeIndex": 0
+}
+```
+
+Clear selection:
+
+```json
+{ "clear": true }
+```
+
+Targets accept either scene object reference fields (`type`, `value`, optional `scenePath`) or asset reference fields (`assetGuid`, `assetPath`, optional `assetType`). Do not mix scene and asset reference fields in one target object.
+
+### Response
+
+Same shape as `GET /api/editor/selection`.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | Missing target fields, malformed target, mixed scene and asset target fields, or invalid `activeIndex` |
+| 403 | Editor Actions category is disabled |
+| 404 | Scene object or asset was not found |
+| 409 | Scene name is ambiguous |
+| 422 | Target resolves to an unsupported object kind |
+
+---
+
+## POST /api/editor/ping
+
+Highlights a Unity Editor object with `EditorGUIUtility.PingObject()` without changing the current selection.
+
+> Can be called only when the Editor Actions category is enabled.
+> The endpoint risk is `editorState`.
+
+### Request Body (JSON)
+
+```json
+{
+  "target": { "assetGuid": "a1b2c3..." }
+}
+```
+
+`target` accepts the same single-target shape as `POST /api/editor/selection`.
+
+### Response
+
+```json
+{
+  "pinged": true,
+  "target": {
+    "kind": "asset",
+    "name": "Icon",
+    "type": "UnityEngine.Texture2D",
+    "assetGuid": "a1b2c3...",
+    "assetPath": "Assets/Textures/Icon.png"
+  }
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `target` is missing or malformed |
+| 403 | Editor Actions category is disabled |
+| 404 | Target object or asset was not found |
+| 409 | Scene name is ambiguous |
+| 422 | Target resolves to an unsupported object kind |
 
 ---
 
@@ -1410,6 +1550,54 @@ Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and asset
 
 ---
 
+## POST /api/editor/menu-item
+
+Executes a Unity Editor menu item using `EditorApplication.ExecuteMenuItem()`.
+
+> Can be called only when the Editor Actions category is enabled.
+> Returns `409 Conflict` in Play mode.
+> The risk is reported as `requestDependent` because the side effects depend on the requested menu item path.
+
+### Request Body (JSON)
+
+```json
+{
+  "path": "Window/UnionAir/REST Bridge"
+}
+```
+
+| Field | Required | Description |
+|-----------|------|------|
+| `path` | ✅ | Unity Editor menu item path, such as `Window/UnionAir/REST Bridge` |
+
+### Response
+
+```json
+{
+  "executed": true,
+  "path": "Window/UnionAir/REST Bridge"
+}
+```
+
+### Errors
+
+| Status | Cause |
+|-----------|------|
+| 400 | `path` is missing or empty |
+| 403 | Editor Actions category is disabled |
+| 404 | The menu item was not found, is disabled, or could not be executed |
+| 409 | The Unity Editor is in Play mode |
+
+### Examples
+
+```bash
+curl -X POST http://localhost:8765/api/editor/menu-item \
+  -H "Content-Type: application/json" \
+  -d '{"path":"Window/UnionAir/REST Bridge"}'
+```
+
+---
+
 ## POST /api/assets/prefabs
 
 Creates a prefab from a GameObject in the scene.
@@ -1688,6 +1876,97 @@ Moves/renames an asset. Its GUID and references within the project are preserved
 | 404 | No matching asset exists |
 | 422 | Move operation failed (duplicate path, etc.) |
 | 403 | Asset Write category is disabled |
+
+---
+
+## POST /api/assets/open
+
+Opens an asset in the Unity Editor using `AssetDatabase.OpenAsset()`.
+
+> Can be called only when the Editor Actions category is enabled.
+> Returns `409 Conflict` in Play mode.
+> The endpoint risk is `editorState`.
+
+### Request Body (JSON)
+
+```json
+{
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Scripts/Foo.cs"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `guid` | Conditional | GUID of the asset to open. Takes precedence when both fields are provided |
+| `assetPath` | Conditional | Project asset path. Required when `guid` is omitted |
+
+### Response
+
+```json
+{
+  "opened": true,
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Scripts/Foo.cs"
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `guid` and `assetPath` are both missing |
+| 403 | Editor Actions category is disabled |
+| 404 | No matching asset exists |
+| 409 | The Unity Editor is in Play mode |
+| 422 | The asset could not be opened |
+
+---
+
+## POST /api/assets/reimport
+
+Reimports one project asset using `AssetDatabase.ImportAsset()`.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Request Body (JSON)
+
+```json
+{
+  "guid": "a1b2c3...",
+  "recursive": false,
+  "forceUpdate": false
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `guid` | Conditional | GUID of the asset to reimport. Takes precedence when both fields are provided |
+| `assetPath` | Conditional | Project asset path. Required when `guid` is omitted |
+| `recursive` | ❌ | Adds `ImportAssetOptions.ImportRecursive` |
+| `forceUpdate` | ❌ | Adds `ImportAssetOptions.ForceUpdate` |
+
+### Response
+
+```json
+{
+  "reimported": true,
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Textures/Icon.png",
+  "isCompiling": false,
+  "isUpdating": true
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `guid` and `assetPath` are both missing |
+| 403 | Asset Write category is disabled |
+| 404 | No matching asset exists |
+| 409 | The Unity Editor is in Play mode |
 
 ---
 

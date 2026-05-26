@@ -34,7 +34,7 @@ This example registers `GET /api/custom/my-tool/status`.
 
 Custom handlers are disabled by default. Enable them in **Window > UnionAir > REST Bridge > Custom Handlers**. Custom categories can also be enabled or disabled independently.
 
-`Category` is a string so custom extensions can define their own grouping labels in `/api/help` and the EditorWindow. Built-in endpoints use `UnionAirEndpointCategories.Read`, `SceneWrite`, `AssetWrite`, and `PlayMode`. Category metadata controls enablement and risk reporting. `Risk` is descriptive metadata for tools and LLMs; category enablement controls whether requests are accepted.
+`Category` is a string so custom extensions can define their own grouping labels in `/api/help` and the EditorWindow. Built-in endpoints use `UnionAirEndpointCategories.Read`, `SceneWrite`, `AssetWrite`, `PlayMode`, and `EditorActions`. Category metadata controls enablement and default risk reporting. `Risk` is descriptive metadata for tools and LLMs; category enablement controls whether requests are accepted. Endpoints can set `UseRiskOverride = true` and `Risk = ...` when a route has a narrower risk profile than its category.
 
 ## Requests and Responses
 
@@ -186,6 +186,9 @@ Use category metadata and `PlayModePolicy` deliberately:
 | `UnionAirEndpointRisk.SceneUpdate` | Endpoints that modify scene objects or scene state |
 | `UnionAirEndpointRisk.AssetUpdate` | Endpoints that modify assets, project files, prefabs, or saved scenes |
 | `UnionAirEndpointRisk.PlayMode` | Endpoints that enter, exit, pause, or step Play mode |
+| `UnionAirEndpointRisk.Custom` | Tool-specific or mixed behavior |
+| `UnionAirEndpointRisk.RequestDependent` | Endpoints whose side effects depend on request parameters or payload |
+| `UnionAirEndpointRisk.EditorState` | Endpoints that change Editor UI or selection state without directly modifying scene or asset data |
 | `UnionAirPlayModePolicy.Blocked` | Persistent scene or asset writes that should never run in Play mode |
 | `UnionAirPlayModePolicy.ExplicitOptIn` | Transient scene-object changes that require both Editor-side permission and `allowWhilePlaying=true` |
 

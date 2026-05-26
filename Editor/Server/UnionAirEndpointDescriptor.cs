@@ -22,6 +22,8 @@ namespace LeonAkasaka.UnionAir.Editor
             string category,
             UnionAirCategoryDefinition categoryDefinition,
             UnionAirPlayModePolicy playModePolicy,
+            bool useRiskOverride,
+            UnionAirEndpointRisk riskOverride,
             string summary,
             string[] pathParams,
             string[] requiredQuery,
@@ -40,6 +42,8 @@ namespace LeonAkasaka.UnionAir.Editor
             Category = category;
             CategoryDefinition = categoryDefinition;
             PlayModePolicy = playModePolicy;
+            UseRiskOverride = useRiskOverride;
+            RiskOverride = riskOverride;
             Summary = summary;
             PathParams = pathParams ?? new string[0];
             RequiredQuery = requiredQuery ?? new string[0];
@@ -91,7 +95,19 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Risk metadata inherited from <see cref="CategoryDefinition"/>.
         /// </summary>
-        public UnionAirEndpointRisk Risk => CategoryDefinition?.Risk ?? UnionAirEndpointRisk.Custom;
+        public UnionAirEndpointRisk Risk => UseRiskOverride
+            ? RiskOverride
+            : CategoryDefinition?.Risk ?? UnionAirEndpointRisk.Custom;
+
+        /// <summary>
+        /// Whether this endpoint reports risk metadata that differs from its category.
+        /// </summary>
+        public bool UseRiskOverride { get; }
+
+        /// <summary>
+        /// Endpoint-specific risk metadata used when <see cref="UseRiskOverride"/> is true.
+        /// </summary>
+        public UnionAirEndpointRisk RiskOverride { get; }
 
         /// <summary>
         /// Whether this endpoint may be called while the Unity Editor is in Play mode.

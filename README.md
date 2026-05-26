@@ -19,10 +19,12 @@ UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making i
 | **Scene Write** | Create/open/unload scenes, create/update/delete GameObjects and components | Disabled by default |
 | **Asset Write** | Prefabs, materials, asset files, AssetDatabase refresh | Disabled by default |
 | **Play Mode** | Enter/exit/pause/step play mode | Disabled by default |
+| **Editor Actions** | Selection, object ping, asset open, and Unity Editor menu item execution | Disabled by default |
 
 > Edit mode write operations are Undo-able in the Unity Editor (Ctrl+Z).
 > Scene GameObjects and Components include `globalObjectId` values in read responses and can be targeted with typed object references in write requests.
 > Write APIs declare Play Mode safety in `GET /api/help`; persistent scene/asset changes are blocked during Play Mode, while selected scene-object changes require both the Editor setting and `allowWhilePlaying=true`.
+> Editor Actions include Editor state operations and request-dependent menu execution; enable that category only for trusted local clients.
 > See **[API Reference](Documentation~/api-reference.md)** for the full endpoint list and request/response details.
 
 ## Quick Example

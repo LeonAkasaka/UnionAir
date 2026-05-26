@@ -36,12 +36,49 @@ namespace LeonAkasaka.UnionAir.Editor
         private void Logs(UnionAirRequestContext ctx)
             => new EditorLogsHandler().Handle(ctx.Request, ctx.Response);
 
+        [UnionAirEndpoint("GET", "selection",
+            Category = UnionAirEndpointCategories.EditorActions,
+            UseRiskOverride = true,
+            Risk = UnionAirEndpointRisk.EditorState,
+            Summary = "Returns the current Unity Editor selection.")]
+        private void GetSelection(UnionAirRequestContext ctx)
+            => new EditorSelectionHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "selection",
+            Category = UnionAirEndpointCategories.EditorActions,
+            UseRiskOverride = true,
+            Risk = UnionAirEndpointRisk.EditorState,
+            Summary = "Sets or clears the current Unity Editor selection.",
+            OptionalBody = new string[] { "target", "targets", "activeIndex", "scenePath", "clear" })]
+        private void SetSelection(UnionAirRequestContext ctx)
+            => new EditorSelectionHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "ping",
+            Category = UnionAirEndpointCategories.EditorActions,
+            UseRiskOverride = true,
+            Risk = UnionAirEndpointRisk.EditorState,
+            Summary = "Highlights a Unity Editor object without changing the selection.",
+            RequiredBody = new string[] { "target" },
+            OptionalBody = new string[] { "scenePath" })]
+        private void Ping(UnionAirRequestContext ctx)
+            => new EditorPingHandler().Handle(ctx.Request, ctx.Response);
+
         [UnionAirEndpoint("POST", "refresh",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
             Summary = "Refreshes the Unity AssetDatabase.")]
         private void Refresh(UnionAirRequestContext ctx)
             => new EditorRefreshHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "menu-item",
+            Category = UnionAirEndpointCategories.EditorActions,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            UseRiskOverride = true,
+            Risk = UnionAirEndpointRisk.RequestDependent,
+            Summary = "Executes a Unity Editor menu item.",
+            RequiredBody = new string[] { "path" })]
+        private void MenuItem(UnionAirRequestContext ctx)
+            => new EditorMenuItemHandler().Handle(ctx.Request, ctx.Response);
 
         [UnionAirEndpoint("POST", "play",
             Category = UnionAirEndpointCategories.PlayMode,
@@ -336,6 +373,25 @@ namespace LeonAkasaka.UnionAir.Editor
             RequiredBody = new string[] { "guid", "newPath" })]
         private void Move(UnionAirRequestContext ctx)
             => new AssetMoveHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "open",
+            Category = UnionAirEndpointCategories.EditorActions,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            UseRiskOverride = true,
+            Risk = UnionAirEndpointRisk.EditorState,
+            Summary = "Opens an asset in the Unity Editor.",
+            RequiredBody = new string[] { "guid or assetPath" })]
+        private void Open(UnionAirRequestContext ctx)
+            => new AssetOpenHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "reimport",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Reimports one project asset.",
+            RequiredBody = new string[] { "guid or assetPath" },
+            OptionalBody = new string[] { "recursive", "forceUpdate" })]
+        private void Reimport(UnionAirRequestContext ctx)
+            => new AssetReimportHandler().Handle(ctx.Request, ctx.Response);
     }
 
     [UnionAirController("assets/prefabs")]
@@ -409,5 +465,3 @@ namespace LeonAkasaka.UnionAir.Editor
             => new SearchAssetRefsHandler().Handle(ctx.Request, ctx.Response);
     }
 }
-
-
