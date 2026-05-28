@@ -1550,6 +1550,87 @@ Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and asset
 
 ---
 
+## GET /api/editor/menu-items
+
+Lists currently discoverable Unity Editor menu item paths that can be used with `POST /api/editor/menu-item`.
+
+> Can be called only when the Editor Actions category is enabled.
+> The endpoint risk is `editorState`.
+> Unity does not expose a stable public API for complete menu enumeration. This endpoint reports whether it used Unity's internal menu API or a fallback scan of `[MenuItem]` attributes.
+
+### Query Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `root` | ― | Optional menu root such as `Window`, `Assets`, or `GameObject` |
+| `search` | ― | Case-insensitive partial match on menu item path |
+| `includeFolders` | `true` | Includes menu folder entries when internal menu enumeration is available |
+| `includeAttributeFallback` | `true` | Adds `[MenuItem]` attribute paths to internal menu enumeration results |
+| `limit` | `1000` | Maximum number of returned items, clamped to 1-5000 |
+
+### Response
+
+```json
+{
+  "enumerationMode": "unsupportedApi",
+  "isComplete": true,
+  "root": "Window",
+  "count": 1,
+  "items": [
+    {
+      "path": "Window/UnionAir/REST Bridge",
+      "name": "REST Bridge",
+      "parent": "Window/UnionAir",
+      "depth": 2,
+      "isFolder": false,
+      "source": "unityMenu"
+    }
+  ],
+  "warnings": []
+}
+```
+
+When Unity's internal menu enumeration method is unavailable, the endpoint falls back to scanning loaded assemblies for `[MenuItem]` attributes:
+
+```json
+{
+  "enumerationMode": "menuItemAttributes",
+  "isComplete": false,
+  "root": "",
+  "count": 1,
+  "items": [
+    {
+      "path": "Window/UnionAir/REST Bridge",
+      "name": "REST Bridge",
+      "parent": "Window/UnionAir",
+      "depth": 2,
+      "isFolder": false,
+      "source": "menuItemAttribute"
+    }
+  ],
+  "warnings": [
+    "UnityEditor.Unsupported.GetSubmenus was not available; built-in Unity menu items may be incomplete."
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `enumerationMode` | `unsupportedApi` when Unity internal menu enumeration was used, otherwise `menuItemAttributes` |
+| `isComplete` | Whether the endpoint expects built-in Unity menu coverage to be complete |
+| `items[].path` | Menu path intended for `POST /api/editor/menu-item` |
+| `items[].isFolder` | Whether the item is a menu folder rather than an executable item |
+| `items[].source` | `unityMenu` or `menuItemAttribute` |
+
+### Examples
+
+```bash
+curl "http://localhost:8765/api/editor/menu-items?search=UnionAir"
+curl "http://localhost:8765/api/editor/menu-items?root=Window&includeFolders=false"
+```
+
+---
+
 ## POST /api/editor/menu-item
 
 Executes a Unity Editor menu item using `EditorApplication.ExecuteMenuItem()`.

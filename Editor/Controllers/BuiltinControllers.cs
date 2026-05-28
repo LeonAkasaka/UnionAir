@@ -80,6 +80,15 @@ namespace LeonAkasaka.UnionAir.Editor
         private void MenuItem(UnionAirRequestContext ctx)
             => new EditorMenuItemHandler().Handle(ctx.Request, ctx.Response);
 
+        [UnionAirEndpoint("GET", "menu-items",
+            Category = UnionAirEndpointCategories.EditorActions,
+            UseRiskOverride = true,
+            Risk = UnionAirEndpointRisk.EditorState,
+            Summary = "Lists currently discoverable Unity Editor menu item paths.",
+            OptionalQuery = new string[] { "root", "search", "includeFolders", "includeAttributeFallback", "limit" })]
+        private void MenuItems(UnionAirRequestContext ctx)
+            => new EditorMenuItemsHandler().Handle(ctx.Request, ctx.Response);
+
         [UnionAirEndpoint("POST", "play",
             Category = UnionAirEndpointCategories.PlayMode,
             Summary = "Requests entering Play mode.")]
