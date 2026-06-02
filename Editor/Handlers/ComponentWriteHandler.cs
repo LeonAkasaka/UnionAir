@@ -222,116 +222,31 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static string FindPropertyKey(string json, SerializedProperty prop)
         {
-            if (PropertyExistsInJson(json, prop.propertyPath)) return prop.propertyPath;
-            if (prop.propertyPath == prop.name && PropertyExistsInJson(json, prop.name)) return prop.name;
+            if (SerializedPropertySerializer.PropertyExistsInJson(json, prop.propertyPath)) return prop.propertyPath;
+            if (prop.propertyPath == prop.name && SerializedPropertySerializer.PropertyExistsInJson(json, prop.name)) return prop.name;
             return null;
         }
-
-        private static bool PropertyExistsInJson(string json, string propName)
-            => FindJsonValue(json, propName) != null;
 
         private static bool ApplyPropertyFromJson(
             SerializedProperty prop, string json, string jsonKey, out string error, out int statusCode)
         {
+            // Delegate scalar-type handling to the shared serializer, but handle ObjectReference
+            // ourselves so we can also resolve scene-object references (globalObjectId).
+            if (prop.propertyType != SerializedPropertyType.ObjectReference)
+                return SerializedPropertySerializer.ApplyPropertyFromJson(prop, json, jsonKey, out error, out statusCode);
+
             error = null;
             statusCode = 400;
-
             try
             {
-                switch (prop.propertyType)
+                UnityEngine.Object value;
+                if (TryResolveObjectReference(json, jsonKey, prop, out value, out error, out statusCode))
                 {
-                    case SerializedPropertyType.Boolean:
-                    {
-                        var v = RequestBodyReader.GetBool(json, jsonKey);
-                        if (v.HasValue) { prop.boolValue = v.Value; return true; }
-                        break;
-                    }
-                    case SerializedPropertyType.Integer:
-                    case SerializedPropertyType.LayerMask:
-                    case SerializedPropertyType.Enum:
-                    {
-                        var v = RequestBodyReader.GetInt(json, jsonKey);
-                        if (v.HasValue) { prop.intValue = v.Value; return true; }
-                        break;
-                    }
-                    case SerializedPropertyType.Float:
-                    {
-                        var v = RequestBodyReader.GetFloat(json, jsonKey);
-                        if (v.HasValue) { prop.floatValue = v.Value; return true; }
-                        break;
-                    }
-                    case SerializedPropertyType.String:
-                    {
-                        var v = RequestBodyReader.GetString(json, jsonKey);
-                        if (v != null) { prop.stringValue = v; return true; }
-                        break;
-                    }
-                    case SerializedPropertyType.Color:
-                    {
-                        var obj = RequestBodyReader.GetObject(json, jsonKey);
-                        if (obj != null)
-                        {
-                            var r = RequestBodyReader.GetFloat(obj, "r") ?? prop.colorValue.r;
-                            var g = RequestBodyReader.GetFloat(obj, "g") ?? prop.colorValue.g;
-                            var b = RequestBodyReader.GetFloat(obj, "b") ?? prop.colorValue.b;
-                            var a = RequestBodyReader.GetFloat(obj, "a") ?? prop.colorValue.a;
-                            prop.colorValue = new Color(r, g, b, a);
-                            return true;
-                        }
-                        break;
-                    }
-                    case SerializedPropertyType.Vector2:
-                    {
-                        var obj = RequestBodyReader.GetObject(json, jsonKey);
-                        if (obj != null)
-                        {
-                            var x = RequestBodyReader.GetFloat(obj, "x") ?? prop.vector2Value.x;
-                            var y = RequestBodyReader.GetFloat(obj, "y") ?? prop.vector2Value.y;
-                            prop.vector2Value = new Vector2(x, y);
-                            return true;
-                        }
-                        break;
-                    }
-                    case SerializedPropertyType.Vector3:
-                    {
-                        var obj = RequestBodyReader.GetObject(json, jsonKey);
-                        if (obj != null)
-                        {
-                            var x = RequestBodyReader.GetFloat(obj, "x") ?? prop.vector3Value.x;
-                            var y = RequestBodyReader.GetFloat(obj, "y") ?? prop.vector3Value.y;
-                            var z = RequestBodyReader.GetFloat(obj, "z") ?? prop.vector3Value.z;
-                            prop.vector3Value = new Vector3(x, y, z);
-                            return true;
-                        }
-                        break;
-                    }
-                    case SerializedPropertyType.Vector4:
-                    {
-                        var obj = RequestBodyReader.GetObject(json, jsonKey);
-                        if (obj != null)
-                        {
-                            var x = RequestBodyReader.GetFloat(obj, "x") ?? prop.vector4Value.x;
-                            var y = RequestBodyReader.GetFloat(obj, "y") ?? prop.vector4Value.y;
-                            var z = RequestBodyReader.GetFloat(obj, "z") ?? prop.vector4Value.z;
-                            var w = RequestBodyReader.GetFloat(obj, "w") ?? prop.vector4Value.w;
-                            prop.vector4Value = new Vector4(x, y, z, w);
-                            return true;
-                        }
-                        break;
-                    }
-                    case SerializedPropertyType.ObjectReference:
-                    {
-                        UnityEngine.Object value;
-                        if (TryResolveObjectReference(json, jsonKey, prop, out value, out error, out statusCode))
-                        {
-                            prop.objectReferenceValue = value;
-                            return true;
-                        }
-                        break;
-                    }
+                    prop.objectReferenceValue = value;
+                    return true;
                 }
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 error = $"Failed to update property {jsonKey}: {ex.Message}";
                 statusCode = 400;
@@ -347,7 +262,7 @@ namespace LeonAkasaka.UnionAir.Editor
             error = null;
             statusCode = 400;
 
-            var rawValue = FindJsonValue(json, jsonKey);
+            var rawValue = SerializedPropertySerializer.FindJsonValue(json, jsonKey);
             if (rawValue == null) return false;
 
             rawValue = rawValue.Trim();
@@ -424,84 +339,6 @@ namespace LeonAkasaka.UnionAir.Editor
 
             statusCode = status == ResolveStatus.Ambiguous ? 409 : 404;
             return false;
-        }
-
-        private static string FindJsonValue(string json, string key)
-        {
-            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(key)) return null;
-
-            var searchKey = $"\"{key}\"";
-            int keyIdx = json.IndexOf(searchKey, StringComparison.Ordinal);
-            if (keyIdx < 0) return null;
-
-            int colonIdx = json.IndexOf(':', keyIdx + searchKey.Length);
-            if (colonIdx < 0) return null;
-
-            int start = colonIdx + 1;
-            while (start < json.Length && char.IsWhiteSpace(json[start])) start++;
-            if (start >= json.Length) return null;
-
-            int end = FindJsonValueEnd(json, start);
-            if (end <= start) return null;
-
-            return json.Substring(start, end - start);
-        }
-
-        private static int FindJsonValueEnd(string json, int start)
-        {
-            if (json[start] == '"')
-            {
-                int end = start + 1;
-                while (end < json.Length)
-                {
-                    if (json[end] == '\\') { end += 2; continue; }
-                    if (json[end] == '"') return end + 1;
-                    end++;
-                }
-                return json.Length;
-            }
-
-            if (json[start] == '{' || json[start] == '[')
-            {
-                char open = json[start];
-                char close = open == '{' ? '}' : ']';
-                int depth = 0;
-                bool inString = false;
-                int end = start;
-                while (end < json.Length)
-                {
-                    var c = json[end];
-                    if (inString)
-                    {
-                        if (c == '\\') end++;
-                        else if (c == '"') inString = false;
-                    }
-                    else
-                    {
-                        if (c == '"') inString = true;
-                        else if (c == open) depth++;
-                        else if (c == close)
-                        {
-                            depth--;
-                            if (depth == 0) return end + 1;
-                        }
-                    }
-                    end++;
-                }
-                return json.Length;
-            }
-
-            int scalarEnd = start;
-            while (scalarEnd < json.Length &&
-                   json[scalarEnd] != ',' &&
-                   json[scalarEnd] != '}' &&
-                   json[scalarEnd] != '\n' &&
-                   json[scalarEnd] != '\r')
-            {
-                scalarEnd++;
-            }
-
-            return scalarEnd;
         }
 
     }
