@@ -1,0 +1,27 @@
+{
+    "name": "LeonAkasaka.UnionAir.Editor.InputSystem",
+    "rootNamespace": "LeonAkasaka.UnionAir.Editor",
+    "references": [
+        "LeonAkasaka.UnionAir.Editor",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNION_AIR_INPUT_SYSTEM"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "",
+            "define": "UNION_AIR_INPUT_SYSTEM"
+        }
+    ],
+    "noEngineReferences": false
+}
