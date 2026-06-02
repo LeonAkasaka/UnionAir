@@ -63,7 +63,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             // Ensure directory exists
-            EnsureDirectory(System.IO.Path.GetDirectoryName(assetPath).Replace('\\', '/'));
+            AssetUtils.EnsureDirectory(System.IO.Path.GetDirectoryName(assetPath).Replace('\\', '/'));
 
             var mat = new Material(shader);
             AssetDatabase.CreateAsset(mat, assetPath);
@@ -197,18 +197,5 @@ namespace LeonAkasaka.UnionAir.Editor
             return updated;
         }
 
-        private static void EnsureDirectory(string dir)
-        {
-            if (string.IsNullOrEmpty(dir) || AssetDatabase.IsValidFolder(dir)) return;
-            var parts = dir.Split('/');
-            var current = parts[0];
-            for (int i = 1; i < parts.Length; i++)
-            {
-                var next = current + "/" + parts[i];
-                if (!AssetDatabase.IsValidFolder(next))
-                    AssetDatabase.CreateFolder(current, parts[i]);
-                current = next;
-            }
-        }
     }
 }
