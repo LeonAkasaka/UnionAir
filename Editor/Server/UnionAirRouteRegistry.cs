@@ -62,7 +62,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (controller == null)
                         continue;
 
-                    var source = type.Assembly == typeof(RestRouter).Assembly
+                    var source = IsBuiltinAssembly(type.Assembly)
                         ? UnionAirRouteSource.Builtin
                         : UnionAirRouteSource.Custom;
                     var controllerRoute = controller.Route;
@@ -313,6 +313,12 @@ namespace LeonAkasaka.UnionAir.Editor
             if (length != 0) return length;
 
             return left.DeclarationOrder.CompareTo(right.DeclarationOrder);
+        }
+
+        private static bool IsBuiltinAssembly(System.Reflection.Assembly assembly)
+        {
+            return assembly == typeof(RestRouter).Assembly ||
+                   Attribute.IsDefined(assembly, typeof(UnionAirBuiltinAssemblyAttribute));
         }
 
         private static string NormalizeRoute(string route)

@@ -1,7 +1,22 @@
 using System;
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.InputSystem")]
 
 namespace LeonAkasaka.UnionAir.Editor
 {
+    /// <summary>
+    /// Marks an assembly as a first-party UnionAir assembly so that its controllers
+    /// are registered as built-in endpoints (under <c>/api/</c>) rather than custom
+    /// endpoints (under <c>/api/custom/</c>).
+    /// </summary>
+    /// <remarks>
+    /// This attribute is <c>internal</c> and only accessible to assemblies explicitly
+    /// listed in <c>InternalsVisibleTo</c>. Unofficial assemblies cannot apply it.
+    /// </remarks>
+    [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false)]
+    internal sealed class UnionAirBuiltinAssemblyAttribute : Attribute { }
+
     /// <summary>
     /// Identifies whether a discovered route is provided by UnionAir or by an external Editor assembly.
     /// </summary>

@@ -1,5 +1,7 @@
 using UnityEditor;
 
+[assembly: LeonAkasaka.UnionAir.Editor.UnionAirBuiltinAssembly]
+
 namespace LeonAkasaka.UnionAir.Editor
 {
     /// <summary>
