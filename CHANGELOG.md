@@ -28,6 +28,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `POST /api/assets/open` opens project assets in the Unity Editor, and `POST /api/assets/reimport` reimports individual assets.
 - Endpoint risk metadata now includes `editorState`, and endpoints can override their category risk when they have a narrower side-effect profile.
 - Built-in and custom API endpoint lists in the EditorWindow can now expand and collapse by category.
+- `GET /api/assets/scriptableobjects`, `GET /api/assets/scriptableobjects/{guid}`, `POST /api/assets/scriptableobjects`, `PATCH /api/assets/scriptableobjects`, and `DELETE /api/assets/scriptableobjects/{guid}` — full CRUD for ScriptableObject assets using runtime reflection and `SerializedObject`, supporting any project-defined ScriptableObject subclass without package changes.
+- `SerializedPropertySerializer` utility extracted from `ComponentWriteHandler` and extended with a read direction for reuse across asset and component property serialization.
+- `AssetUtils.EnsureDirectory` extracted from `MaterialWriteHandler` as a shared asset file system utility.
 - `GET /api/editor/menu-items` lists discoverable Unity Editor menu paths for use with `POST /api/editor/menu-item`.
 
 ### Fixed

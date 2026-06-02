@@ -473,4 +473,48 @@ namespace LeonAkasaka.UnionAir.Editor
         private void AssetRefs(UnionAirRequestContext ctx)
             => new SearchAssetRefsHandler().Handle(ctx.Request, ctx.Response);
     }
+
+    [UnionAirController("assets/scriptableobjects")]
+    internal sealed class ScriptableObjectsController
+    {
+        [UnionAirEndpoint("GET", "",
+            Category = UnionAirEndpointCategories.Read,
+            Summary = "Lists ScriptableObject assets.",
+            OptionalQuery = new string[] { "type", "path", "search" })]
+        private void List(UnionAirRequestContext ctx)
+            => new ScriptableObjectReadHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("GET", "{guid}",
+            Category = UnionAirEndpointCategories.Read,
+            Summary = "Returns a ScriptableObject asset with all readable serialized properties. Arrays are returned as null.",
+            PathParams = new string[] { "guid" })]
+        private void Detail(UnionAirRequestContext ctx)
+            => new ScriptableObjectReadHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Creates a ScriptableObject asset from a type name.",
+            RequiredBody = new string[] { "typeName", "assetPath" },
+            OptionalBody = new string[] { "properties" })]
+        private void Create(UnionAirRequestContext ctx)
+            => new ScriptableObjectWriteHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("PATCH", "",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Updates serialized properties on a ScriptableObject. Arrays and unsupported generic types are skipped.",
+            RequiredQuery = new string[] { "guid" },
+            RequiredBody = new string[] { "properties" })]
+        private void Update(UnionAirRequestContext ctx)
+            => new ScriptableObjectWriteHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("DELETE", "{guid}",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Deletes a ScriptableObject asset.",
+            PathParams = new string[] { "guid" })]
+        private void Delete(UnionAirRequestContext ctx)
+            => new ScriptableObjectWriteHandler().Handle(ctx.Request, ctx.Response);
+    }
 }

@@ -2051,6 +2051,221 @@ Reimports one project asset using `AssetDatabase.ImportAsset()`.
 
 ---
 
+## GET /api/assets/scriptableobjects
+
+Lists ScriptableObject assets in the project.
+
+> Requires the Read category (enabled by default).
+
+### Query Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `type` | ❌ | Filter by type name (e.g. `EnemyConfig`). Defaults to `ScriptableObject` (all SO assets) |
+| `path` | ❌ | Restrict search to this folder (e.g. `Assets/Data`) |
+| `search` | ❌ | Additional keyword passed to `AssetDatabase.FindAssets` |
+
+### Response
+
+```json
+{
+  "assets": [
+    { "guid": "a1b2c3...", "path": "Assets/Data/EnemyConfig.asset", "type": "MyGame.EnemyConfig" }
+  ],
+  "total": 1,
+  "returned": 1
+}
+```
+
+Maximum 500 assets are returned per request.
+
+---
+
+## GET /api/assets/scriptableobjects/{guid}
+
+Returns a ScriptableObject asset together with all readable serialized properties.
+
+> Requires the Read category (enabled by default).
+
+### Path Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `guid` | GUID of the ScriptableObject asset |
+
+### Response
+
+```json
+{
+  "guid": "a1b2c3...",
+  "path": "Assets/Data/EnemyConfig.asset",
+  "type": "MyGame.EnemyConfig",
+  "properties": {
+    "health": 100,
+    "speed": 3.5,
+    "displayName": "Goblin",
+    "primaryWeapon": { "assetGuid": "def456...", "assetPath": "Assets/Weapons/Sword.asset", "assetType": "MyGame.WeaponData" },
+    "tags": null
+  }
+}
+```
+
+**Property serialization rules:**
+
+| SerializedPropertyType | JSON representation |
+|---|---|
+| Boolean | `true` / `false` |
+| Integer, Enum, LayerMask | Integer literal |
+| Float | Float literal (round-trip format) |
+| String | JSON string |
+| Color | `{"r":…,"g":…,"b":…,"a":…}` |
+| Vector2 | `{"x":…,"y":…}` |
+| Vector3 | `{"x":…,"y":…,"z":…}` |
+| Vector4, Quaternion | `{"x":…,"y":…,"z":…,"w":…}` |
+| Rect | `{"x":…,"y":…,"width":…,"height":…}` |
+| Bounds | `{"center":{"x":…,"y":…,"z":…},"extents":{"x":…,"y":…,"z":…}}` |
+| ObjectReference (asset) | `{"assetGuid":…,"assetPath":…,"assetType":…}` |
+| ObjectReference (null) | `null` |
+| Arrays, nested generic types | `null` (not supported in v1) |
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | GUID is empty, or the asset is not a ScriptableObject |
+| 404 | No asset found for the given GUID |
+
+---
+
+## POST /api/assets/scriptableobjects
+
+Creates a new ScriptableObject asset. The type is resolved via reflection at runtime, so any project-defined ScriptableObject subclass is supported — no package changes required.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Request Body (JSON)
+
+```json
+{
+  "typeName": "MyGame.EnemyConfig",
+  "assetPath": "Assets/Data/Enemies/Goblin.asset",
+  "properties": {
+    "health": 100,
+    "speed": 3.5
+  }
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `typeName` | ✅ | Fully qualified or simple type name of the ScriptableObject subclass |
+| `assetPath` | ✅ | Destination path (must start with `Assets/` and end with `.asset`) |
+| `properties` | ❌ | Initial property values (same format as PATCH) |
+
+### Response (HTTP 201)
+
+```json
+{
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Data/Enemies/Goblin.asset",
+  "type": "MyGame.EnemyConfig",
+  "updated": ["health", "speed"]
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | Required fields are missing, `assetPath` does not end with `.asset`, type not found, or type is not a ScriptableObject |
+| 403 | Asset Write category is disabled |
+| 409 | Unity Editor is in Play mode |
+
+---
+
+## PATCH /api/assets/scriptableobjects
+
+Updates serialized properties on an existing ScriptableObject asset. Array and nested generic properties are silently skipped.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Query Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `guid` | ✅ | GUID of the target ScriptableObject |
+
+### Request Body (JSON)
+
+```json
+{
+  "properties": {
+    "health": 150,
+    "primaryWeapon": { "assetGuid": "def456..." }
+  }
+}
+```
+
+For ObjectReference fields, supply an object with `assetGuid` or `assetPath`. To clear a reference, use `null`.
+
+```json
+{ "properties": { "primaryWeapon": null } }
+```
+
+### Response
+
+```json
+{
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Data/Enemies/Goblin.asset",
+  "type": "MyGame.EnemyConfig",
+  "updated": ["health", "primaryWeapon"]
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `guid` is missing, asset is not a ScriptableObject, `properties` field is missing, or a property value is malformed |
+| 404 | No asset found for the given GUID |
+| 403 | Asset Write category is disabled |
+| 409 | Unity Editor is in Play mode |
+
+---
+
+## DELETE /api/assets/scriptableobjects/{guid}
+
+Deletes a ScriptableObject asset and its `.meta` file.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Path Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `guid` | GUID of the ScriptableObject asset to delete |
+
+### Response
+
+```json
+{ "deleted": "Assets/Data/Enemies/Goblin.asset", "guid": "a1b2c3..." }
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | GUID is empty, or the asset is not a ScriptableObject |
+| 404 | No asset found for the given GUID |
+| 403 | Asset Write category is disabled |
+| 409 | Unity Editor is in Play mode |
+
+---
+
 ## POST /api/editor/play
 
 Enters Play mode (`EditorApplication.isPlaying = true`).
