@@ -88,6 +88,11 @@ namespace LeonAkasaka.UnionAir.Editor
                 RestResponse.SendError(response, $"Type is not a ScriptableObject: {typeName}", 400);
                 return;
             }
+            if (type.IsAbstract)
+            {
+                RestResponse.SendError(response, $"Type is abstract and cannot be instantiated: {typeName}", 400);
+                return;
+            }
 
             // Create instance in memory first, apply properties before saving to disk.
             // This ensures a failed property validation leaves no orphaned asset on disk.

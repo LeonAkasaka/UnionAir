@@ -33,7 +33,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     break;
 
                 case SerializedPropertyType.Float:
-                    sb.Append(prop.floatValue.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append(F(prop.floatValue));
                     break;
 
                 case SerializedPropertyType.String:
@@ -376,6 +376,8 @@ namespace LeonAkasaka.UnionAir.Editor
         // ── Float formatting helper ───────────────────────────────────────────
 
         private static string F(float v)
-            => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+            => float.IsNaN(v) || float.IsInfinity(v)
+                ? "null"
+                : v.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
     }
 }

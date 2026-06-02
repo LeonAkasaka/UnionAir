@@ -2178,9 +2178,9 @@ Creates a new ScriptableObject asset. The type is resolved via reflection at run
 
 | Status | Cause |
 |--------|-------|
-| 400 | Required fields are missing, `assetPath` does not end with `.asset`, type not found, or type is not a ScriptableObject |
+| 400 | Required fields are missing, `assetPath` does not end with `.asset` or does not start with `Assets/`, type not found, type is not a ScriptableObject, or type is abstract |
 | 403 | Asset Write category is disabled |
-| 409 | Unity Editor is in Play mode |
+| 409 | Asset already exists at the specified path, or the Unity Editor is in Play mode |
 
 ---
 
