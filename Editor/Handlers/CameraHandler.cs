@@ -66,48 +66,13 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static void HandleCapture(HttpListenerRequest request, HttpListenerResponse response)
         {
-            var query = request.QueryString;
-
-            if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
+            if (!TryResolveCaptureContext(request, response,
+                    out var camera, out var width, out var height, out var format, out var quality, out var bytes))
                 return;
 
-            if (!ObjectRefUtils.TryReadQuery(query, "target", out var target, out var error, out var statusCode))
-            {
-                RestResponse.SendError(response, error, statusCode);
-                return;
-            }
-
-            // --- resolution ---
-            int width  = ParseClamp(query["width"],  640, 1, MaxWidth);
-            int height = ParseClamp(query["height"], 360, 1, MaxHeight);
-
-            // --- format / quality ---
-            var format  = (query["format"] ?? "jpeg").ToLowerInvariant();
-            if (format != "png" && format != "jpeg") format = "jpeg";
-            int quality = ParseClamp(query["quality"], 85, 1, 100);
-
-            // --- find camera ---
-            if (!ObjectRefUtils.TryResolveCamera(scene, target, out var camera, out error, out statusCode))
-            {
-                RestResponse.SendError(response, error, statusCode);
-                return;
-            }
-            var path = GameObjectUtils.GetPath(camera.gameObject);
-
-            // --- render ---
-            byte[] bytes;
-            try
-            {
-                bytes = RenderCamera(camera, width, height, format, quality);
-            }
-            catch (Exception ex)
-            {
-                RestResponse.SendError(response, $"Render failed: {ex.Message}", 500);
-                return;
-            }
-
-            string base64   = Convert.ToBase64String(bytes);
-            string mimeType = format == "png" ? "image/png" : "image/jpeg";
+            var path    = GameObjectUtils.GetPath(camera.gameObject);
+            var base64  = Convert.ToBase64String(bytes);
+            var mimeType = format == "png" ? "image/png" : "image/jpeg";
 
             var sb = new StringBuilder();
             sb.Append("{");
@@ -125,43 +90,57 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static void HandleCaptureImage(HttpListenerRequest request, HttpListenerResponse response)
         {
+            if (!TryResolveCaptureContext(request, response,
+                    out _, out _, out _, out var format, out _, out var bytes))
+                return;
+
+            var mimeType = format == "png" ? "image/png" : "image/jpeg";
+            RestResponse.SendBinary(response, bytes, mimeType);
+        }
+
+        private static bool TryResolveCaptureContext(
+            HttpListenerRequest request,
+            HttpListenerResponse response,
+            out Camera camera,
+            out int width, out int height,
+            out string format, out int quality,
+            out byte[] bytes)
+        {
+            camera = null; width = 0; height = 0; format = "jpeg"; quality = 85; bytes = null;
+
             var query = request.QueryString;
 
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
-                return;
+                return false;
 
             if (!ObjectRefUtils.TryReadQuery(query, "target", out var target, out var error, out var statusCode))
             {
                 RestResponse.SendError(response, error, statusCode);
-                return;
+                return false;
             }
 
-            int width  = ParseClamp(query["width"],  640, 1, MaxWidth);
-            int height = ParseClamp(query["height"], 360, 1, MaxHeight);
-
-            var format  = (query["format"] ?? "jpeg").ToLowerInvariant();
+            width   = ParseClamp(query["width"],   640, 1, MaxWidth);
+            height  = ParseClamp(query["height"],  360, 1, MaxHeight);
+            format  = (query["format"] ?? "jpeg").ToLowerInvariant();
             if (format != "png" && format != "jpeg") format = "jpeg";
-            int quality = ParseClamp(query["quality"], 85, 1, 100);
+            quality = ParseClamp(query["quality"], 85,  1, 100);
 
-            if (!ObjectRefUtils.TryResolveCamera(scene, target, out var camera, out error, out statusCode))
+            if (!ObjectRefUtils.TryResolveCamera(scene, target, out camera, out error, out statusCode))
             {
                 RestResponse.SendError(response, error, statusCode);
-                return;
+                return false;
             }
 
-            byte[] bytes;
             try
             {
                 bytes = RenderCamera(camera, width, height, format, quality);
+                return true;
             }
             catch (Exception ex)
             {
                 RestResponse.SendError(response, $"Render failed: {ex.Message}", 500);
-                return;
+                return false;
             }
-
-            string mimeType = format == "png" ? "image/png" : "image/jpeg";
-            RestResponse.SendBinary(response, bytes, mimeType);
         }
 
         private static byte[] RenderCamera(Camera cam, int width, int height, string format, int quality)
