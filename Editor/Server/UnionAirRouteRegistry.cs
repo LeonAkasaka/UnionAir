@@ -135,6 +135,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 endpoint.OptionalQuery,
                 endpoint.RequiredBody,
                 endpoint.OptionalBody,
+                endpoint.RequestExample,
+                endpoint.ResponseExample,
                 target,
                 method,
                 order);

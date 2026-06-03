@@ -5,7 +5,8 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         [UnionAirEndpoint("GET", "",
             Category = UnionAirEndpointCategories.Read,
-            Summary = "Returns this compact API manifest.")]
+            Summary = "Returns the API manifest. Use ?detail=full to include requestExample and responseExample fields.",
+            OptionalQuery = new string[] { "detail", "source", "includeDisabled" })]
         private void Help(UnionAirRequestContext ctx)
             => new HelpHandler().Handle(ctx.Request, ctx.Response);
     }
@@ -236,7 +237,9 @@ namespace LeonAkasaka.UnionAir.Editor
             Summary = "Creates an empty GameObject.",
             RequiredBody = new string[] { "name" },
             OptionalQuery = new string[] { "allowWhilePlaying" },
-            OptionalBody = new string[] { "parent", "scenePath", "allowWhilePlaying" })]
+            OptionalBody = new string[] { "parent", "scenePath", "allowWhilePlaying" },
+            RequestExample = "{\"name\":\"Brick\",\"parent\":{\"type\":\"hierarchyPath\",\"value\":\"BrickGroup\"}}",
+            ResponseExample = "{\"name\":\"Brick\",\"path\":\"BrickGroup/Brick\",\"globalObjectId\":\"...\"}")]
         private void Create(UnionAirRequestContext ctx)
             => new GameObjectWriteHandler().Handle(ctx.Request, ctx.Response);
 
@@ -252,10 +255,12 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Updates GameObject properties.",
+            Summary = "Updates GameObject properties. Query: target={\\\"type\\\":\\\"hierarchyPath\\\",\\\"value\\\":\\\"Path/To/Object\\\"}",
             RequiredQuery = new string[] { "target" },
             OptionalQuery = new string[] { "scenePath", "allowWhilePlaying" },
-            OptionalBody = new string[] { "name", "isActive", "tag", "layer", "transform", "allowWhilePlaying" })]
+            OptionalBody = new string[] { "name", "isActive", "tag", "layer", "transform", "allowWhilePlaying" },
+            RequestExample = "{\"transform\":{\"position\":{\"x\":0,\"y\":1,\"z\":5},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"scale\":{\"x\":1,\"y\":1,\"z\":1}}}",
+            ResponseExample = "{\"name\":\"Ball\",\"path\":\"Ball\",\"globalObjectId\":\"...\",\"isActive\":true,\"tag\":\"Untagged\",\"layer\":0,\"transform\":{\"position\":{\"x\":0,\"y\":1,\"z\":5},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"scale\":{\"x\":1,\"y\":1,\"z\":1}}}")]
         private void Update(UnionAirRequestContext ctx)
             => new GameObjectWriteHandler().Handle(ctx.Request, ctx.Response);
 
@@ -265,7 +270,9 @@ namespace LeonAkasaka.UnionAir.Editor
             Summary = "Creates a primitive GameObject with optional transform in a single call.",
             RequiredBody = new string[] { "type" },
             OptionalQuery = new string[] { "allowWhilePlaying" },
-            OptionalBody = new string[] { "name", "parent", "transform", "scenePath", "allowWhilePlaying" })]
+            OptionalBody = new string[] { "name", "parent", "transform", "scenePath", "allowWhilePlaying" },
+            RequestExample = "{\"type\":\"Cube\",\"name\":\"Wall\",\"parent\":{\"type\":\"hierarchyPath\",\"value\":\"Level\"},\"transform\":{\"position\":{\"x\":0,\"y\":0.5,\"z\":0},\"scale\":{\"x\":10,\"y\":1,\"z\":0.2}}}",
+            ResponseExample = "{\"name\":\"Wall\",\"path\":\"Level/Wall\",\"globalObjectId\":\"...\",\"primitiveType\":\"Cube\",\"transform\":{\"position\":{\"x\":0,\"y\":0.5,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"scale\":{\"x\":10,\"y\":1,\"z\":0.2}},\"components\":[\"Transform\",\"MeshFilter\",\"MeshRenderer\",\"BoxCollider\"]}")]
         private void Primitive(UnionAirRequestContext ctx)
             => new GameObjectPrimitiveHandler().Handle(ctx.Request, ctx.Response);
 
@@ -315,17 +322,19 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Adds a component to a GameObject.",
+            Summary = "Adds a component to a GameObject. Use the C# type name for 'type'.",
             RequiredBody = new string[] { "target", "type" },
             OptionalQuery = new string[] { "allowWhilePlaying" },
-            OptionalBody = new string[] { "scenePath", "allowWhilePlaying" })]
+            OptionalBody = new string[] { "scenePath", "allowWhilePlaying" },
+            RequestExample = "{\"target\":{\"type\":\"hierarchyPath\",\"value\":\"Ball\"},\"type\":\"Rigidbody\"}",
+            ResponseExample = "{\"added\":\"Rigidbody\",\"target\":\"Ball\"}")]
         private void Add(UnionAirRequestContext ctx)
             => new ComponentWriteHandler().Handle(ctx.Request, ctx.Response);
 
         [UnionAirEndpoint("DELETE", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Removes a component from a GameObject.",
+            Summary = "Removes a component from a GameObject. Query: target={\\\"type\\\":\\\"hierarchyPath\\\",\\\"value\\\":\\\"Path\\\"}&type=Rigidbody",
             RequiredQuery = new string[] { "target" },
             OptionalQuery = new string[] { "scenePath", "allowWhilePlaying" })]
         private void Remove(UnionAirRequestContext ctx)
@@ -334,11 +343,13 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Updates serialized component properties, including object references.",
+            Summary = "Updates serialized component properties. Query: target={\\\"type\\\":\\\"hierarchyPath\\\",\\\"value\\\":\\\"Path\\\"}. Use Unity serialized property names.",
             RequiredQuery = new string[] { "target" },
             OptionalQuery = new string[] { "scenePath", "allowWhilePlaying" },
             RequiredBody = new string[] { "properties" },
-            OptionalBody = new string[] { "allowWhilePlaying" })]
+            OptionalBody = new string[] { "allowWhilePlaying" },
+            RequestExample = "{\"properties\":{\"Rigidbody\":{\"m_Mass\":1.0,\"m_UseGravity\":true,\"m_IsKinematic\":false}}}",
+            ResponseExample = "{\"updated\":[\"Rigidbody\"],\"target\":\"Ball\"}")]
         private void Update(UnionAirRequestContext ctx)
             => new ComponentWriteHandler().Handle(ctx.Request, ctx.Response);
     }

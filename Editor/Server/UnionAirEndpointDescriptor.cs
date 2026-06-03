@@ -30,6 +30,8 @@ namespace LeonAkasaka.UnionAir.Editor
             string[] optionalQuery,
             string[] requiredBody,
             string[] optionalBody,
+            string requestExample,
+            string responseExample,
             object target,
             MethodInfo handler,
             int declarationOrder)
@@ -50,6 +52,8 @@ namespace LeonAkasaka.UnionAir.Editor
             OptionalQuery = optionalQuery ?? new string[0];
             RequiredBody = requiredBody ?? new string[0];
             OptionalBody = optionalBody ?? new string[0];
+            RequestExample = requestExample ?? "";
+            ResponseExample = responseExample ?? "";
             Target = target;
             Handler = handler;
             DeclarationOrder = declarationOrder;
@@ -148,6 +152,16 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Optional JSON body field names.
         /// </summary>
         public string[] OptionalBody { get; }
+
+        /// <summary>
+        /// Example JSON request body included in <c>GET /api/help?detail=full</c> output.
+        /// </summary>
+        public string RequestExample { get; }
+
+        /// <summary>
+        /// Example JSON response body included in <c>GET /api/help?detail=full</c> output.
+        /// </summary>
+        public string ResponseExample { get; }
 
         /// <summary>
         /// Current enabled state after applying category settings and route conflict checks.

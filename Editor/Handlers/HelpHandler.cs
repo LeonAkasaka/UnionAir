@@ -103,6 +103,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var includeDisabled = IsTrue(request.QueryString["includeDisabled"]);
             var source = (request.QueryString["source"] ?? "all").ToLowerInvariant();
+            var detail = (request.QueryString["detail"] ?? "").ToLowerInvariant() == "full";
             var endpoints = UnionAirRouteRegistry.Descriptors;
 
             sb.Append("\"endpoints\":[");
@@ -118,7 +119,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 if (!first) sb.Append(",");
                 first = false;
-                AppendEndpoint(sb, endpoint);
+                AppendEndpoint(sb, endpoint, detail);
             }
             sb.Append("]");
         }
@@ -128,7 +129,7 @@ namespace LeonAkasaka.UnionAir.Editor
             return value == "true" || value == "1";
         }
 
-        private static void AppendEndpoint(StringBuilder sb, UnionAirEndpointDescriptor endpoint)
+        private static void AppendEndpoint(StringBuilder sb, UnionAirEndpointDescriptor endpoint, bool detail)
         {
             sb.Append("{");
             AppendString(sb, "method", endpoint.Method);
@@ -159,6 +160,21 @@ namespace LeonAkasaka.UnionAir.Editor
             AppendStringArray(sb, "requiredBody", endpoint.RequiredBody);
             sb.Append(",");
             AppendStringArray(sb, "optionalBody", endpoint.OptionalBody);
+            if (detail)
+            {
+                if (!string.IsNullOrEmpty(endpoint.RequestExample))
+                {
+                    sb.Append(",");
+                    sb.Append("\"requestExample\":");
+                    sb.Append(endpoint.RequestExample);
+                }
+                if (!string.IsNullOrEmpty(endpoint.ResponseExample))
+                {
+                    sb.Append(",");
+                    sb.Append("\"responseExample\":");
+                    sb.Append(endpoint.ResponseExample);
+                }
+            }
             if (!string.IsNullOrEmpty(endpoint.Error))
             {
                 sb.Append(",");

@@ -262,5 +262,15 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Optional JSON body field names.
         /// </summary>
         public string[] OptionalBody { get; set; } = new string[0];
+
+        /// <summary>
+        /// Example JSON request body shown when <c>GET /api/help?detail=full</c> is requested.
+        /// </summary>
+        public string RequestExample { get; set; } = "";
+
+        /// <summary>
+        /// Example JSON response body shown when <c>GET /api/help?detail=full</c> is requested.
+        /// </summary>
+        public string ResponseExample { get; set; } = "";
     }
 }
