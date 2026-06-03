@@ -262,10 +262,10 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "primitive",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Creates a primitive GameObject.",
+            Summary = "Creates a primitive GameObject with optional transform in a single call.",
             RequiredBody = new string[] { "type" },
             OptionalQuery = new string[] { "allowWhilePlaying" },
-            OptionalBody = new string[] { "name", "parent", "scenePath", "allowWhilePlaying" })]
+            OptionalBody = new string[] { "name", "parent", "transform", "scenePath", "allowWhilePlaying" })]
         private void Primitive(UnionAirRequestContext ctx)
             => new GameObjectPrimitiveHandler().Handle(ctx.Request, ctx.Response);
 

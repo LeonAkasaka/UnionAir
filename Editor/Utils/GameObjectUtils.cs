@@ -1,3 +1,4 @@
+using System.Globalization;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -70,5 +71,58 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             return path;
         }
+
+        /// <summary>
+        /// Applies position/rotation/scale from a JSON body's "transform" object to the given Transform.
+        /// Each axis is optional; missing axes are left unchanged. Expects localPosition, localEulerAngles,
+        /// and localScale semantics.
+        /// </summary>
+        public static void ApplyTransformFromBody(Transform t, string body)
+        {
+            var transformJson = RequestBodyReader.GetObject(body, "transform");
+            if (transformJson == null) return;
+
+            var posJson = RequestBodyReader.GetObject(transformJson, "position");
+            if (posJson != null)
+            {
+                var x = RequestBodyReader.GetFloat(posJson, "x");
+                var y = RequestBodyReader.GetFloat(posJson, "y");
+                var z = RequestBodyReader.GetFloat(posJson, "z");
+                t.localPosition = new Vector3(
+                    x ?? t.localPosition.x,
+                    y ?? t.localPosition.y,
+                    z ?? t.localPosition.z);
+            }
+
+            var rotJson = RequestBodyReader.GetObject(transformJson, "rotation");
+            if (rotJson != null)
+            {
+                var x = RequestBodyReader.GetFloat(rotJson, "x");
+                var y = RequestBodyReader.GetFloat(rotJson, "y");
+                var z = RequestBodyReader.GetFloat(rotJson, "z");
+                t.localEulerAngles = new Vector3(
+                    x ?? t.localEulerAngles.x,
+                    y ?? t.localEulerAngles.y,
+                    z ?? t.localEulerAngles.z);
+            }
+
+            var scaleJson = RequestBodyReader.GetObject(transformJson, "scale");
+            if (scaleJson != null)
+            {
+                var x = RequestBodyReader.GetFloat(scaleJson, "x");
+                var y = RequestBodyReader.GetFloat(scaleJson, "y");
+                var z = RequestBodyReader.GetFloat(scaleJson, "z");
+                t.localScale = new Vector3(
+                    x ?? t.localScale.x,
+                    y ?? t.localScale.y,
+                    z ?? t.localScale.z);
+            }
+        }
+
+        /// <summary>
+        /// Formats a float for JSON output, substituting null for NaN/Infinity.
+        /// </summary>
+        public static string FormatFloat(float v)
+            => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("G", CultureInfo.InvariantCulture);
     }
 }

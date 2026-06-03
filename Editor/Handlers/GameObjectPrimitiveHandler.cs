@@ -1,5 +1,6 @@
 using System;
 using System.Net;
+using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -84,18 +85,29 @@ namespace LeonAkasaka.UnionAir.Editor
                 go.transform.SetParent(parent.transform, false);
             }
 
+            GameObjectUtils.ApplyTransformFromBody(go.transform, body);
+
             if (useUndo)
                 Undo.CollapseUndoOperations(group);
             SceneUtils.MarkDirtyUnlessPlaying(scene);
 
             var goPath = GameObjectUtils.GetPath(go);
             var components = go.GetComponents<Component>();
-            var sb = new System.Text.StringBuilder();
+            var t = go.transform;
+            var p = t.localPosition;
+            var r = t.localEulerAngles;
+            var s = t.localScale;
+            var sb = new StringBuilder();
             sb.Append("{");
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(go.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(goPath)}\",");
             sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
             sb.Append($"\"primitiveType\":\"{RestResponse.EscapeJson(primitiveType.ToString())}\",");
+            sb.Append("\"transform\":{");
+            sb.Append($"\"position\":{{\"x\":{GameObjectUtils.FormatFloat(p.x)},\"y\":{GameObjectUtils.FormatFloat(p.y)},\"z\":{GameObjectUtils.FormatFloat(p.z)}}},");
+            sb.Append($"\"rotation\":{{\"x\":{GameObjectUtils.FormatFloat(r.x)},\"y\":{GameObjectUtils.FormatFloat(r.y)},\"z\":{GameObjectUtils.FormatFloat(r.z)}}},");
+            sb.Append($"\"scale\":{{\"x\":{GameObjectUtils.FormatFloat(s.x)},\"y\":{GameObjectUtils.FormatFloat(s.y)},\"z\":{GameObjectUtils.FormatFloat(s.z)}}}");
+            sb.Append("},");
             sb.Append("\"components\":[");
             for (int i = 0; i < components.Length; i++)
             {
