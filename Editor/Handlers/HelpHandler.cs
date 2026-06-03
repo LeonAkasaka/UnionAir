@@ -53,7 +53,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var includeDisabled = IsTrue(request.QueryString["includeDisabled"]);
             var source = (request.QueryString["source"] ?? "all").ToLowerInvariant();
-            var categoryFilter = (request.QueryString["category"] ?? "").ToLowerInvariant();
+            var categoryFilter = request.QueryString["category"] ?? "";
 
             sb.Append("\"categories\":[");
             var first = true;
@@ -65,7 +65,8 @@ namespace LeonAkasaka.UnionAir.Editor
                     continue;
                 if (source == "custom" && category.Source != UnionAirRouteSource.Custom)
                     continue;
-                if (!string.IsNullOrEmpty(categoryFilter) && category.Id != categoryFilter)
+                if (!string.IsNullOrEmpty(categoryFilter) &&
+                    !string.Equals(category.Id, categoryFilter, System.StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 if (!first) sb.Append(",");
@@ -107,7 +108,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var includeDisabled = IsTrue(request.QueryString["includeDisabled"]);
             var source = (request.QueryString["source"] ?? "all").ToLowerInvariant();
             var detail = (request.QueryString["detail"] ?? "").ToLowerInvariant() == "full";
-            var categoryFilter = (request.QueryString["category"] ?? "").ToLowerInvariant();
+            var categoryFilter = request.QueryString["category"] ?? "";
             var endpoints = UnionAirRouteRegistry.Descriptors;
 
             sb.Append("\"endpoints\":[");
@@ -120,7 +121,8 @@ namespace LeonAkasaka.UnionAir.Editor
                     continue;
                 if (source == "custom" && endpoint.Source != UnionAirRouteSource.Custom)
                     continue;
-                if (!string.IsNullOrEmpty(categoryFilter) && endpoint.Category != categoryFilter)
+                if (!string.IsNullOrEmpty(categoryFilter) &&
+                    !string.Equals(endpoint.Category, categoryFilter, System.StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 if (!first) sb.Append(",");
