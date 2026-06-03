@@ -281,10 +281,12 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "instantiate",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Instantiates a prefab asset into the scene.",
+            Summary = "Instantiates a prefab asset into the scene. Supply either 'guid' or 'assetPath'; guid takes precedence when both are present.",
             RequiredBody = new string[] { "guid or assetPath" },
             OptionalQuery = new string[] { "allowWhilePlaying" },
-            OptionalBody = new string[] { "name", "parent", "scenePath", "allowWhilePlaying" })]
+            OptionalBody = new string[] { "name", "parent", "scenePath", "allowWhilePlaying" },
+            RequestExample = "{\"guid\":\"a1b2c3d4e5f67890a1b2c3d4e5f67890\",\"name\":\"Enemy_01\",\"parent\":{\"type\":\"hierarchyPath\",\"value\":\"Enemies\"}}",
+            ResponseExample = "{\"name\":\"Enemy_01\",\"path\":\"Enemies/Enemy_01\",\"globalObjectId\":\"...\",\"prefabAssetPath\":\"Assets/Prefabs/Enemy.prefab\",\"components\":[\"Transform\",\"Animator\",\"Rigidbody\"]}")]
         private void Instantiate(UnionAirRequestContext ctx)
             => new GameObjectInstantiateHandler().Handle(ctx.Request, ctx.Response);
 
@@ -300,20 +302,24 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "reparent",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Moves a GameObject to a new parent.",
+            Summary = "Moves a GameObject to a new parent. Both 'target' and 'parent' are ObjectRefs. Omit 'parent' to move to scene root.",
             RequiredBody = new string[] { "target" },
             OptionalQuery = new string[] { "allowWhilePlaying" },
-            OptionalBody = new string[] { "parent", "scenePath", "allowWhilePlaying" })]
+            OptionalBody = new string[] { "parent", "scenePath", "allowWhilePlaying" },
+            RequestExample = "{\"target\":{\"type\":\"hierarchyPath\",\"value\":\"HUD/Score\"},\"parent\":{\"type\":\"hierarchyPath\",\"value\":\"Canvas/UI\"}}",
+            ResponseExample = "{\"reparented\":\"Canvas/UI/Score\",\"globalObjectId\":\"...\"}")]
         private void Reparent(UnionAirRequestContext ctx)
             => new GameObjectReparentHandler().Handle(ctx.Request, ctx.Response);
 
         [UnionAirEndpoint("POST", "batch",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Runs multiple GameObject operations in one Undo group.",
+            Summary = "Runs multiple GameObject operations in one Undo group. Each operation object requires 'op': create | create_primitive | update | delete. Returns 207 Multi-Status.",
             RequiredBody = new string[] { "operations" },
             OptionalQuery = new string[] { "allowWhilePlaying" },
-            OptionalBody = new string[] { "scenePath", "target", "parent", "allowWhilePlaying" })]
+            OptionalBody = new string[] { "scenePath", "target", "parent", "allowWhilePlaying" },
+            RequestExample = "{\"operations\":[{\"op\":\"create_primitive\",\"type\":\"Cube\",\"name\":\"Wall\",\"parent\":{\"type\":\"hierarchyPath\",\"value\":\"Level\"},\"transform\":{\"position\":{\"x\":0,\"y\":0.5,\"z\":0},\"scale\":{\"x\":10,\"y\":1,\"z\":0.2}}},{\"op\":\"update\",\"target\":{\"type\":\"hierarchyPath\",\"value\":\"Ball\"},\"isActive\":false},{\"op\":\"delete\",\"target\":{\"type\":\"hierarchyPath\",\"value\":\"OldObj\"}}]}",
+            ResponseExample = "{\"processed\":3,\"failed\":0,\"results\":[{\"index\":0,\"success\":true,\"path\":\"Level/Wall\",\"globalObjectId\":\"...\"},{\"index\":1,\"success\":true,\"path\":\"Ball\",\"globalObjectId\":\"...\"},{\"index\":2,\"success\":true,\"path\":\"OldObj\",\"globalObjectId\":\"...\"}]}")]
         private void Batch(UnionAirRequestContext ctx)
             => new GameObjectBatchHandler().Handle(ctx.Request, ctx.Response);
     }
@@ -453,17 +459,21 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Creates a material asset.",
-            RequiredBody = new string[] { "assetPath", "shader" })]
+            Summary = "Creates a material asset. 'shader' is the Unity shader name string (e.g. Standard, Universal Render Pipeline/Lit).",
+            RequiredBody = new string[] { "assetPath", "shader" },
+            RequestExample = "{\"assetPath\":\"Assets/Materials/BrickMat.mat\",\"shader\":\"Standard\"}",
+            ResponseExample = "{\"assetPath\":\"Assets/Materials/BrickMat.mat\",\"guid\":\"...\",\"shader\":\"Standard\"}")]
         private void Create(UnionAirRequestContext ctx)
             => new MaterialWriteHandler().Handle(ctx.Request, ctx.Response);
 
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Updates material properties.",
+            Summary = "Updates material properties. 'properties' keys are shader property names (e.g. _Color, _Metallic). Color: {r,g,b,a}; Float/Range: number; Texture: {guid}; Vector: {x,y,z,w}.",
             RequiredQuery = new string[] { "guid" },
-            RequiredBody = new string[] { "properties" })]
+            RequiredBody = new string[] { "properties" },
+            RequestExample = "{\"properties\":{\"_Color\":{\"r\":1.0,\"g\":0.2,\"b\":0.2,\"a\":1.0},\"_Metallic\":0.0,\"_Glossiness\":0.5,\"_MainTex\":{\"guid\":\"a1b2c3d4e5f67890a1b2c3d4e5f67890\"}}}",
+            ResponseExample = "{\"updated\":[\"_Color\",\"_Metallic\",\"_Glossiness\",\"_MainTex\"]}")]
         private void Update(UnionAirRequestContext ctx)
             => new MaterialWriteHandler().Handle(ctx.Request, ctx.Response);
     }
