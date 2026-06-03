@@ -9,21 +9,8 @@ namespace LeonAkasaka.UnionAir.Editor
     /// GET /api/scene/stats
     /// Returns aggregated statistics about the current scene.
     /// </summary>
-    internal class SceneStatsHandler : IRequestHandler
+    internal class SceneStatsHandler
     {
-        /// <summary>
-        /// Determines whether this handler can process the request.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <returns>True when this handler supports the request.</returns>
-        public bool CanHandle(HttpListenerRequest request)
-            => request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/scene/stats";
-
-        /// <summary>
-        /// Processes the request and writes the HTTP response.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <param name="response">HTTP response to write.</param>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))

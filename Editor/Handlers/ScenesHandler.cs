@@ -10,15 +10,8 @@ namespace LeonAkasaka.UnionAir.Editor
     /// <summary>
     /// Handles loaded scene listing and scene lifecycle operations.
     /// </summary>
-    internal sealed class ScenesHandler : IRequestHandler
+    internal sealed class ScenesHandler
     {
-        public bool CanHandle(HttpListenerRequest request)
-            => request.Url.AbsolutePath == "/api/scenes" ||
-               request.Url.AbsolutePath == "/api/scenes/new" ||
-               request.Url.AbsolutePath == "/api/scenes/open" ||
-               request.Url.AbsolutePath == "/api/scenes/unload" ||
-               request.Url.AbsolutePath == "/api/scenes/active";
-
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/scenes")

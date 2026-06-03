@@ -12,22 +12,8 @@ namespace LeonAkasaka.UnionAir.Editor
     /// Body: { "guid": "...", "assetPath": "...", "name": "...", "parent": {"value": "..."} }
     /// Either "guid" or "assetPath" is required; "guid" takes precedence when both are provided.
     /// </summary>
-    internal class GameObjectInstantiateHandler : IRequestHandler
+    internal class GameObjectInstantiateHandler
     {
-        /// <summary>
-        /// Determines whether this handler can process the request.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <returns>True when this handler supports the request.</returns>
-        public bool CanHandle(HttpListenerRequest request)
-            => request.HttpMethod == "POST" &&
-               request.Url.AbsolutePath == "/api/gameobjects/instantiate";
-
-        /// <summary>
-        /// Processes the request and writes the HTTP response.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <param name="response">HTTP response to write.</param>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var body       = RequestBodyReader.ReadString(request);

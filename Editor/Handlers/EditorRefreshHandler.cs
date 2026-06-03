@@ -17,21 +17,8 @@ namespace LeonAkasaka.UnionAir.Editor
     ///      (note: domain reload will briefly restart the server — handle connection retries)
     ///   3. POST /api/gameobjects/components with the newly compiled type
     /// </summary>
-    internal class EditorRefreshHandler : IRequestHandler
+    internal class EditorRefreshHandler
     {
-        /// <summary>
-        /// Determines whether this handler can process the request.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <returns>True when this handler supports the request.</returns>
-        public bool CanHandle(HttpListenerRequest request)
-            => request.HttpMethod == "POST" && request.Url.AbsolutePath == "/api/editor/refresh";
-
-        /// <summary>
-        /// Processes the request and writes the HTTP response.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <param name="response">HTTP response to write.</param>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             AssetDatabase.Refresh();

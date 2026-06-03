@@ -10,21 +10,10 @@ namespace LeonAkasaka.UnionAir.Editor
     ///   GET /api/assets/scriptableobjects           — list assets (filterable by type, path, search)
     ///   GET /api/assets/scriptableobjects/{guid}    — detail with all readable serialized properties
     /// </summary>
-    internal class ScriptableObjectReadHandler : IRequestHandler
+    internal class ScriptableObjectReadHandler
     {
         private const int MaxResults = 500;
 
-        /// <summary>
-        /// Determines whether this handler can process the request.
-        /// </summary>
-        public bool CanHandle(HttpListenerRequest request)
-            => request.HttpMethod == "GET" &&
-               (request.Url.AbsolutePath == "/api/assets/scriptableobjects" ||
-                request.Url.AbsolutePath.StartsWith("/api/assets/scriptableobjects/"));
-
-        /// <summary>
-        /// Processes the request and writes the HTTP response.
-        /// </summary>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var absPath = request.Url.AbsolutePath;

@@ -7,13 +7,10 @@ using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
-    internal class EditorMenuItemsHandler : IRequestHandler
+    internal class EditorMenuItemsHandler
     {
         private const int DefaultLimit = 1000;
         private const int MaxLimit = 5000;
-
-        public bool CanHandle(HttpListenerRequest request)
-            => request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/editor/menu-items";
 
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {

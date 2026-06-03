@@ -4,12 +4,8 @@ using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
-    internal class EditorSelectionHandler : IRequestHandler
+    internal class EditorSelectionHandler
     {
-        public bool CanHandle(HttpListenerRequest request)
-            => (request.HttpMethod == "GET" || request.HttpMethod == "POST") &&
-               request.Url.AbsolutePath == "/api/editor/selection";
-
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             if (request.HttpMethod == "GET")

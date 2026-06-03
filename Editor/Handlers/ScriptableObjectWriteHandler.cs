@@ -12,21 +12,8 @@ namespace LeonAkasaka.UnionAir.Editor
     ///   PATCH  /api/assets/scriptableobjects?guid=     — update serialized properties
     ///   DELETE /api/assets/scriptableobjects/{guid}    — delete the asset
     /// </summary>
-    internal class ScriptableObjectWriteHandler : IRequestHandler
+    internal class ScriptableObjectWriteHandler
     {
-        /// <summary>
-        /// Determines whether this handler can process the request.
-        /// </summary>
-        public bool CanHandle(HttpListenerRequest request)
-            => (request.Url.AbsolutePath == "/api/assets/scriptableobjects" ||
-                request.Url.AbsolutePath.StartsWith("/api/assets/scriptableobjects/")) &&
-               (request.HttpMethod == "POST" ||
-                request.HttpMethod == "PATCH" ||
-                request.HttpMethod == "DELETE");
-
-        /// <summary>
-        /// Processes the request and writes the HTTP response.
-        /// </summary>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             switch (request.HttpMethod)

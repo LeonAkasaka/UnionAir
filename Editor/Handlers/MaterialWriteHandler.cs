@@ -12,22 +12,8 @@ namespace LeonAkasaka.UnionAir.Editor
     ///   POST  /api/assets/materials               — create a new material
     ///   PATCH /api/assets/materials?guid=&lt;guid&gt; — update material properties
     /// </summary>
-    internal class MaterialWriteHandler : IRequestHandler
+    internal class MaterialWriteHandler
     {
-        /// <summary>
-        /// Determines whether this handler can process the request.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <returns>True when this handler supports the request.</returns>
-        public bool CanHandle(HttpListenerRequest request)
-            => request.Url.AbsolutePath == "/api/assets/materials" &&
-               (request.HttpMethod == "POST" || request.HttpMethod == "PATCH");
-
-        /// <summary>
-        /// Processes the request and writes the HTTP response.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <param name="response">HTTP response to write.</param>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             if (request.HttpMethod == "POST")

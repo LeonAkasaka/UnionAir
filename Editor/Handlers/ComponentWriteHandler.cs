@@ -13,24 +13,8 @@ namespace LeonAkasaka.UnionAir.Editor
     ///   DELETE /api/gameobjects/components?path=&amp;type= — remove component
     ///   PATCH  /api/gameobjects/components?path=&amp;type= — update serialized properties
     /// </summary>
-    internal class ComponentWriteHandler : IRequestHandler
+    internal class ComponentWriteHandler
     {
-        /// <summary>
-        /// Determines whether this handler can process the request.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <returns>True when this handler supports the request.</returns>
-        public bool CanHandle(HttpListenerRequest request)
-            => request.Url.AbsolutePath == "/api/gameobjects/components" &&
-               (request.HttpMethod == "POST" ||
-                request.HttpMethod == "DELETE" ||
-                request.HttpMethod == "PATCH");
-
-        /// <summary>
-        /// Processes the request and writes the HTTP response.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <param name="response">HTTP response to write.</param>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             switch (request.HttpMethod)

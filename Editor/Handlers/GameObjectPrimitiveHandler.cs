@@ -14,22 +14,8 @@ namespace LeonAkasaka.UnionAir.Editor
     /// using GameObject.CreatePrimitive so the mesh and default material are assigned.
     /// Body: { "type": "Cube", "name": "MyCube", "parent": {"value": "..."} }
     /// </summary>
-    internal class GameObjectPrimitiveHandler : IRequestHandler
+    internal class GameObjectPrimitiveHandler
     {
-        /// <summary>
-        /// Determines whether this handler can process the request.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <returns>True when this handler supports the request.</returns>
-        public bool CanHandle(HttpListenerRequest request)
-            => request.HttpMethod == "POST" &&
-               request.Url.AbsolutePath == "/api/gameobjects/primitive";
-
-        /// <summary>
-        /// Processes the request and writes the HTTP response.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <param name="response">HTTP response to write.</param>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var body     = RequestBodyReader.ReadString(request);

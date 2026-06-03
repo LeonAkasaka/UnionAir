@@ -8,27 +8,11 @@ using UnityEngine;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
-    internal class CameraHandler : IRequestHandler
+    internal class CameraHandler
     {
         private const int MaxWidth  = 1920;
         private const int MaxHeight = 1080;
 
-        /// <summary>
-        /// Determines whether this handler can process the request.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <returns>True when this handler supports the request.</returns>
-        public bool CanHandle(HttpListenerRequest request)
-            => request.HttpMethod == "GET" &&
-               (request.Url.AbsolutePath == "/api/cameras" ||
-                request.Url.AbsolutePath == "/api/cameras/capture" ||
-                request.Url.AbsolutePath == "/api/cameras/capture/image");
-
-        /// <summary>
-        /// Processes the request and writes the HTTP response.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <param name="response">HTTP response to write.</param>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             switch (request.Url.AbsolutePath)

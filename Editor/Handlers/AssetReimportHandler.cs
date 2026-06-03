@@ -3,11 +3,8 @@ using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
-    internal class AssetReimportHandler : IRequestHandler
+    internal class AssetReimportHandler
     {
-        public bool CanHandle(HttpListenerRequest request)
-            => request.HttpMethod == "POST" && request.Url.AbsolutePath == "/api/assets/reimport";
-
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var body = RequestBodyReader.ReadString(request);

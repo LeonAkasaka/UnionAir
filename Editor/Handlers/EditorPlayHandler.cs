@@ -11,25 +11,8 @@ namespace LeonAkasaka.UnionAir.Editor
     ///   POST /api/editor/step   — advance one frame (requires isPaused == true)
     /// All require the Play Mode category to be enabled.
     /// </summary>
-    internal class EditorPlayHandler : IRequestHandler
+    internal class EditorPlayHandler
     {
-        /// <summary>
-        /// Determines whether this handler can process the request.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <returns>True when this handler supports the request.</returns>
-        public bool CanHandle(HttpListenerRequest request)
-            => request.HttpMethod == "POST" &&
-               (request.Url.AbsolutePath == "/api/editor/play"  ||
-                request.Url.AbsolutePath == "/api/editor/stop"  ||
-                request.Url.AbsolutePath == "/api/editor/pause" ||
-                request.Url.AbsolutePath == "/api/editor/step");
-
-        /// <summary>
-        /// Processes the request and writes the HTTP response.
-        /// </summary>
-        /// <param name="request">Incoming HTTP request.</param>
-        /// <param name="response">HTTP response to write.</param>
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             switch (request.Url.AbsolutePath)

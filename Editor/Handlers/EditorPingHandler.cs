@@ -4,11 +4,8 @@ using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
-    internal class EditorPingHandler : IRequestHandler
+    internal class EditorPingHandler
     {
-        public bool CanHandle(HttpListenerRequest request)
-            => request.HttpMethod == "POST" && request.Url.AbsolutePath == "/api/editor/ping";
-
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
