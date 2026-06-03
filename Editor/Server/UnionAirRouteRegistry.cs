@@ -330,14 +330,15 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static string CombineRoutes(params string[] routes)
         {
-            var result = "";
+            var sb = new System.Text.StringBuilder();
             foreach (var route in routes)
             {
                 var normalized = NormalizeRoute(route);
                 if (string.IsNullOrEmpty(normalized)) continue;
-                result += "/" + normalized;
+                sb.Append('/');
+                sb.Append(normalized);
             }
-            return string.IsNullOrEmpty(result) ? "/" : result;
+            return sb.Length == 0 ? "/" : sb.ToString();
         }
     }
 }
