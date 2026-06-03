@@ -34,7 +34,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var pathMatched = false;
             foreach (var descriptor in UnionAirRouteRegistry.Descriptors)
             {
-                var routeValues = new Dictionary<string, string>();
+                var routeValues = descriptor.HasPathParameters ? new Dictionary<string, string>() : null;
                 if (!descriptor.TryMatch(request.Url.AbsolutePath, routeValues))
                     continue;
 

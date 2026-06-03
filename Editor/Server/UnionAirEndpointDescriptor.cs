@@ -177,6 +177,16 @@ namespace LeonAkasaka.UnionAir.Editor
         internal int DeclarationOrder { get; }
         internal RouteSegment[] Segments { get; }
 
+        internal bool HasPathParameters
+        {
+            get
+            {
+                foreach (var segment in Segments)
+                    if (segment.IsParameter) return true;
+                return false;
+            }
+        }
+
         internal int LiteralSegmentCount
         {
             get
@@ -200,7 +210,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 var requestSegment = Uri.UnescapeDataString(requestSegments[i]);
                 if (segment.IsParameter)
                 {
-                    routeValues[segment.Value] = requestSegment;
+                    routeValues?.Add(segment.Value, requestSegment);
                 }
                 else if (!string.Equals(segment.Value, requestSegment, StringComparison.Ordinal))
                 {
