@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Text;
 
@@ -96,6 +96,19 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (s == null) return "";
 
+            // fast path: return the original string when no escaping is needed
+            bool needsEscape = false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                var ch = s[i];
+                if (ch < 0x20 || ch == '"' || ch == '\\' || (ch >= (char)0x2028 && ch <= (char)0x2029))
+                {
+                    needsEscape = true;
+                    break;
+                }
+            }
+            if (!needsEscape) return s;
+
             var sb = new StringBuilder(s.Length + 8);
             for (int i = 0; i < s.Length; i++)
             {
@@ -127,3 +140,4 @@ namespace LeonAkasaka.UnionAir.Editor
         }
     }
 }
+
