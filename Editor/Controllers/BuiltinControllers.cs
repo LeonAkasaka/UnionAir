@@ -5,8 +5,8 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         [UnionAirEndpoint("GET", "",
             Category = UnionAirEndpointCategories.Read,
-            Summary = "Returns the API manifest. Use ?detail=full to include requestExample and responseExample fields.",
-            OptionalQuery = new string[] { "detail", "source", "includeDisabled" })]
+            Summary = "Returns the API manifest. Use ?detail=full for examples, ?category=<id> to filter by category (e.g. sceneWrite, read, assetWrite, playMode, editorActions).",
+            OptionalQuery = new string[] { "detail", "category", "source", "includeDisabled" })]
         private void Help(UnionAirRequestContext ctx)
             => new HelpHandler().Handle(ctx.Request, ctx.Response);
     }

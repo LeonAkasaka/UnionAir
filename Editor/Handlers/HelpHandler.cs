@@ -53,6 +53,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var includeDisabled = IsTrue(request.QueryString["includeDisabled"]);
             var source = (request.QueryString["source"] ?? "all").ToLowerInvariant();
+            var categoryFilter = (request.QueryString["category"] ?? "").ToLowerInvariant();
 
             sb.Append("\"categories\":[");
             var first = true;
@@ -63,6 +64,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (source == "builtin" && category.Source != UnionAirRouteSource.Builtin)
                     continue;
                 if (source == "custom" && category.Source != UnionAirRouteSource.Custom)
+                    continue;
+                if (!string.IsNullOrEmpty(categoryFilter) && category.Id != categoryFilter)
                     continue;
 
                 if (!first) sb.Append(",");
@@ -104,6 +107,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var includeDisabled = IsTrue(request.QueryString["includeDisabled"]);
             var source = (request.QueryString["source"] ?? "all").ToLowerInvariant();
             var detail = (request.QueryString["detail"] ?? "").ToLowerInvariant() == "full";
+            var categoryFilter = (request.QueryString["category"] ?? "").ToLowerInvariant();
             var endpoints = UnionAirRouteRegistry.Descriptors;
 
             sb.Append("\"endpoints\":[");
@@ -115,6 +119,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (source == "builtin" && endpoint.Source != UnionAirRouteSource.Builtin)
                     continue;
                 if (source == "custom" && endpoint.Source != UnionAirRouteSource.Custom)
+                    continue;
+                if (!string.IsNullOrEmpty(categoryFilter) && endpoint.Category != categoryFilter)
                     continue;
 
                 if (!first) sb.Append(",");
