@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 
@@ -72,6 +73,19 @@ namespace LeonAkasaka.UnionAir.Editor
             response.AddHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, PATCH, OPTIONS");
             response.AddHeader("Access-Control-Allow-Headers", "Content-Type");
         }
+
+        /// <summary>
+        /// Formats a float for safe inclusion in JSON, mapping NaN and Infinity to <c>null</c>.
+        /// </summary>
+        /// <param name="v">Value to format.</param>
+        /// <returns>Culture-invariant decimal string, or <c>"null"</c> for non-finite values.</returns>
+        public static string FormatFloat(float v)
+            => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("G", CultureInfo.InvariantCulture);
+
+        /// <summary>
+        /// Returns the JSON literal <c>true</c> or <c>false</c> for a boolean value.
+        /// </summary>
+        public static string FormatBool(bool b) => b ? "true" : "false";
 
         /// <summary>
         /// Escapes a string for safe inclusion in a JSON string literal.

@@ -533,7 +533,9 @@ Returns the GameObject tree for the entire scene. If `scenePath` is omitted, the
 ```json
 {
   "scene": "SampleScene",
-  "objects": [ <GameObjectNode>, ... ]
+  "objects": [ <GameObjectNode>, ... ],
+  "totalReturned": 42,
+  "truncated": false
 }
 ```
 
@@ -560,6 +562,16 @@ Returns the GameObject tree for the entire scene. If `scenePath` is omitted, the
   ]
 }
 ```
+
+#### Top-level response fields
+
+| Field | Type | Description |
+|-------------|------|------|
+| `scene` | string | Name of the resolved scene |
+| `totalReturned` | int | Number of GameObjects actually included in `objects` |
+| `truncated` | bool | `true` when the result was cut off by the `limit` parameter |
+
+#### GameObjectNode fields
 
 | Field | Type | Description |
 |-----------|-----|------|
@@ -2278,7 +2290,7 @@ Enters Play mode (`EditorApplication.isPlaying = true`).
 ### Response
 
 ```json
-{ "requested": true, "action": "play" }
+{ "playing": true, "note": "Domain reload may occur. Poll GET /api/editor/status until isPlaying is true." }
 ```
 
 ---
@@ -2292,7 +2304,7 @@ Exits Play mode (`EditorApplication.isPlaying = false`).
 ### Response
 
 ```json
-{ "requested": true, "action": "stop" }
+{ "playing": false }
 ```
 
 ---
@@ -2312,7 +2324,7 @@ Sets the paused state. If the body is omitted, toggles the current state.
 ### Response
 
 ```json
-{ "isPaused": true }
+{ "paused": true }
 ```
 
 ---

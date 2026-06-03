@@ -90,9 +90,9 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
             sb.Append($"\"primitiveType\":\"{RestResponse.EscapeJson(primitiveType.ToString())}\",");
             sb.Append("\"transform\":{");
-            sb.Append($"\"position\":{{\"x\":{GameObjectUtils.FormatFloat(p.x)},\"y\":{GameObjectUtils.FormatFloat(p.y)},\"z\":{GameObjectUtils.FormatFloat(p.z)}}},");
-            sb.Append($"\"rotation\":{{\"x\":{GameObjectUtils.FormatFloat(r.x)},\"y\":{GameObjectUtils.FormatFloat(r.y)},\"z\":{GameObjectUtils.FormatFloat(r.z)}}},");
-            sb.Append($"\"scale\":{{\"x\":{GameObjectUtils.FormatFloat(s.x)},\"y\":{GameObjectUtils.FormatFloat(s.y)},\"z\":{GameObjectUtils.FormatFloat(s.z)}}}");
+            sb.Append($"\"position\":{{\"x\":{RestResponse.FormatFloat(p.x)},\"y\":{RestResponse.FormatFloat(p.y)},\"z\":{RestResponse.FormatFloat(p.z)}}},");
+            sb.Append($"\"rotation\":{{\"x\":{RestResponse.FormatFloat(r.x)},\"y\":{RestResponse.FormatFloat(r.y)},\"z\":{RestResponse.FormatFloat(r.z)}}},");
+            sb.Append($"\"scale\":{{\"x\":{RestResponse.FormatFloat(s.x)},\"y\":{RestResponse.FormatFloat(s.y)},\"z\":{RestResponse.FormatFloat(s.z)}}}");
             sb.Append("},");
             sb.Append("\"components\":[");
             for (int i = 0; i < components.Length; i++)

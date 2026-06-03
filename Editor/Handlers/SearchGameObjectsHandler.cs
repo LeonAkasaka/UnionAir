@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Net;
 using System.Text;
 using UnityEditor;
@@ -117,13 +116,13 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(go.name)}\",");
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(path)}\",");
             sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
-            sb.Append($"\"isActive\":{Bool(go.activeInHierarchy)},");
+            sb.Append($"\"isActive\":{RestResponse.FormatBool(go.activeInHierarchy)},");
             sb.Append($"\"tag\":\"{RestResponse.EscapeJson(go.tag)}\",");
             sb.Append($"\"layer\":{go.layer},");
             sb.Append("\"transform\":{");
-            sb.Append($"\"position\":{{\"x\":{F(p.x)},\"y\":{F(p.y)},\"z\":{F(p.z)}}},");
-            sb.Append($"\"rotation\":{{\"x\":{F(r.x)},\"y\":{F(r.y)},\"z\":{F(r.z)}}},");
-            sb.Append($"\"scale\":{{\"x\":{F(s.x)},\"y\":{F(s.y)},\"z\":{F(s.z)}}}");
+            sb.Append($"\"position\":{{\"x\":{RestResponse.FormatFloat(p.x)},\"y\":{RestResponse.FormatFloat(p.y)},\"z\":{RestResponse.FormatFloat(p.z)}}},");
+            sb.Append($"\"rotation\":{{\"x\":{RestResponse.FormatFloat(r.x)},\"y\":{RestResponse.FormatFloat(r.y)},\"z\":{RestResponse.FormatFloat(r.z)}}},");
+            sb.Append($"\"scale\":{{\"x\":{RestResponse.FormatFloat(s.x)},\"y\":{RestResponse.FormatFloat(s.y)},\"z\":{RestResponse.FormatFloat(s.z)}}}");
             sb.Append("}");
 
             if (includeComponents)
@@ -147,7 +146,5 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("}");
         }
 
-        private static string F(float v) => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("G", CultureInfo.InvariantCulture);
-        private static string Bool(bool b) => b ? "true" : "false";
     }
 }

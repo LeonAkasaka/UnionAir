@@ -11,15 +11,13 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var sb = new StringBuilder();
             sb.Append("{");
-            sb.Append($"\"isPlaying\":{Bool(EditorApplication.isPlaying)},");
-            sb.Append($"\"isPaused\":{Bool(EditorApplication.isPaused)},");
-            sb.Append($"\"isCompiling\":{Bool(EditorApplication.isCompiling)},");
-            sb.Append($"\"isUpdating\":{Bool(EditorApplication.isUpdating)},");
+            sb.Append($"\"isPlaying\":{RestResponse.FormatBool(EditorApplication.isPlaying)},");
+            sb.Append($"\"isPaused\":{RestResponse.FormatBool(EditorApplication.isPaused)},");
+            sb.Append($"\"isCompiling\":{RestResponse.FormatBool(EditorApplication.isCompiling)},");
+            sb.Append($"\"isUpdating\":{RestResponse.FormatBool(EditorApplication.isUpdating)},");
             sb.Append($"\"unityVersion\":\"{RestResponse.EscapeJson(Application.unityVersion)}\"");
             sb.Append("}");
             RestResponse.Send(response, sb.ToString());
         }
-
-        private static string Bool(bool v) => v ? "true" : "false";
     }
 }

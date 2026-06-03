@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Net;
 using System.Text;
 using UnityEditor.SceneManagement;
@@ -51,10 +50,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(cam.gameObject))}\",");
                 sb.Append($"\"componentGlobalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(cam))}\",");
                 sb.Append($"\"name\":\"{RestResponse.EscapeJson(cam.name)}\",");
-                sb.Append($"\"enabled\":{Bool(cam.enabled)},");
-                sb.Append($"\"depth\":{F(cam.depth)},");
-                sb.Append($"\"fieldOfView\":{F(cam.fieldOfView)},");
-                sb.Append($"\"isOrthographic\":{Bool(cam.orthographic)},");
+                sb.Append($"\"enabled\":{RestResponse.FormatBool(cam.enabled)},");
+                sb.Append($"\"depth\":{RestResponse.FormatFloat(cam.depth)},");
+                sb.Append($"\"fieldOfView\":{RestResponse.FormatFloat(cam.fieldOfView)},");
+                sb.Append($"\"isOrthographic\":{RestResponse.FormatBool(cam.orthographic)},");
                 sb.Append($"\"tag\":\"{RestResponse.EscapeJson(cam.tag)}\"");
                 sb.Append("}");
             }
@@ -203,7 +202,5 @@ namespace LeonAkasaka.UnionAir.Editor
             return Math.Max(min, Math.Min(max, v));
         }
 
-        private static string Bool(bool b) => b ? "true" : "false";
-        private static string F(float v)   => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("G", CultureInfo.InvariantCulture);
     }
 }

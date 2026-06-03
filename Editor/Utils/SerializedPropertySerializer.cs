@@ -45,7 +45,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     break;
 
                 case SerializedPropertyType.Float:
-                    sb.Append(F(prop.floatValue));
+                    sb.Append(RestResponse.FormatFloat(prop.floatValue));
                     break;
 
                 case SerializedPropertyType.String:
@@ -57,44 +57,44 @@ namespace LeonAkasaka.UnionAir.Editor
                 case SerializedPropertyType.Color:
                 {
                     var c = prop.colorValue;
-                    sb.Append($"{{\"r\":{F(c.r)},\"g\":{F(c.g)},\"b\":{F(c.b)},\"a\":{F(c.a)}}}");
+                    sb.Append($"{{\"r\":{RestResponse.FormatFloat(c.r)},\"g\":{RestResponse.FormatFloat(c.g)},\"b\":{RestResponse.FormatFloat(c.b)},\"a\":{RestResponse.FormatFloat(c.a)}}}");
                     break;
                 }
                 case SerializedPropertyType.Vector2:
                 {
                     var v = prop.vector2Value;
-                    sb.Append($"{{\"x\":{F(v.x)},\"y\":{F(v.y)}}}");
+                    sb.Append($"{{\"x\":{RestResponse.FormatFloat(v.x)},\"y\":{RestResponse.FormatFloat(v.y)}}}");
                     break;
                 }
                 case SerializedPropertyType.Vector3:
                 {
                     var v = prop.vector3Value;
-                    sb.Append($"{{\"x\":{F(v.x)},\"y\":{F(v.y)},\"z\":{F(v.z)}}}");
+                    sb.Append($"{{\"x\":{RestResponse.FormatFloat(v.x)},\"y\":{RestResponse.FormatFloat(v.y)},\"z\":{RestResponse.FormatFloat(v.z)}}}");
                     break;
                 }
                 case SerializedPropertyType.Vector4:
                 {
                     var v = prop.vector4Value;
-                    sb.Append($"{{\"x\":{F(v.x)},\"y\":{F(v.y)},\"z\":{F(v.z)},\"w\":{F(v.w)}}}");
+                    sb.Append($"{{\"x\":{RestResponse.FormatFloat(v.x)},\"y\":{RestResponse.FormatFloat(v.y)},\"z\":{RestResponse.FormatFloat(v.z)},\"w\":{RestResponse.FormatFloat(v.w)}}}");
                     break;
                 }
                 case SerializedPropertyType.Quaternion:
                 {
                     var q = prop.quaternionValue;
-                    sb.Append($"{{\"x\":{F(q.x)},\"y\":{F(q.y)},\"z\":{F(q.z)},\"w\":{F(q.w)}}}");
+                    sb.Append($"{{\"x\":{RestResponse.FormatFloat(q.x)},\"y\":{RestResponse.FormatFloat(q.y)},\"z\":{RestResponse.FormatFloat(q.z)},\"w\":{RestResponse.FormatFloat(q.w)}}}");
                     break;
                 }
                 case SerializedPropertyType.Rect:
                 {
                     var r = prop.rectValue;
-                    sb.Append($"{{\"x\":{F(r.x)},\"y\":{F(r.y)},\"width\":{F(r.width)},\"height\":{F(r.height)}}}");
+                    sb.Append($"{{\"x\":{RestResponse.FormatFloat(r.x)},\"y\":{RestResponse.FormatFloat(r.y)},\"width\":{RestResponse.FormatFloat(r.width)},\"height\":{RestResponse.FormatFloat(r.height)}}}");
                     break;
                 }
                 case SerializedPropertyType.Bounds:
                 {
                     var b = prop.boundsValue;
-                    sb.Append($"{{\"center\":{{\"x\":{F(b.center.x)},\"y\":{F(b.center.y)},\"z\":{F(b.center.z)}}},");
-                    sb.Append($"\"extents\":{{\"x\":{F(b.extents.x)},\"y\":{F(b.extents.y)},\"z\":{F(b.extents.z)}}}}}");
+                    sb.Append($"{{\"center\":{{\"x\":{RestResponse.FormatFloat(b.center.x)},\"y\":{RestResponse.FormatFloat(b.center.y)},\"z\":{RestResponse.FormatFloat(b.center.z)}}},");
+                    sb.Append($"\"extents\":{{\"x\":{RestResponse.FormatFloat(b.extents.x)},\"y\":{RestResponse.FormatFloat(b.extents.y)},\"z\":{RestResponse.FormatFloat(b.extents.z)}}}}}");
                     break;
                 }
                 case SerializedPropertyType.ObjectReference:
@@ -385,11 +385,5 @@ namespace LeonAkasaka.UnionAir.Editor
             return scalarEnd;
         }
 
-        // ── Float formatting helper ───────────────────────────────────────────
-
-        private static string F(float v)
-            => float.IsNaN(v) || float.IsInfinity(v)
-                ? "null"
-                : v.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
     }
 }

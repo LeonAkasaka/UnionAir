@@ -120,14 +120,13 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(scene.path)}\",");
             sb.Append($"\"guid\":\"{RestResponse.EscapeJson(AssetDatabase.AssetPathToGUID(scene.path))}\",");
             sb.Append($"\"buildIndex\":{scene.buildIndex},");
-            sb.Append($"\"isDirty\":{Bool(scene.isDirty)},");
-            sb.Append($"\"isLoaded\":{Bool(scene.isLoaded)},");
-            sb.Append($"\"isActive\":{Bool(active)},");
+            sb.Append($"\"isDirty\":{RestResponse.FormatBool(scene.isDirty)},");
+            sb.Append($"\"isLoaded\":{RestResponse.FormatBool(scene.isLoaded)},");
+            sb.Append($"\"isActive\":{RestResponse.FormatBool(active)},");
             sb.Append($"\"rootCount\":{scene.rootCount}");
             sb.Append("}");
         }
 
-        private static string Bool(bool value) => value ? "true" : "false";
     }
 
     internal enum ResolveStatus

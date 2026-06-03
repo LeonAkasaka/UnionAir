@@ -1,4 +1,3 @@
-using System.Globalization;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -119,10 +118,5 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
-        /// <summary>
-        /// Formats a float for JSON output, substituting null for NaN/Infinity.
-        /// </summary>
-        public static string FormatFloat(float v)
-            => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("G", CultureInfo.InvariantCulture);
     }
 }

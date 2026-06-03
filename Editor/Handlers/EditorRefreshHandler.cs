@@ -27,14 +27,12 @@ namespace LeonAkasaka.UnionAir.Editor
             var sb = new StringBuilder();
             sb.Append("{");
             sb.Append($"\"refreshed\":true,");
-            sb.Append($"\"isCompiling\":{Bool(EditorApplication.isCompiling)},");
-            sb.Append($"\"isUpdating\":{Bool(EditorApplication.isUpdating)},");
-            sb.Append($"\"isPlaying\":{Bool(EditorApplication.isPlaying)}");
+            sb.Append($"\"isCompiling\":{RestResponse.FormatBool(EditorApplication.isCompiling)},");
+            sb.Append($"\"isUpdating\":{RestResponse.FormatBool(EditorApplication.isUpdating)},");
+            sb.Append($"\"isPlaying\":{RestResponse.FormatBool(EditorApplication.isPlaying)}");
             sb.Append("}");
 
             RestResponse.Send(response, sb.ToString());
         }
-
-        private static string Bool(bool v) => v ? "true" : "false";
     }
 }
