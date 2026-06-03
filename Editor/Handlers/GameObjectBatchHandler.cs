@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Net;
 using System.Text;
 using UnityEditor;
@@ -292,47 +291,6 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         private static void ApplyTransformFromOp(Transform t, string op)
-        {
-            var transformJson = RequestBodyReader.GetObject(op, "transform");
-            if (transformJson == null) return;
-
-            var posJson = RequestBodyReader.GetObject(transformJson, "position");
-            if (posJson != null)
-            {
-                var x = RequestBodyReader.GetFloat(posJson, "x");
-                var y = RequestBodyReader.GetFloat(posJson, "y");
-                var z = RequestBodyReader.GetFloat(posJson, "z");
-                t.localPosition = new Vector3(
-                    x ?? t.localPosition.x,
-                    y ?? t.localPosition.y,
-                    z ?? t.localPosition.z);
-            }
-
-            var rotJson = RequestBodyReader.GetObject(transformJson, "rotation");
-            if (rotJson != null)
-            {
-                var x = RequestBodyReader.GetFloat(rotJson, "x");
-                var y = RequestBodyReader.GetFloat(rotJson, "y");
-                var z = RequestBodyReader.GetFloat(rotJson, "z");
-                t.localEulerAngles = new Vector3(
-                    x ?? t.localEulerAngles.x,
-                    y ?? t.localEulerAngles.y,
-                    z ?? t.localEulerAngles.z);
-            }
-
-            var scaleJson = RequestBodyReader.GetObject(transformJson, "scale");
-            if (scaleJson != null)
-            {
-                var x = RequestBodyReader.GetFloat(scaleJson, "x");
-                var y = RequestBodyReader.GetFloat(scaleJson, "y");
-                var z = RequestBodyReader.GetFloat(scaleJson, "z");
-                t.localScale = new Vector3(
-                    x ?? t.localScale.x,
-                    y ?? t.localScale.y,
-                    z ?? t.localScale.z);
-            }
-        }
-
-        private static string F(float v) => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("G", CultureInfo.InvariantCulture);
+            => GameObjectUtils.ApplyTransformFromBody(t, op);
     }
 }
