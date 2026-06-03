@@ -62,11 +62,48 @@ namespace LeonAkasaka.UnionAir.Editor
             token = token.Trim();
             if (token == "null") return null;
             if (token.Length >= 2 && token[0] == '"' && token[token.Length - 1] == '"')
-                return token.Substring(1, token.Length - 2)
-                    .Replace("\\\"", "\"").Replace("\\\\", "\\")
-                    .Replace("\\n", "\n").Replace("\\r", "\r").Replace("\\t", "\t");
+                return UnescapeJsonString(token.Substring(1, token.Length - 2));
             return token;
         }
+
+        /// <summary>
+        /// Extracts a string value directly from a request body, combining ReadString and GetString.
+        /// </summary>
+        /// <param name="request">HTTP request whose body should be read.</param>
+        /// <param name="key">Field name to read.</param>
+        /// <returns>The string value, or null when absent/null.</returns>
+        public static string GetString(HttpListenerRequest request, string key)
+            => GetString(ReadString(request), key);
+
+        /// <summary>
+        /// Extracts a bool value directly from a request body, combining ReadString and GetBool.
+        /// </summary>
+        public static bool? GetBool(HttpListenerRequest request, string key)
+            => GetBool(ReadString(request), key);
+
+        /// <summary>
+        /// Extracts an int value directly from a request body, combining ReadString and GetInt.
+        /// </summary>
+        public static int? GetInt(HttpListenerRequest request, string key)
+            => GetInt(ReadString(request), key);
+
+        /// <summary>
+        /// Extracts a float value directly from a request body, combining ReadString and GetFloat.
+        /// </summary>
+        public static float? GetFloat(HttpListenerRequest request, string key)
+            => GetFloat(ReadString(request), key);
+
+        /// <summary>
+        /// Extracts a nested JSON object directly from a request body, combining ReadString and GetObject.
+        /// </summary>
+        public static string GetObject(HttpListenerRequest request, string key)
+            => GetObject(ReadString(request), key);
+
+        /// <summary>
+        /// Extracts a JSON array directly from a request body, combining ReadString and GetArray.
+        /// </summary>
+        public static List<string> GetArray(HttpListenerRequest request, string key)
+            => GetArray(ReadString(request), key);
 
         /// <summary>
         /// Extracts a bool value from a flat JSON object body.
@@ -219,6 +256,53 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         // ── Private helpers ──────────────────────────────────────────────────────
+
+        private static string UnescapeJsonString(string s)
+        {
+            if (s.IndexOf('\\') < 0) return s;
+
+            var sb = new System.Text.StringBuilder(s.Length);
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (s[i] != '\\' || i + 1 >= s.Length) { sb.Append(s[i]); continue; }
+                i++;
+                switch (s[i])
+                {
+                    case '"':  sb.Append('"');  break;
+                    case '\\': sb.Append('\\'); break;
+                    case '/':  sb.Append('/');  break;
+                    case 'b':  sb.Append('\b'); break;
+                    case 'f':  sb.Append('\f'); break;
+                    case 'n':  sb.Append('\n'); break;
+                    case 'r':  sb.Append('\r'); break;
+                    case 't':  sb.Append('\t'); break;
+                    case 'u':
+                        if (i + 4 < s.Length && IsHex(s, i + 1, 4))
+                        {
+                            sb.Append((char)System.Convert.ToInt32(s.Substring(i + 1, 4), 16));
+                            i += 4;
+                        }
+                        else
+                        {
+                            sb.Append('u');
+                        }
+                        break;
+                    default: sb.Append(s[i]); break;
+                }
+            }
+            return sb.ToString();
+        }
+
+        private static bool IsHex(string s, int start, int count)
+        {
+            for (int i = start; i < start + count && i < s.Length; i++)
+            {
+                var c = s[i];
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+                    return false;
+            }
+            return true;
+        }
 
         /// <summary>
         /// Finds the raw value token for a given key in a simple (non-nested) JSON object.
