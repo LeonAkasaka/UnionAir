@@ -15,11 +15,23 @@ namespace LeonAkasaka.UnionAir.Editor
 
         /// <summary>
         /// Appends the JSON representation of <paramref name="prop"/> to <paramref name="sb"/>.
-        /// Arrays and unsupported generic types are emitted as <c>null</c>.
         /// ObjectReferences to scene objects (non-asset) are emitted as <c>null</c>.
         /// </summary>
         public static void SerializePropertyToJson(SerializedProperty prop, StringBuilder sb)
         {
+            // Serialize arrays (Unity internally represents strings as char arrays, so exclude those)
+            if (prop.isArray && prop.propertyType != SerializedPropertyType.String)
+            {
+                sb.Append('[');
+                for (int i = 0; i < prop.arraySize; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    SerializePropertyToJson(prop.GetArrayElementAtIndex(i), sb);
+                }
+                sb.Append(']');
+                return;
+            }
+
             switch (prop.propertyType)
             {
                 case SerializedPropertyType.Boolean:

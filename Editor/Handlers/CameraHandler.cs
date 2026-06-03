@@ -135,7 +135,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"height\":{height},");
             sb.Append($"\"format\":\"{RestResponse.EscapeJson(format)}\",");
             sb.Append($"\"mimeType\":\"{RestResponse.EscapeJson(mimeType)}\",");
-            sb.Append($"\"data\":\"{RestResponse.EscapeJson(base64)}\"");
+            sb.Append($"\"image\":\"{RestResponse.EscapeJson(base64)}\"");
             sb.Append("}");
             RestResponse.Send(response, sb.ToString());
         }

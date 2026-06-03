@@ -111,8 +111,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            if (!ObjectRefUtils.TryReadQuery(request.QueryString, "target", out var target, out var targetError, out var targetStatusCode) ||
-                !ObjectRefUtils.TryResolveComponent(scene, target, "target", out var go, out var comp, out targetError, out targetStatusCode))
+            if (!TryResolveComponentForWrite(request, scene, out var go, out var comp, out var targetError, out var targetStatusCode))
             {
                 RestResponse.SendError(response, targetError, targetStatusCode);
                 return;
@@ -142,8 +141,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
 
-            if (!ObjectRefUtils.TryReadQuery(request.QueryString, "target", out var target, out var targetError, out var targetStatusCode) ||
-                !ObjectRefUtils.TryResolveComponent(scene, target, "target", out var go, out var comp, out targetError, out targetStatusCode))
+            if (!TryResolveComponentForWrite(request, scene, out var go, out var comp, out var targetError, out var targetStatusCode))
             {
                 RestResponse.SendError(response, targetError, targetStatusCode);
                 return;
@@ -219,6 +217,57 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
+
+        // Resolves the target component for DELETE/PATCH.
+        // Accepts componentPath or a component's globalObjectId directly.
+        // Also accepts hierarchyPath / GameObject globalObjectId when ?type=ComponentName is provided.
+        private static bool TryResolveComponentForWrite(
+            HttpListenerRequest request,
+            UnityEngine.SceneManagement.Scene scene,
+            out GameObject go,
+            out Component comp,
+            out string error,
+            out int statusCode)
+        {
+            go = null;
+            comp = null;
+
+            if (!ObjectRefUtils.TryReadQuery(request.QueryString, "target", out var target, out error, out statusCode))
+                return false;
+
+            if (!ObjectRefUtils.TryResolveGameObjectOrComponent(scene, target, "target", out go, out comp, out error, out statusCode))
+                return false;
+
+            if (comp != null)
+                return true;
+
+            // Target resolved to a GameObject — require ?type=ComponentName to identify the component
+            var typeName = request.QueryString["type"];
+            if (string.IsNullOrEmpty(typeName))
+            {
+                error = "target resolved to a GameObject. Specify the component using componentPath format or add ?type=ComponentName.";
+                statusCode = 422;
+                return false;
+            }
+
+            var type = ObjectRefUtils.ResolveType(typeName);
+            if (type == null)
+            {
+                error = $"Unknown component type: {typeName}";
+                statusCode = 400;
+                return false;
+            }
+
+            comp = go.GetComponent(type);
+            if (comp == null)
+            {
+                error = $"No component of type '{typeName}' on '{GameObjectUtils.GetPath(go)}'.";
+                statusCode = 404;
+                return false;
+            }
+
+            return true;
+        }
 
         private static string FindPropertyKey(string json, SerializedProperty prop)
         {

@@ -111,6 +111,18 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static void AppendPropertyValue(StringBuilder sb, SerializedProperty prop)
         {
+            if (prop.isArray && prop.propertyType != SerializedPropertyType.String)
+            {
+                sb.Append('[');
+                for (int i = 0; i < prop.arraySize; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    AppendPropertyValue(sb, prop.GetArrayElementAtIndex(i));
+                }
+                sb.Append(']');
+                return;
+            }
+
             switch (prop.propertyType)
             {
                 case SerializedPropertyType.Boolean:

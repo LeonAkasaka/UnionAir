@@ -384,7 +384,7 @@ Works in both Edit mode and Play mode.
   "height": 360,
   "format": "jpeg",
   "mimeType": "image/jpeg",
-  "data": "<base64-encoded image data>"
+  "image": "<base64-encoded image data>"
 }
 ```
 
@@ -416,7 +416,7 @@ curl --get "http://localhost:8765/api/cameras/capture" \
 
 ### Use with LLM / MCP Bridges
 
-The response `mimeType` and `data` fields can be converted directly into an MCP image content block.
+The response `mimeType` and `image` fields can be converted directly into an MCP image content block.
 
 ---
 
@@ -758,7 +758,7 @@ If `scenePath` is omitted, the active scene is used.
 ```
 
 `components[].properties` are properties obtained via `SerializedObject`.
-Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Color`, `Vector2/3/4`, `Rect`, `ObjectReference`. Other types are `null`.
+Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Color`, `Vector2/3/4`, `Rect`, `ObjectReference`. Arrays are serialized as JSON arrays whose elements follow the same type rules. Other types are `null`.
 
 ### Errors
 
@@ -1422,7 +1422,8 @@ If `scenePath` is omitted, the active scene is used.
 
 | Parameter | Required | Description |
 |-------------|------|------|
-| `target` | ✅ | Object reference resolving to a Component. Use `componentPath` or a Component `globalObjectId` |
+| `target` | ✅ | Object reference resolving to a Component. Use `componentPath` (e.g. `{"type":"componentPath","value":"Canvas/Button:Rigidbody"}`) or a Component `globalObjectId`. Alternatively, target a GameObject with `hierarchyPath` and add `?type=ComponentName` |
+| `type` | ❌ | C# type name of the component to remove. Required when `target` is a GameObject reference (e.g. `hierarchyPath`) |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Response
@@ -1440,9 +1441,9 @@ If `scenePath` is omitted, the active scene is used.
 
 | Status | Cause |
 |-----------|------|
-| 400 | `target` is missing or malformed |
-| 404 | `target` does not exist |
-| 422 | `target` does not resolve to a Component |
+| 400 | `target` is missing, malformed, or `type` is an unknown component name |
+| 404 | `target` does not exist, or no component of the given `type` is on the target |
+| 422 | `target` resolves to a GameObject but `type` was not provided |
 | 403 | Scene Write category is disabled |
 
 ---
@@ -1456,7 +1457,8 @@ If `scenePath` is omitted, the active scene is used.
 
 | Parameter | Required | Description |
 |-------------|------|------|
-| `target` | ✅ | Object reference resolving to a Component. Use `componentPath` or a Component `globalObjectId` |
+| `target` | ✅ | Object reference resolving to a Component. Use `componentPath` (e.g. `{"type":"componentPath","value":"Obj:MeshRenderer"}`) or a Component `globalObjectId`. Alternatively, target a GameObject with `hierarchyPath` and add `?type=ComponentName` |
+| `type` | ❌ | C# type name of the component to update. Required when `target` is a GameObject reference (e.g. `hierarchyPath`) |
 | `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name |
 
 ### Request Body (JSON)
@@ -1505,10 +1507,10 @@ Supported object reference values:
 
 | Status | Cause |
 |-----------|------|
-| 400 | `target` is missing or malformed, or `properties` is missing |
+| 400 | `target` is missing or malformed, `properties` is missing, or `type` is an unknown component name |
 | 400 | An object reference payload is malformed, or a requested type cannot be resolved |
 | 404 | The GameObject, component, or asset does not exist |
-| 422 | The resolved object is not assignable to the requested type or field type |
+| 422 | `target` resolves to a GameObject but `type` was not provided; or the resolved object is not assignable to the requested type or field type |
 | 403 | Scene Write category is disabled |
 
 ---
@@ -2126,7 +2128,7 @@ Returns a ScriptableObject asset together with all readable serialized propertie
 | Bounds | `{"center":{"x":…,"y":…,"z":…},"extents":{"x":…,"y":…,"z":…}}` |
 | ObjectReference (asset) | `{"assetGuid":…,"assetPath":…,"assetType":…}` |
 | ObjectReference (null) | `null` |
-| Arrays, nested generic types | `null` (not supported in v1) |
+| Arrays, nested generic types | `null` (ScriptableObject GET does not serialize arrays; use GET /api/gameobjects for array-valued component properties) |
 
 ### Errors
 

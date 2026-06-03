@@ -131,7 +131,8 @@ namespace LeonAkasaka.UnionAir.Editor
             Category = UnionAirEndpointCategories.Read,
             Summary = "Renders a camera and returns a base64 image.",
             RequiredQuery = new string[] { "target" },
-            OptionalQuery = new string[] { "scenePath", "width", "height", "format", "quality" })]
+            OptionalQuery = new string[] { "scenePath", "width", "height", "format", "quality" },
+            ResponseExample = "{\"cameraPath\":\"Main Camera\",\"width\":1280,\"height\":720,\"format\":\"png\",\"mimeType\":\"image/png\",\"image\":\"<base64>\"}")]
         private void Capture(UnionAirRequestContext ctx)
             => new CameraHandler().Handle(ctx.Request, ctx.Response);
 
@@ -342,7 +343,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("DELETE", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Removes a component from a GameObject. Query: target={\\\"type\\\":\\\"hierarchyPath\\\",\\\"value\\\":\\\"Path\\\"}&type=Rigidbody",
+            Summary = "Removes a component from a GameObject. Query: target={\\\"type\\\":\\\"componentPath\\\",\\\"value\\\":\\\"Path:Rigidbody\\\"}. Alternatively, target a GameObject with hierarchyPath and add ?type=Rigidbody.",
             RequiredQuery = new string[] { "target" },
             OptionalQuery = new string[] { "scenePath", "allowWhilePlaying" })]
         private void Remove(UnionAirRequestContext ctx)
@@ -351,7 +352,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Updates serialized component properties. Query: target={\\\"type\\\":\\\"hierarchyPath\\\",\\\"value\\\":\\\"Path\\\"}. Use Unity serialized property names.",
+            Summary = "Updates serialized component properties. Query: target={\\\"type\\\":\\\"componentPath\\\",\\\"value\\\":\\\"Path:ComponentType\\\"}. Alternatively, target a GameObject with hierarchyPath and add ?type=ComponentName. Use Unity serialized property names.",
             RequiredQuery = new string[] { "target" },
             OptionalQuery = new string[] { "scenePath", "allowWhilePlaying" },
             RequiredBody = new string[] { "properties" },
