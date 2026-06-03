@@ -53,7 +53,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
 
             var sb = new StringBuilder();
-            var counter = new int[1]; // use array for ref-in-lambda compatibility
+            int counter = 0;
             bool truncated = false;
 
             sb.Append("{\"scene\":\"");
@@ -79,12 +79,12 @@ namespace LeonAkasaka.UnionAir.Editor
                 bool first = true;
                 for (int i = 0; i < root.transform.childCount; i++)
                 {
-                    if (counter[0] >= limit) { truncated = true; break; }
+                    if (counter >= limit) { truncated = true; break; }
                     if (!first) sb.Append(",");
                     first = false;
                     AppendNode(sb, root.transform.GetChild(i).gameObject,
                         subtreePath + "/" + root.transform.GetChild(i).name,
-                        0, maxDepth, compact, limit, counter, ref truncated);
+                        0, maxDepth, compact, limit, ref counter, ref truncated);
                 }
             }
             else
@@ -92,25 +92,25 @@ namespace LeonAkasaka.UnionAir.Editor
                 var roots = scene.GetRootGameObjects();
                 for (int i = 0; i < roots.Length; i++)
                 {
-                    if (counter[0] >= limit) { truncated = true; break; }
+                    if (counter >= limit) { truncated = true; break; }
                     if (i > 0) sb.Append(",");
                     AppendNode(sb, roots[i], roots[i].name,
-                        0, maxDepth, compact, limit, counter, ref truncated);
+                        0, maxDepth, compact, limit, ref counter, ref truncated);
                 }
             }
 
             sb.Append("],");
-            sb.Append($"\"totalReturned\":{counter[0]},");
+            sb.Append($"\"totalReturned\":{counter},");
             sb.Append($"\"truncated\":{RestResponse.FormatBool(truncated)}");
             sb.Append("}");
             RestResponse.Send(response, sb.ToString());
         }
 
         private static void AppendNode(StringBuilder sb, GameObject go, string path,
-            int currentDepth, int maxDepth, bool compact, int limit, int[] counter, ref bool truncated)
+            int currentDepth, int maxDepth, bool compact, int limit, ref int counter, ref bool truncated)
         {
-            if (counter[0] >= limit) { truncated = true; return; }
-            counter[0]++;
+            if (counter >= limit) { truncated = true; return; }
+            counter++;
 
             var t = go.transform;
 
@@ -136,47 +136,35 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append($"\"rotation\":{{\"x\":{RestResponse.FormatFloat(r.x)},\"y\":{RestResponse.FormatFloat(r.y)},\"z\":{RestResponse.FormatFloat(r.z)}}},");
                 sb.Append($"\"scale\":{{\"x\":{RestResponse.FormatFloat(s.x)},\"y\":{RestResponse.FormatFloat(s.y)},\"z\":{RestResponse.FormatFloat(s.z)}}}");
                 sb.Append("},\"children\":[");
-
-                if (maxDepth < 0 || currentDepth < maxDepth)
-                {
-                    int childCount = t.childCount;
-                    bool firstChild = true;
-                    for (int i = 0; i < childCount; i++)
-                    {
-                        if (counter[0] >= limit) { truncated = true; break; }
-                        if (!firstChild) sb.Append(",");
-                        firstChild = false;
-                        var child = t.GetChild(i).gameObject;
-                        AppendNode(sb, child, path + "/" + child.name,
-                            currentDepth + 1, maxDepth, compact, limit, counter, ref truncated);
-                    }
-                }
-
+                AppendChildren(sb, t, path, currentDepth, maxDepth, compact, limit, ref counter, ref truncated);
                 sb.Append("]");
             }
 
-            // In compact mode, still recurse into children if depth allows
-            if (compact)
+            if (compact && (maxDepth < 0 || currentDepth < maxDepth))
             {
-                if (maxDepth < 0 || currentDepth < maxDepth)
-                {
-                    sb.Append(",\"children\":[");
-                    int childCount = t.childCount;
-                    bool firstChild = true;
-                    for (int i = 0; i < childCount; i++)
-                    {
-                        if (counter[0] >= limit) { truncated = true; break; }
-                        if (!firstChild) sb.Append(",");
-                        firstChild = false;
-                        var child = t.GetChild(i).gameObject;
-                        AppendNode(sb, child, path + "/" + child.name,
-                            currentDepth + 1, maxDepth, compact, limit, counter, ref truncated);
-                    }
-                    sb.Append("]");
-                }
+                sb.Append(",\"children\":[");
+                AppendChildren(sb, t, path, currentDepth, maxDepth, compact, limit, ref counter, ref truncated);
+                sb.Append("]");
             }
 
             sb.Append("}");
+        }
+
+        private static void AppendChildren(StringBuilder sb, Transform t, string path,
+            int currentDepth, int maxDepth, bool compact, int limit, ref int counter, ref bool truncated)
+        {
+            if (maxDepth >= 0 && currentDepth >= maxDepth) return;
+
+            bool firstChild = true;
+            for (int i = 0; i < t.childCount; i++)
+            {
+                if (counter >= limit) { truncated = true; break; }
+                if (!firstChild) sb.Append(",");
+                firstChild = false;
+                var child = t.GetChild(i).gameObject;
+                AppendNode(sb, child, path + "/" + child.name,
+                    currentDepth + 1, maxDepth, compact, limit, ref counter, ref truncated);
+            }
         }
 
     }
