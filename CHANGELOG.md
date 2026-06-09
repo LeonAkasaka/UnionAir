@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `SerializedPropertySerializer` utility extracted from `ComponentWriteHandler` and extended with a read direction for reuse across asset and component property serialization.
 - `AssetUtils.EnsureDirectory` extracted from `MaterialWriteHandler` as a shared asset file system utility.
 - `GET /api/editor/menu-items` lists discoverable Unity Editor menu paths for use with `POST /api/editor/menu-item`.
+- `GET /api/editor/capture` and `GET /api/editor/capture/image` — capture the current view without specifying a camera. In Play mode, reads the composited GameView render texture via reflection, including Screen Space Overlay Canvas UI; falls back to `ScreenCapture.CaptureScreenshotAsTexture()` if reflection is unavailable. In Edit mode, renders the last active Scene View camera. Both endpoints accept optional `width`, `height`, `format`, and `quality` query parameters.
 
 ### Fixed
 

@@ -116,6 +116,23 @@ namespace LeonAkasaka.UnionAir.Editor
             Summary = "Advances one frame while paused in Play mode.")]
         private void Step(UnionAirRequestContext ctx)
             => new EditorPlayHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("GET", "capture",
+            Category = UnionAirEndpointCategories.Read,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            Summary = "Captures the current view as a base64 image. In Play mode uses ScreenCapture (includes Canvas UI). In Edit mode uses the last active Scene View.",
+            OptionalQuery = new string[] { "width", "height", "format", "quality" },
+            ResponseExample = "{\"source\":\"screen\",\"cameraName\":\"Main Camera\",\"width\":1920,\"height\":1080,\"format\":\"jpeg\",\"mimeType\":\"image/jpeg\",\"image\":\"<base64>\"}")]
+        private void CaptureView(UnionAirRequestContext ctx)
+            => new EditorCaptureHandler().HandleCapture(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("GET", "capture/image",
+            Category = UnionAirEndpointCategories.Read,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            Summary = "Captures the current view and returns binary image data. Follows the same rules as GET /api/editor/capture.",
+            OptionalQuery = new string[] { "width", "height", "format", "quality" })]
+        private void CaptureViewImage(UnionAirRequestContext ctx)
+            => new EditorCaptureHandler().HandleCaptureImage(ctx.Request, ctx.Response);
     }
 
     [UnionAirController("cameras")]

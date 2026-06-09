@@ -2347,3 +2347,99 @@ Advances by one frame. Valid only when `isPaused: true`.
 |-----------|------|
 | 400 | Not in Play mode, or not paused |
 | 403 | Play Mode category is disabled |
+
+---
+
+## GET /api/editor/capture
+
+Captures the current view and returns a base64-encoded image.
+
+- **Play mode**: reads `GameView.m_RenderTexture` via Unity internal reflection — the fully composited frame including Screen Space Overlay Canvas UI. Falls back to `ScreenCapture.CaptureScreenshotAsTexture()` if reflection is unavailable.
+- **Edit mode**: renders the last active Scene View camera using `camera.Render()`.
+
+The `target` parameter is not required; the endpoint automatically selects the appropriate source based on the current Editor state.
+
+### Query Parameters
+
+| Parameter | Default | Description |
+|-------------|-----------|------|
+| `width` | native width (Play) / `640` (Edit) | Output width (px), max 1920 |
+| `height` | native height (Play) / `360` (Edit) | Output height (px), max 1080 |
+| `format` | `jpeg` | `png` or `jpeg` |
+| `quality` | `85` | JPEG quality (1–100, valid when `format=jpeg`) |
+
+### Response
+
+```json
+{
+  "source": "screen",
+  "cameraName": "Main Camera",
+  "width": 1920,
+  "height": 1080,
+  "format": "jpeg",
+  "mimeType": "image/jpeg",
+  "image": "<base64-encoded image data>"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `source` | `"screen"` in Play mode, `"sceneView"` in Edit mode |
+| `cameraName` | Name of `Camera.main` (Play mode) or the Scene View camera (Edit mode). Omitted when `Camera.main` is `null` |
+| `width` / `height` | Actual output dimensions |
+| `image` | Base64-encoded image data |
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 500 | Screen capture failed (Play mode) |
+| 503 | No Scene View is currently open (Edit mode) |
+
+### Examples
+
+```bash
+# Capture the current view at default resolution
+curl http://localhost:8765/api/editor/capture
+
+# Capture at a specific resolution in PNG
+curl "http://localhost:8765/api/editor/capture?width=1280&height=720&format=png"
+```
+
+### Use with LLM / MCP Bridges
+
+The `mimeType` and `image` fields can be passed directly to an MCP image content block, the same as `/api/cameras/capture`.
+
+---
+
+## GET /api/editor/capture/image
+
+Same as `GET /api/editor/capture` but returns the binary image directly instead of a JSON wrapper.
+
+### Query Parameters
+
+Same as `GET /api/editor/capture` (`width`, `height`, `format`, `quality` — all optional).
+
+### Response
+
+`Content-Type: image/jpeg` (or `image/png`) binary stream. No JSON wrapper.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 500 | Screen capture failed (Play mode) |
+| 503 | No Scene View is currently open (Edit mode) |
+
+### Examples
+
+```bash
+# Open in browser to view directly
+open "http://localhost:8765/api/editor/capture/image"
+
+# Save to file
+curl -o screenshot.jpg "http://localhost:8765/api/editor/capture/image"
+
+# Save PNG at specified resolution
+curl -o view.png "http://localhost:8765/api/editor/capture/image?format=png&width=1280&height=720"
+```

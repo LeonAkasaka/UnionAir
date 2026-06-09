@@ -143,7 +143,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
-        private static byte[] RenderCamera(Camera cam, int width, int height, string format, int quality)
+        internal static byte[] RenderCamera(Camera cam, int width, int height, string format, int quality)
         {
             var prevTarget    = cam.targetTexture;
             var prevActive    = RenderTexture.active;
