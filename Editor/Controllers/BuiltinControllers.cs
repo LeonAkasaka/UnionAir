@@ -558,4 +558,191 @@ namespace LeonAkasaka.UnionAir.Editor
         private void Delete(UnionAirRequestContext ctx)
             => new ScriptableObjectWriteHandler().Handle(ctx.Request, ctx.Response);
     }
+
+    [UnionAirController("assets/texture-importer")]
+    internal sealed class TextureImporterController
+    {
+        [UnionAirEndpoint("PATCH", "{guid}",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Updates texture import settings and reimports the asset. Supported textureType values: Sprite, Default, NormalMap, GUI, Cursor, Cookie, Lightmap, SingleChannel. spriteMode: Single, Multiple, Polygon (Sprite type only).",
+            PathParams = new string[] { "guid" },
+            OptionalBody = new string[] { "textureType", "spriteMode", "pixelsPerUnit" },
+            RequestExample = "{\"textureType\":\"Sprite\",\"spriteMode\":\"Single\",\"pixelsPerUnit\":100}",
+            ResponseExample = "{\"guid\":\"...\",\"assetPath\":\"Assets/Actors/portrait.png\",\"textureType\":\"Sprite\",\"spriteMode\":\"Single\",\"pixelsPerUnit\":100.0}")]
+        private void Update(UnionAirRequestContext ctx)
+            => new TextureImporterHandler().HandleUpdate(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+    }
+
+    [UnionAirController("assets/animation-clips")]
+    internal sealed class AnimationClipsController
+    {
+        [UnionAirEndpoint("POST", "",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Creates an AnimationClip asset.",
+            RequiredBody = new string[] { "assetPath" },
+            OptionalBody = new string[] { "frameRate", "wrapMode" },
+            RequestExample = "{\"assetPath\":\"Assets/Animations/Walk.anim\",\"frameRate\":60,\"wrapMode\":\"Loop\"}",
+            ResponseExample = "{\"assetPath\":\"Assets/Animations/Walk.anim\",\"guid\":\"...\",\"frameRate\":60.0,\"length\":0.0}")]
+        private void Create(UnionAirRequestContext ctx)
+            => new AnimationClipHandler().HandleCreate(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("GET", "{guid}",
+            Category = UnionAirEndpointCategories.Read,
+            Summary = "Returns AnimationClip metadata and all property curves.",
+            PathParams = new string[] { "guid" })]
+        private void Detail(UnionAirRequestContext ctx)
+            => new AnimationClipHandler().HandleRead(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("POST", "{guid}/curves",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Adds or replaces float curves and/or object reference curves on an AnimationClip. At least one of 'curves' or 'objectReferenceCurves' must be provided. Each entry requires relativePath, type (C# type name, e.g. Transform), property, and keys array. Object reference keys use 'guid' to reference assets; for Sprite-type textures the Sprite sub-asset is loaded automatically.",
+            PathParams = new string[] { "guid" },
+            OptionalBody = new string[] { "curves", "objectReferenceCurves" },
+            RequestExample = "{\"objectReferenceCurves\":[{\"relativePath\":\"\",\"type\":\"UnityEngine.UI.Image\",\"property\":\"m_Sprite\",\"keys\":[{\"time\":0.0,\"guid\":\"abc123...\"},{\"time\":0.1667,\"guid\":\"def456...\"}]}]}",
+            ResponseExample = "{\"added\":[\"m_Sprite\"],\"addedFloat\":[],\"addedObjectReference\":[\"m_Sprite\"],\"errors\":[]}")]
+        private void AddCurves(UnionAirRequestContext ctx)
+            => new AnimationClipHandler().HandleAddCurves(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("DELETE", "{guid}/curves",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Removes curves from an AnimationClip by binding. Each binding requires relativePath, type, and property.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "bindings" },
+            RequestExample = "{\"bindings\":[{\"relativePath\":\"Hips\",\"type\":\"Transform\",\"property\":\"localPosition.y\"}]}",
+            ResponseExample = "{\"removed\":[\"localPosition.y\"],\"errors\":[]}")]
+        private void DeleteCurves(UnionAirRequestContext ctx)
+            => new AnimationClipHandler().HandleDeleteCurves(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+    }
+
+    [UnionAirController("assets/animator-controllers")]
+    internal sealed class AnimatorControllersController
+    {
+        [UnionAirEndpoint("POST", "",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Creates an AnimatorController asset with a default Base Layer.",
+            RequiredBody = new string[] { "assetPath" },
+            RequestExample = "{\"assetPath\":\"Assets/Animations/Character.controller\"}",
+            ResponseExample = "{\"assetPath\":\"Assets/Animations/Character.controller\",\"guid\":\"...\",\"layerCount\":1}")]
+        private void Create(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleCreate(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("GET", "{guid}",
+            Category = UnionAirEndpointCategories.Read,
+            Summary = "Returns the full AnimatorController structure: layers, states, transitions, and parameters.",
+            PathParams = new string[] { "guid" })]
+        private void Detail(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleRead(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("POST", "{guid}/parameters",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Adds or replaces a parameter on an AnimatorController. type must be Float, Int, Bool, or Trigger.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "name", "type" },
+            OptionalBody = new string[] { "defaultValue" },
+            RequestExample = "{\"name\":\"Speed\",\"type\":\"Float\",\"defaultValue\":0.0}",
+            ResponseExample = "{\"added\":\"Speed\",\"type\":\"Float\"}")]
+        private void AddParameter(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleAddParameter(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("DELETE", "{guid}/parameters",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Removes a parameter from an AnimatorController by name.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "name" },
+            RequestExample = "{\"name\":\"Speed\"}",
+            ResponseExample = "{\"removed\":\"Speed\"}")]
+        private void DeleteParameter(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleDeleteParameter(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("POST", "{guid}/layers",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Adds a layer to an AnimatorController.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "name" },
+            OptionalBody = new string[] { "weight" },
+            RequestExample = "{\"name\":\"Arms\",\"weight\":1.0}",
+            ResponseExample = "{\"added\":\"Arms\",\"layerIndex\":1}")]
+        private void AddLayer(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleAddLayer(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("POST", "{guid}/states",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Adds a state to a layer of an AnimatorController. 'motion' is an optional object with a 'guid' field referencing an AnimationClip asset.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "name" },
+            OptionalBody = new string[] { "layerIndex", "motion", "speed", "setAsDefault" },
+            RequestExample = "{\"name\":\"Walk\",\"layerIndex\":0,\"motion\":{\"guid\":\"abc123...\"},\"speed\":1.0,\"setAsDefault\":false}",
+            ResponseExample = "{\"added\":\"Walk\",\"layerIndex\":0,\"isDefault\":false}")]
+        private void AddState(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleAddState(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("PATCH", "{guid}/states",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Updates a state in an AnimatorController. Identify the state by 'name' and optionally 'layerIndex'.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "name" },
+            OptionalBody = new string[] { "layerIndex", "newName", "motion", "speed", "setAsDefault" },
+            RequestExample = "{\"name\":\"Walk\",\"layerIndex\":0,\"motion\":{\"guid\":\"abc123...\"},\"speed\":1.5}",
+            ResponseExample = "{\"updated\":\"Walk\",\"layerIndex\":0}")]
+        private void UpdateState(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleUpdateState(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("DELETE", "{guid}/states",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Removes a state from an AnimatorController layer.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "name" },
+            OptionalBody = new string[] { "layerIndex" },
+            RequestExample = "{\"name\":\"Walk\",\"layerIndex\":0}",
+            ResponseExample = "{\"removed\":\"Walk\",\"layerIndex\":0}")]
+        private void DeleteState(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleDeleteState(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("POST", "{guid}/transitions",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Adds a transition between states in an AnimatorController. Use 'AnyState' as 'from' for any-state transitions, and 'Exit' as 'to' for exit transitions. Condition modes: If, IfNot, Greater, Less, Equals, NotEqual.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "from", "to" },
+            OptionalBody = new string[] { "layerIndex", "hasExitTime", "exitTime", "duration", "offset", "conditions" },
+            RequestExample = "{\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0,\"hasExitTime\":false,\"duration\":0.25,\"conditions\":[{\"parameter\":\"Speed\",\"mode\":\"Greater\",\"threshold\":0.1}]}",
+            ResponseExample = "{\"added\":true,\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0}")]
+        private void AddTransition(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleAddTransition(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("PATCH", "{guid}/transitions",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Updates an existing transition. Identifies the transition by 'from' and 'to' state names.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "from", "to" },
+            OptionalBody = new string[] { "layerIndex", "hasExitTime", "exitTime", "duration", "offset", "conditions" },
+            RequestExample = "{\"from\":\"Idle\",\"to\":\"Walk\",\"duration\":0.1,\"conditions\":[{\"parameter\":\"Speed\",\"mode\":\"Greater\",\"threshold\":0.5}]}",
+            ResponseExample = "{\"updated\":true,\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0}")]
+        private void UpdateTransition(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleUpdateTransition(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("DELETE", "{guid}/transitions",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Removes a transition from an AnimatorController. Identifies the transition by 'from' and 'to' state names.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "from", "to" },
+            OptionalBody = new string[] { "layerIndex" },
+            RequestExample = "{\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0}",
+            ResponseExample = "{\"removed\":true,\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0}")]
+        private void DeleteTransition(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleDeleteTransition(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+    }
 }

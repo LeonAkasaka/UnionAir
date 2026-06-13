@@ -8,6 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `PATCH /api/assets/texture-importer/{guid}` — updates texture import settings (`textureType`, `spriteMode`, `pixelsPerUnit`) and calls `SaveAndReimport()`. Required for converting Texture2D assets to Sprite type before using them in object reference curves.
+- `POST /api/assets/animation-clips` — creates an AnimationClip asset with optional `frameRate` and `wrapMode`.
+- `GET /api/assets/animation-clips/{guid}` — returns clip metadata, all float curves, and all object reference curves (sprite-swap style).
+- `POST /api/assets/animation-clips/{guid}/curves` — adds or replaces float curves (`curves`) and object reference curves (`objectReferenceCurves`) in a single call. For Sprite-mode textures, the Sprite sub-asset is loaded automatically via `AssetDatabase.LoadAssetAtPath<Sprite>` to avoid type mismatches with `m_Sprite`.
+- `DELETE /api/assets/animation-clips/{guid}/curves` — removes curves by binding. Automatically selects `AnimationUtility.SetObjectReferenceCurve(clip, binding, null)` for PPtr bindings and `clip.SetCurve(..., null)` for float bindings.
+- `POST /api/assets/animator-controllers` — creates an AnimatorController asset (includes a default Base Layer).
+- `GET /api/assets/animator-controllers/{guid}` — returns the full controller structure: parameters, layers, states (with motion and transitions), and any-state transitions.
+- `POST /api/assets/animator-controllers/{guid}/parameters` — adds or replaces a Float/Int/Bool/Trigger parameter with an optional default value.
+- `DELETE /api/assets/animator-controllers/{guid}/parameters` — removes a parameter by name.
+- `POST /api/assets/animator-controllers/{guid}/layers` — adds a layer with optional weight.
+- `POST /api/assets/animator-controllers/{guid}/states` — adds a state with optional motion GUID, speed, and default-state flag.
+- `PATCH /api/assets/animator-controllers/{guid}/states` — updates an existing state (rename, motion, speed, default).
+- `DELETE /api/assets/animator-controllers/{guid}/states` — removes a state by name.
+- `POST /api/assets/animator-controllers/{guid}/transitions` — adds a transition; supports `AnyState` as source and `Exit` as destination; accepts `hasExitTime`, `duration`, `offset`, and a `conditions` array with `If`/`IfNot`/`Greater`/`Less`/`Equals`/`NotEqual` modes.
+- `PATCH /api/assets/animator-controllers/{guid}/transitions` — updates an existing transition identified by `from`/`to` names.
+- `DELETE /api/assets/animator-controllers/{guid}/transitions` — removes a transition identified by `from`/`to` names.
+
+### Fixed
+
+- `POST /api/assets/animation-clips/{guid}/curves` — `objectReferenceCurves` keys now load `Sprite` sub-assets via `AssetDatabase.LoadAssetAtPath<Sprite>` instead of `LoadMainAssetAtPath`. The previous behavior returned a `Texture2D` for Sprite-mode PNGs, causing a type mismatch in `m_Sprite` that crashed Unity during animation preview.
+- `DELETE /api/assets/animation-clips/{guid}/curves` — bindings that match existing object reference (PPtr) curves are now removed with `AnimationUtility.SetObjectReferenceCurve(clip, binding, null)` instead of `clip.SetCurve(..., null)`, which silently did nothing for PPtr bindings.
+
+### Changed
+
+- `POST /api/assets/animation-clips/{guid}/curves` — `curves` is no longer declared as a required body field; `objectReferenceCurves` alone is now a valid payload.
+
 - `GET /api/help` — attribute-generated API manifest for LLMs, MCP bridges, and tools that cannot access the documentation directly
 - ASP.NET-style attribute routing with `[UnionAirController]` and `[UnionAirEndpoint]` as the source of truth for routing, help, category state, and the EditorWindow endpoint list
 - Custom handler discovery under `/api/custom/...`, managed separately in the UnionAir EditorWindow
