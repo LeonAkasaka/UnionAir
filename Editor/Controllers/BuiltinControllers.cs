@@ -189,7 +189,8 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "save",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Saves the active scene.")]
+            Summary = "Saves the active scene. Provide assetPath to save a new scene to a specific location (e.g. Assets/Scenes/MyScene.unity).",
+            OptionalBody = new string[] { "assetPath" })]
         private void Save(UnionAirRequestContext ctx)
             => new SceneSaveHandler().Handle(ctx.Request, ctx.Response);
     }
