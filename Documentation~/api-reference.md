@@ -3087,11 +3087,232 @@ Advances by one frame. Valid only when `isPaused: true`.
 
 ---
 
+## GET /api/playmode/input/actions
+
+Lists enabled Unity Input System actions in the running game.
+
+> Requires the optional `com.unity.inputsystem` package.
+> Can be called only when the Play Mode category is enabled.
+> Returns `409 Conflict` outside Play mode.
+
+### Response
+
+```json
+{
+  "actions": [
+    {
+      "name": "Jump",
+      "map": "Player",
+      "actionType": "Button",
+      "expectedControlType": "Button",
+      "bindings": ["<Keyboard>/space", "<Gamepad>/buttonSouth"]
+    }
+  ],
+  "count": 1
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `actions[].name` | InputAction name used by `POST /api/playmode/input/perform` or `POST /api/playmode/input/set` |
+| `actions[].map` | Action map name, or empty string |
+| `actions[].actionType` | Unity InputAction type, such as `Button`, `Value`, or `PassThrough` |
+| `actions[].expectedControlType` | Expected control type declared by the action |
+| `actions[].bindings` | Non-empty effective binding paths exposed by the action |
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 403 | Play Mode category is disabled |
+| 409 | Unity Editor is not in Play mode |
+
+---
+
+## POST /api/playmode/input/perform
+
+Performs a Button InputAction through a UnionAir virtual device. The action is matched by name, case-insensitively.
+
+> Requires the optional `com.unity.inputsystem` package.
+> Can be called only when the Play Mode category is enabled.
+> Returns `409 Conflict` outside Play mode.
+
+### Request Body (JSON)
+
+Tap a Button action:
+
+```json
+{ "action": "Jump" }
+```
+
+`mode` is optional and defaults to `tap`, which sends press -> update -> release -> update.
+
+Hold a Button action:
+
+```json
+{ "action": "Jump", "mode": "press" }
+```
+
+Release all controls held by UnionAir for that action:
+
+```json
+{ "action": "Jump", "mode": "release" }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `action` | Yes | InputAction name |
+| `mode` | No | `tap`, `press`, or `release`. Defaults to `tap` |
+
+`value` is not accepted by this endpoint. Axis, Vector2, and Stick actions use `POST /api/playmode/input/set`.
+
+For `tap` and `press`, UnionAir uses the first supported non-composite Button binding in the action's binding order. Supported Button devices are Keyboard, Gamepad, Mouse, and `<Pointer>/press` (mapped to the virtual Mouse left button). Touch, Pen, XR, custom devices, and composite bindings return `422`.
+
+For `release`, UnionAir releases every control currently held by UnionAir for that action. Callers do not need to specify the binding selected during `press`.
+
+### Response
+
+Tap:
+
+```json
+{
+  "success": true,
+  "action": "Jump",
+  "controlType": "Button",
+  "mode": "tap",
+  "pressedBinding": "<Keyboard>/space",
+  "pressedControl": "/UnionAirVirtualKeyboard/space",
+  "releasedControl": "/UnionAirVirtualKeyboard/space"
+}
+```
+
+Press:
+
+```json
+{
+  "success": true,
+  "action": "Jump",
+  "controlType": "Button",
+  "mode": "press",
+  "pressedBinding": "<Keyboard>/space",
+  "pressedControl": "/UnionAirVirtualKeyboard/space"
+}
+```
+
+Release:
+
+```json
+{
+  "success": true,
+  "action": "Jump",
+  "controlType": "Button",
+  "mode": "release",
+  "releasedControls": ["/UnionAirVirtualKeyboard/space"]
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `action` is missing, `mode` is invalid, `value` was provided, or the action is not a Button action |
+| 403 | Play Mode category is disabled |
+| 404 | Action not found |
+| 409 | Unity Editor is not in Play mode |
+| 422 | Button action exists, but no supported Keyboard/Gamepad/Mouse/Pointer Button binding can be simulated |
+
+---
+
+## POST /api/playmode/input/set
+
+Sets an Axis, Vector2, or Stick InputAction value through a UnionAir virtual device. The value remains active until another `set` call changes it, Play mode changes, or UnionAir cleans up its virtual devices.
+
+> Requires the optional `com.unity.inputsystem` package.
+> Can be called only when the Play Mode category is enabled.
+> Returns `409 Conflict` outside Play mode.
+
+### Request Body (JSON)
+
+Vector2 / Stick action:
+
+```json
+{ "action": "Move", "value": [1.0, 0.0] }
+```
+
+Return to neutral:
+
+```json
+{ "action": "Move", "value": [0.0, 0.0] }
+```
+
+Axis action:
+
+```json
+{ "action": "Throttle", "value": 1.0 }
+```
+
+Return to neutral:
+
+```json
+{ "action": "Throttle", "value": 0.0 }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `action` | Yes | InputAction name |
+| `value` | Yes | Axis: finite number; Vector2/Stick: `[x, y]` |
+
+For actions with multiple bindings, UnionAir uses the first supported direct Gamepad value binding in the action's binding order. Supported set bindings are `<Gamepad>/leftStick`, `<Gamepad>/rightStick`, `<Gamepad>/leftTrigger`, `<Gamepad>/rightTrigger`, and Gamepad stick x/y axes. Keyboard composites such as WASD, arrow-key composites, Touch, Pen, XR, custom devices, and other controls return `422`.
+
+### Response
+
+Vector2:
+
+```json
+{
+  "success": true,
+  "action": "Move",
+  "controlType": "Vector2",
+  "value": [1.0, 0.0],
+  "setBinding": "<Gamepad>/leftStick",
+  "setControl": "/UnionAirVirtualGamepad/leftStick"
+}
+```
+
+Axis:
+
+```json
+{
+  "success": true,
+  "action": "Throttle",
+  "controlType": "Axis",
+  "value": 1.0,
+  "setBinding": "<Gamepad>/rightTrigger",
+  "setControl": "/UnionAirVirtualGamepad/rightTrigger"
+}
+```
+
+### Notes
+
+UnionAir reports the binding/control it wrote, but Unity Input System remains responsible for action resolution after the virtual device event is queued. `PlayerInput` device pairing, control schemes, binding masks, interactions, processors, and action enablement can still prevent an action from observing the virtual device.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `action` is missing, `value` is malformed or missing, or the action is a Button action |
+| 403 | Play Mode category is disabled |
+| 404 | Action not found |
+| 409 | Unity Editor is not in Play mode |
+| 422 | Action exists, but no supported direct Gamepad Axis/Vector2 binding can be set |
+
+---
+
 ## GET /api/editor/capture
 
 Captures the current view and returns a base64-encoded image.
 
-- **Play mode**: reads `GameView.m_RenderTexture` via Unity internal reflection — the fully composited frame including Screen Space Overlay Canvas UI. Falls back to `ScreenCapture.CaptureScreenshotAsTexture()` if reflection is unavailable.
+- **Play mode**: reads `GameView.m_RenderTexture` via Unity internal reflection - the fully composited current GameView frame including Screen Space Overlay Canvas UI. Falls back to `ScreenCapture.CaptureScreenshotAsTexture()` if reflection is unavailable. `width` and `height` resize the captured output image; they do not resize the GameView, Canvas, viewport, or render a new frame at that resolution.
 - **Edit mode**: renders the last active Scene View camera using `camera.Render()`.
 
 The `target` parameter is not required; the endpoint automatically selects the appropriate source based on the current Editor state.
@@ -3100,8 +3321,8 @@ The `target` parameter is not required; the endpoint automatically selects the a
 
 | Parameter | Default | Description |
 |-------------|-----------|------|
-| `width` | native width (Play) / `640` (Edit) | Output width (px), max 1920 |
-| `height` | native height (Play) / `360` (Edit) | Output height (px), max 1080 |
+| `width` | native width (Play) / `640` (Edit) | Output width (px), max 1920. In Play mode this scales the captured GameView frame instead of re-rendering |
+| `height` | native height (Play) / `360` (Edit) | Output height (px), max 1080. In Play mode this scales the captured GameView frame instead of re-rendering |
 | `format` | `jpeg` | `png` or `jpeg` |
 | `quality` | `85` | JPEG quality (1–100, valid when `format=jpeg`) |
 
@@ -3139,7 +3360,7 @@ The `target` parameter is not required; the endpoint automatically selects the a
 # Capture the current view at default resolution
 curl http://localhost:8765/api/editor/capture
 
-# Capture at a specific resolution in PNG
+# Capture and resize the output image to a specific resolution in PNG
 curl "http://localhost:8765/api/editor/capture?width=1280&height=720&format=png"
 ```
 
@@ -3152,6 +3373,7 @@ The `mimeType` and `image` fields can be passed directly to an MCP image content
 ## GET /api/editor/capture/image
 
 Same as `GET /api/editor/capture` but returns the binary image directly instead of a JSON wrapper.
+In Play mode, `width` and `height` resize the captured GameView frame; they do not re-render the GameView at that resolution.
 
 ### Query Parameters
 
@@ -3177,6 +3399,6 @@ open "http://localhost:8765/api/editor/capture/image"
 # Save to file
 curl -o screenshot.jpg "http://localhost:8765/api/editor/capture/image"
 
-# Save PNG at specified resolution
+# Save PNG with the output image resized to the specified resolution
 curl -o view.png "http://localhost:8765/api/editor/capture/image?format=png&width=1280&height=720"
 ```

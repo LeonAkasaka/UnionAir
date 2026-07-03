@@ -19,7 +19,8 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static void OnPlayModeChanged(PlayModeStateChange state)
         {
-            if (state == PlayModeStateChange.ExitingPlayMode)
+            if (state == PlayModeStateChange.EnteredPlayMode ||
+                state == PlayModeStateChange.ExitingPlayMode)
                 PlayModeInputHandler.Cleanup();
         }
     }

@@ -24,15 +24,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `POST /api/assets/animator-controllers/{guid}/transitions` — adds a transition; supports `AnyState` as source and `Exit` as destination; accepts `hasExitTime`, `duration`, `offset`, and a `conditions` array with `If`/`IfNot`/`Greater`/`Less`/`Equals`/`NotEqual` modes.
 - `PATCH /api/assets/animator-controllers/{guid}/transitions` — updates an existing transition identified by `from`/`to` names.
 - `DELETE /api/assets/animator-controllers/{guid}/transitions` — removes a transition identified by `from`/`to` names.
+- `POST /api/playmode/input/set` — sets Axis, Vector2, and Stick InputAction values on supported virtual Gamepad controls. Values remain active until another set call or Play mode cleanup.
 
 ### Fixed
 
+- `POST /api/playmode/input/perform` now handles Gamepad trigger Button bindings as trigger axis state instead of button bitfield flags, validates Vector2 values as finite numbers, and preserves held Button records when `tap` is called while the same action is pressed.
+- `POST /api/playmode/input/perform` now sends full virtual device state for Button actions instead of delta events against bitfield controls, avoiding Keyboard `Key` delta-state failures.
 - `POST /api/assets/animation-clips/{guid}/curves` — `objectReferenceCurves` keys now load `Sprite` sub-assets via `AssetDatabase.LoadAssetAtPath<Sprite>` instead of `LoadMainAssetAtPath`. The previous behavior returned a `Texture2D` for Sprite-mode PNGs, causing a type mismatch in `m_Sprite` that crashed Unity during animation preview.
 - `DELETE /api/assets/animation-clips/{guid}/curves` — bindings that match existing object reference (PPtr) curves are now removed with `AnimationUtility.SetObjectReferenceCurve(clip, binding, null)` instead of `clip.SetCurve(..., null)`, which silently did nothing for PPtr bindings.
 
 ### Changed
 
 - `POST /api/assets/animation-clips/{guid}/curves` — `curves` is no longer declared as a required body field; `objectReferenceCurves` alone is now a valid payload.
+- `POST /api/playmode/input/perform` is now Button-only with `mode` (`tap`, `press`, `release`) instead of `value`; Axis, Vector2, and Stick values use `POST /api/playmode/input/set`.
+- Clarified that `GET /api/editor/capture` and `GET /api/editor/capture/image` resize the captured GameView frame in Play mode instead of re-rendering the GameView at the requested `width` and `height`.
 
 - `GET /api/help` — attribute-generated API manifest for LLMs, MCP bridges, and tools that cannot access the documentation directly
 - ASP.NET-style attribute routing with `[UnionAirController]` and `[UnionAirEndpoint]` as the source of truth for routing, help, category state, and the EditorWindow endpoint list

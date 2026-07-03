@@ -20,10 +20,20 @@ namespace LeonAkasaka.UnionAir.Editor
             UseRiskOverride = true,
             Risk = UnionAirEndpointRisk.Custom,
             PlayModePolicy = UnionAirPlayModePolicy.Allowed,
-            Summary = "Simulates an InputAction via a virtual device. Only available in Play mode.",
+            Summary = "Performs a Button InputAction through a virtual device. mode defaults to tap; unsupported Button bindings fail with 422. Only available in Play mode.",
             RequiredBody = new string[] { "action" },
-            OptionalBody = new string[] { "value" })]
+            OptionalBody = new string[] { "mode" })]
         private void Perform(UnionAirRequestContext ctx)
             => PlayModeInputHandler.HandlePerform(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "set",
+            Category = UnionAirEndpointCategories.PlayMode,
+            UseRiskOverride = true,
+            Risk = UnionAirEndpointRisk.Custom,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            Summary = "Sets an Axis, Vector2, or Stick InputAction value on a virtual device. Values remain until the next set or Play mode cleanup.",
+            RequiredBody = new string[] { "action", "value" })]
+        private void Set(UnionAirRequestContext ctx)
+            => PlayModeInputHandler.HandleSet(ctx.Request, ctx.Response);
     }
 }

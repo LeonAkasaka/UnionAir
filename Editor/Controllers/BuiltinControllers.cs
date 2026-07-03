@@ -120,7 +120,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "capture",
             Category = UnionAirEndpointCategories.Read,
             PlayModePolicy = UnionAirPlayModePolicy.Allowed,
-            Summary = "Captures the current view as a base64 image. In Play mode uses ScreenCapture (includes Canvas UI). In Edit mode uses the last active Scene View.",
+            Summary = "Captures the current view as a base64 image. In Play mode captures the current GameView frame and resizes the output image; it does not re-render at width/height. In Edit mode renders the last active Scene View.",
             OptionalQuery = new string[] { "width", "height", "format", "quality" },
             ResponseExample = "{\"source\":\"screen\",\"cameraName\":\"Main Camera\",\"width\":1920,\"height\":1080,\"format\":\"jpeg\",\"mimeType\":\"image/jpeg\",\"image\":\"<base64>\"}")]
         private void CaptureView(UnionAirRequestContext ctx)
@@ -129,7 +129,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "capture/image",
             Category = UnionAirEndpointCategories.Read,
             PlayModePolicy = UnionAirPlayModePolicy.Allowed,
-            Summary = "Captures the current view and returns binary image data. Follows the same rules as GET /api/editor/capture.",
+            Summary = "Captures the current view and returns binary image data. Follows the same sizing rules as GET /api/editor/capture.",
             OptionalQuery = new string[] { "width", "height", "format", "quality" })]
         private void CaptureViewImage(UnionAirRequestContext ctx)
             => new EditorCaptureHandler().HandleCaptureImage(ctx.Request, ctx.Response);
