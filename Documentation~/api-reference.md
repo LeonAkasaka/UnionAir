@@ -3553,6 +3553,9 @@ Sets a semantic value on a Unity UI `Toggle`, `Slider`, `Dropdown`, or TextMeshP
 |-------|----------|-------------|
 | `target` | ✅ | Object reference resolving to a GameObject, `Toggle`, `Slider`, `Dropdown`, or `TMP_Dropdown` component |
 | `value` | ✅ | Boolean for `Toggle`, number for `Slider`, integer option index for `Dropdown` or `TMP_Dropdown` |
+
+Slider values outside `[minValue, maxValue]` are clamped to the range and the response
+includes `"clamped": true`. Dropdown option indexes out of range are rejected with 400.
 | `backend` | ❌ | `unityUi` (default) |
 | `scenePath` | ❌ | Loaded scene selector for `hierarchyPath` and `componentPath` targets |
 

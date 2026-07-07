@@ -258,8 +258,12 @@ namespace LeonAkasaka.UnionAir.Editor
                     RestResponse.SendError(response, $"Slider is not interactable: {GameObjectUtils.GetPath(slider.gameObject)}", 409);
                     return;
                 }
-                slider.value = Mathf.Clamp(value.Value, slider.minValue, slider.maxValue);
-                SendInteractionResponse(response, "value", slider, $"\"value\":{RestResponse.FormatFloat(slider.value)}");
+                var clampedValue = Mathf.Clamp(value.Value, slider.minValue, slider.maxValue);
+                var clamped = !Mathf.Approximately(clampedValue, value.Value);
+                slider.value = clampedValue;
+                var fields = $"\"value\":{RestResponse.FormatFloat(slider.value)}";
+                if (clamped) fields += ",\"clamped\":true";
+                SendInteractionResponse(response, "value", slider, fields);
                 return;
             }
 
