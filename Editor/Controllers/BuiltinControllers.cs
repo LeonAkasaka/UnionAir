@@ -162,6 +162,62 @@ namespace LeonAkasaka.UnionAir.Editor
             => new CameraHandler().Handle(ctx.Request, ctx.Response);
     }
 
+    [UnionAirController("playmode/ui")]
+    internal sealed class PlayModeUiController
+    {
+        [UnionAirEndpoint("GET", "elements",
+            Category = UnionAirEndpointCategories.PlayMode,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            Summary = "Lists interactable Unity UI and TextMeshPro UI elements in the running scene. Only available in Play mode.",
+            OptionalQuery = new string[] { "scenePath" })]
+        private void Elements(UnionAirRequestContext ctx)
+            => new PlayModeUiHandler().HandleElements(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "click",
+            Category = UnionAirEndpointCategories.PlayMode,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            Summary = "Clicks a Unity UI Button or IPointerClickHandler target. Only available in Play mode.",
+            RequiredBody = new string[] { "target" },
+            OptionalBody = new string[] { "scenePath", "backend", "normalizedPosition" },
+            RequestExample = "{\"target\":{\"type\":\"hierarchyPath\",\"value\":\"Canvas/Button\"}}",
+            ResponseExample = "{\"success\":true,\"backend\":\"unityUi\",\"action\":\"click\",\"path\":\"Canvas/Button\",\"clicked\":true}")]
+        private void Click(UnionAirRequestContext ctx)
+            => new PlayModeUiHandler().HandleClick(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "text",
+            Category = UnionAirEndpointCategories.PlayMode,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            Summary = "Sets text on a Unity UI InputField or TMP_InputField and optionally submits it. Only available in Play mode.",
+            RequiredBody = new string[] { "target", "text" },
+            OptionalBody = new string[] { "scenePath", "backend", "submit" },
+            RequestExample = "{\"target\":{\"type\":\"hierarchyPath\",\"value\":\"Canvas/Input\"},\"text\":\"hello\",\"submit\":true}",
+            ResponseExample = "{\"success\":true,\"backend\":\"unityUi\",\"action\":\"text\",\"path\":\"Canvas/Input\",\"text\":\"hello\"}")]
+        private void Text(UnionAirRequestContext ctx)
+            => new PlayModeUiHandler().HandleText(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "scroll",
+            Category = UnionAirEndpointCategories.PlayMode,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            Summary = "Scrolls a Unity UI ScrollRect by delta or normalized position. Only available in Play mode.",
+            RequiredBody = new string[] { "target" },
+            OptionalBody = new string[] { "scenePath", "backend", "delta", "normalizedPosition" },
+            RequestExample = "{\"target\":{\"type\":\"hierarchyPath\",\"value\":\"Canvas/List\"},\"delta\":{\"x\":0,\"y\":-1}}",
+            ResponseExample = "{\"success\":true,\"backend\":\"unityUi\",\"action\":\"scroll\",\"path\":\"Canvas/List\",\"normalizedPosition\":{\"x\":0,\"y\":1}}")]
+        private void Scroll(UnionAirRequestContext ctx)
+            => new PlayModeUiHandler().HandleScroll(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "value",
+            Category = UnionAirEndpointCategories.PlayMode,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            Summary = "Sets a Unity UI Toggle, Slider, Dropdown, or TMP_Dropdown value. Only available in Play mode.",
+            RequiredBody = new string[] { "target", "value" },
+            OptionalBody = new string[] { "scenePath", "backend" },
+            RequestExample = "{\"target\":{\"type\":\"hierarchyPath\",\"value\":\"Canvas/Toggle\"},\"value\":true}",
+            ResponseExample = "{\"success\":true,\"backend\":\"unityUi\",\"action\":\"value\",\"path\":\"Canvas/Toggle\",\"value\":true}")]
+        private void Value(UnionAirRequestContext ctx)
+            => new PlayModeUiHandler().HandleValue(ctx.Request, ctx.Response);
+    }
+
     [UnionAirController("scene")]
     internal sealed class SceneController
     {

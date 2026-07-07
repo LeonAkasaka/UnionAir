@@ -25,6 +25,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `PATCH /api/assets/animator-controllers/{guid}/transitions` — updates an existing transition identified by `from`/`to` names.
 - `DELETE /api/assets/animator-controllers/{guid}/transitions` — removes a transition identified by `from`/`to` names.
 - `POST /api/playmode/input/set` — sets Axis, Vector2, and Stick InputAction values on supported virtual Gamepad controls. Values remain active until another set call or Play mode cleanup.
+- `GET /api/playmode/ui/elements` — lists active Unity UI and TextMeshPro UI elements that can be targeted during Play mode.
+- `POST /api/playmode/ui/click` — clicks a Unity UI `Button` or `IPointerClickHandler` target during Play mode.
+- `POST /api/playmode/ui/text` — sets text on a Unity UI `InputField` or TextMeshPro `TMP_InputField` and optionally submits it during Play mode.
+- `POST /api/playmode/ui/scroll` — scrolls a Unity UI `ScrollRect` by wheel delta or normalized position during Play mode.
+- `POST /api/playmode/ui/value` — sets a Unity UI `Toggle`, `Slider`, `Dropdown`, or TextMeshPro `TMP_Dropdown` value during Play mode.
 
 ### Fixed
 

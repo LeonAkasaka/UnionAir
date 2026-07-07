@@ -3308,6 +3308,276 @@ UnionAir reports the binding/control it wrote, but Unity Input System remains re
 
 ---
 
+## GET /api/playmode/ui/elements
+
+Lists active Unity UI (uGUI) and TextMeshPro UI elements in the loaded scene that can be targeted by the Play Mode UI interaction APIs.
+
+> Can be called only in Play mode and only when the Play Mode category is enabled.
+> v1 supports Unity UI and TextMeshPro UI components. `backend` values in responses are reserved for future UI Toolkit support.
+
+### Query Parameters
+
+| Parameter | Required | Description |
+|-------------|------|------|
+| `scenePath` | ❌ | Loaded scene asset path or unambiguous scene name. If omitted, the active scene is used |
+
+### Response
+
+```json
+{
+  "backend": "unityUi",
+  "elements": [
+    {
+      "path": "Canvas/StartButton",
+      "globalObjectId": "GlobalObjectId_V1-...",
+      "componentGlobalObjectId": "GlobalObjectId_V1-...",
+      "type": "UnityEngine.UI.Button",
+      "interactable": true
+    },
+    {
+      "path": "Canvas/NameInput",
+      "globalObjectId": "GlobalObjectId_V1-...",
+      "componentGlobalObjectId": "GlobalObjectId_V1-...",
+      "type": "UnityEngine.UI.InputField",
+      "interactable": true,
+      "text": "Player"
+    },
+    {
+      "path": "Canvas/TMPDropdown",
+      "globalObjectId": "GlobalObjectId_V1-...",
+      "componentGlobalObjectId": "GlobalObjectId_V1-...",
+      "type": "TMPro.TMP_Dropdown",
+      "interactable": true,
+      "value": 0,
+      "optionCount": 3
+    }
+  ],
+  "count": 3
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 403 | Play Mode category is disabled |
+| 404 | `scenePath` does not match a loaded scene |
+| 409 | Not in Play mode, or `scenePath` is ambiguous |
+
+---
+
+## POST /api/playmode/ui/click
+
+Clicks a Unity UI `Button` or a component implementing `IPointerClickHandler`.
+
+> Can be called only in Play mode and only when the Play Mode category is enabled.
+> Requires an active `EventSystem` in the scene. UnionAir does not create one automatically.
+
+### Request Body (JSON)
+
+```json
+{
+  "target": { "type": "hierarchyPath", "value": "Canvas/StartButton" },
+  "backend": "unityUi",
+  "normalizedPosition": { "x": 0.5, "y": 0.5 }
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `target` | ✅ | Object reference resolving to a GameObject, `Button`, or `IPointerClickHandler` component |
+| `backend` | ❌ | `unityUi` (default). Other values are reserved for future UI Toolkit support |
+| `scenePath` | ❌ | Loaded scene selector for `hierarchyPath` and `componentPath` targets |
+| `normalizedPosition` | ❌ | Pointer position inside the target `RectTransform`, where `{ "x": 0.5, "y": 0.5 }` is the center |
+
+### Response
+
+```json
+{
+  "success": true,
+  "backend": "unityUi",
+  "action": "click",
+  "path": "Canvas/StartButton",
+  "globalObjectId": "GlobalObjectId_V1-...",
+  "component": "UnityEngine.UI.Button",
+  "componentGlobalObjectId": "GlobalObjectId_V1-...",
+  "clicked": true
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | Unsupported `backend`, malformed `target`, or malformed `normalizedPosition` |
+| 403 | Play Mode category is disabled |
+| 404 | Target or scene was not found |
+| 409 | Not in Play mode, no active `EventSystem`, or target is not interactable |
+| 422 | Target does not resolve to a click-capable Unity UI element |
+
+---
+
+## POST /api/playmode/ui/text
+
+Sets text on a Unity UI `InputField` or TextMeshPro `TMP_InputField` and optionally submits it.
+
+> Can be called only in Play mode and only when the Play Mode category is enabled.
+
+### Request Body (JSON)
+
+```json
+{
+  "target": { "type": "hierarchyPath", "value": "Canvas/NameInput" },
+  "text": "Player",
+  "submit": true
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `target` | ✅ | Object reference resolving to a GameObject, `UnityEngine.UI.InputField`, or `TMPro.TMP_InputField` component |
+| `text` | ✅ | Text to assign |
+| `submit` | ❌ | When `true`, invokes the input field end-edit callback after setting the value |
+| `backend` | ❌ | `unityUi` (default) |
+| `scenePath` | ❌ | Loaded scene selector for `hierarchyPath` and `componentPath` targets |
+
+### Response
+
+```json
+{
+  "success": true,
+  "backend": "unityUi",
+  "action": "text",
+  "path": "Canvas/NameInput",
+  "globalObjectId": "GlobalObjectId_V1-...",
+  "component": "UnityEngine.UI.InputField",
+  "componentGlobalObjectId": "GlobalObjectId_V1-...",
+  "text": "Player"
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | Missing `text`, unsupported `backend`, or malformed `target` |
+| 403 | Play Mode category is disabled |
+| 404 | Target or scene was not found |
+| 409 | Not in Play mode, no active `EventSystem`, or target is not interactable |
+| 422 | Target does not resolve to a Unity UI `InputField` or `TMP_InputField` |
+
+---
+
+## POST /api/playmode/ui/scroll
+
+Scrolls a Unity UI `ScrollRect` by scroll delta or by setting its normalized position.
+
+> Can be called only in Play mode and only when the Play Mode category is enabled.
+
+### Request Body (JSON)
+
+```json
+{
+  "target": { "type": "hierarchyPath", "value": "Canvas/List" },
+  "delta": { "x": 0, "y": -1 }
+}
+```
+
+Or set a normalized position directly:
+
+```json
+{
+  "target": { "type": "hierarchyPath", "value": "Canvas/List" },
+  "normalizedPosition": { "x": 0, "y": 1 }
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `target` | ✅ | Object reference resolving to a GameObject or `UnityEngine.UI.ScrollRect` component |
+| `delta` | ❌ | Scroll wheel delta object with `x` and/or `y` values |
+| `normalizedPosition` | ❌ | Direct normalized scroll position with `x` and/or `y` values |
+| `backend` | ❌ | `unityUi` (default) |
+| `scenePath` | ❌ | Loaded scene selector for `hierarchyPath` and `componentPath` targets |
+
+Provide either `delta` or `normalizedPosition`.
+
+### Response
+
+```json
+{
+  "success": true,
+  "backend": "unityUi",
+  "action": "scroll",
+  "path": "Canvas/List",
+  "globalObjectId": "GlobalObjectId_V1-...",
+  "component": "UnityEngine.UI.ScrollRect",
+  "componentGlobalObjectId": "GlobalObjectId_V1-...",
+  "normalizedPosition": { "x": 0, "y": 1 }
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | Missing both `delta` and `normalizedPosition`, unsupported `backend`, or malformed values |
+| 403 | Play Mode category is disabled |
+| 404 | Target or scene was not found |
+| 409 | Not in Play mode, no active `EventSystem`, or target is inactive |
+| 422 | Target does not resolve to a Unity UI `ScrollRect` |
+
+---
+
+## POST /api/playmode/ui/value
+
+Sets a semantic value on a Unity UI `Toggle`, `Slider`, `Dropdown`, or TextMeshPro `TMP_Dropdown`.
+
+> Can be called only in Play mode and only when the Play Mode category is enabled.
+
+### Request Body (JSON)
+
+```json
+{
+  "target": { "type": "hierarchyPath", "value": "Canvas/MusicToggle" },
+  "value": true
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `target` | ✅ | Object reference resolving to a GameObject, `Toggle`, `Slider`, `Dropdown`, or `TMP_Dropdown` component |
+| `value` | ✅ | Boolean for `Toggle`, number for `Slider`, integer option index for `Dropdown` or `TMP_Dropdown` |
+| `backend` | ❌ | `unityUi` (default) |
+| `scenePath` | ❌ | Loaded scene selector for `hierarchyPath` and `componentPath` targets |
+
+### Response
+
+```json
+{
+  "success": true,
+  "backend": "unityUi",
+  "action": "value",
+  "path": "Canvas/MusicToggle",
+  "globalObjectId": "GlobalObjectId_V1-...",
+  "component": "UnityEngine.UI.Toggle",
+  "componentGlobalObjectId": "GlobalObjectId_V1-...",
+  "value": true
+}
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | Missing or invalid `value`, unsupported `backend`, or malformed `target` |
+| 403 | Play Mode category is disabled |
+| 404 | Target or scene was not found |
+| 409 | Not in Play mode, no active `EventSystem`, or target is not interactable |
+| 422 | Target does not resolve to a supported Unity UI value component |
+
+---
+
 ## GET /api/editor/capture
 
 Captures the current view and returns a base64-encoded image.
