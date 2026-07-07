@@ -3393,7 +3393,7 @@ actually received the click.
 | `target` | ✅ | Object reference resolving to a GameObject, `Button`, or `IPointerClickHandler` component |
 | `backend` | ❌ | `unityUi` (default). Other values are reserved for future UI Toolkit support |
 | `scenePath` | ❌ | Loaded scene selector for `hierarchyPath` and `componentPath` targets |
-| `normalizedPosition` | ❌ | Pointer position inside the target `RectTransform`, where `{ "x": 0.5, "y": 0.5 }` is the center |
+| `normalizedPosition` | ❌ | Pointer position inside the target `RectTransform`, where `{ "x": 0.5, "y": 0.5 }` is the center. Missing or non-numeric coordinates default to `0.5`; values outside `0`–`1` are clamped |
 
 ### Response
 
@@ -3414,7 +3414,7 @@ actually received the click.
 
 | Status | Cause |
 |--------|-------|
-| 400 | Unsupported `backend`, malformed `target`, or malformed `normalizedPosition` |
+| 400 | Unsupported `backend` or malformed `target` |
 | 403 | Play Mode category is disabled |
 | 404 | Target or scene was not found |
 | 409 | Not in Play mode, no active `EventSystem`, or target is not interactable |
