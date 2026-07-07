@@ -144,11 +144,20 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            SetProperty(tmpInput, "text", text);
+            if (!SetProperty(tmpInput, "text", text))
+            {
+                RestResponse.SendError(response, $"Failed to set 'text' via reflection on {tmpInput.GetType().FullName}.", 500);
+                return;
+            }
             if (RequestBodyReader.GetBool(body, "submit") == true)
             {
-                InvokeUnityStringEvent(tmpInput, "onSubmit", text);
-                InvokeUnityStringEvent(tmpInput, "onEndEdit", text);
+                var submitted = InvokeUnityStringEvent(tmpInput, "onSubmit", text);
+                var endEdited = InvokeUnityStringEvent(tmpInput, "onEndEdit", text);
+                if (!submitted && !endEdited)
+                {
+                    RestResponse.SendError(response, $"Failed to invoke 'onSubmit'/'onEndEdit' via reflection on {tmpInput.GetType().FullName}.", 500);
+                    return;
+                }
             }
 
             var currentText = GetStringProperty(tmpInput, "text") ?? text;
@@ -300,7 +309,11 @@ namespace LeonAkasaka.UnionAir.Editor
                     RestResponse.SendError(response, $"TMP_Dropdown value is out of range: {value.Value}", 400);
                     return;
                 }
-                SetProperty(tmpDropdown, "value", value.Value);
+                if (!SetProperty(tmpDropdown, "value", value.Value))
+                {
+                    RestResponse.SendError(response, $"Failed to set 'value' via reflection on {tmpDropdown.GetType().FullName}.", 500);
+                    return;
+                }
                 InvokeMethod(tmpDropdown, "RefreshShownValue");
                 var currentValue = GetIntProperty(tmpDropdown, "value", value.Value);
                 SendInteractionResponse(response, "value", tmpDropdown, $"\"value\":{currentValue}");
@@ -581,32 +594,46 @@ namespace LeonAkasaka.UnionAir.Editor
             return (int)property.GetValue(component, null);
         }
 
-        private static void SetProperty(Component component, string propertyName, object value)
+        private static bool SetProperty(Component component, string propertyName, object value)
         {
             var property = component.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
-            if (property != null && property.CanWrite)
-                property.SetValue(component, value, null);
+            if (property == null || !property.CanWrite)
+                return false;
+
+            property.SetValue(component, value, null);
+            return true;
         }
 
         private static void InvokeMethod(Component component, string methodName)
         {
             var method = component.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
-            if (method != null)
-                method.Invoke(component, null);
+            if (method == null)
+            {
+                Debug.LogWarning($"[UnionAir] Method '{methodName}' not found on {component.GetType().FullName}; skipping.");
+                return;
+            }
+            method.Invoke(component, null);
         }
 
-        private static void InvokeUnityStringEvent(Component component, string propertyName, string value)
+        private static bool InvokeUnityStringEvent(Component component, string propertyName, string value)
         {
-            var property = component.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
-            var unityEvent = property == null ? null : property.GetValue(component, null);
-            if (unityEvent == null)
-            {
-                var field = component.GetType().GetField(propertyName, BindingFlags.Instance | BindingFlags.Public);
-                unityEvent = field == null ? null : field.GetValue(component);
-            }
+            var unityEvent = GetMemberValue(component, propertyName);
             var invoke = unityEvent?.GetType().GetMethod("Invoke", new[] { typeof(string) });
-            if (invoke != null)
-                invoke.Invoke(unityEvent, new object[] { value });
+            if (invoke == null)
+                return false;
+
+            invoke.Invoke(unityEvent, new object[] { value });
+            return true;
+        }
+
+        private static object GetMemberValue(Component component, string memberName)
+        {
+            var property = component.GetType().GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public);
+            if (property != null)
+                return property.GetValue(component, null);
+
+            var field = component.GetType().GetField(memberName, BindingFlags.Instance | BindingFlags.Public);
+            return field == null ? null : field.GetValue(component);
         }
 
         private static int GetOptionsCount(Component component)

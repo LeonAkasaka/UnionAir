@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `POST /api/playmode/ui/text` and `/value` no longer report `success:true` when the reflective TMP `text`/`value` setter or requested submit events cannot be found; they return 500 instead. A missing `RefreshShownValue` now logs a warning instead of being silently skipped.
 - Play Mode UI endpoints now recognize subclasses of `TMP_InputField` and `TMP_Dropdown`: TMP types are resolved once per domain load and matched with `IsInstanceOfType` instead of exact type-name comparison. `GET /api/playmode/ui/elements` also lists such subclasses, reports each element's actual component type in `type`, and no longer scans every scene component when looking for TMP elements (skipped entirely when TextMeshPro is not installed).
 - Short type names such as `Slider`, `Toggle`, and `Button` no longer resolve to same-named non-matching classes (e.g. `UnityEngine.UIElements.Slider`). Type resolution for `componentPath` references, component add/remove, ScriptableObject creation, and object reference `assetType` now filters candidates by the required base type and keeps scanning instead of returning the first name match.
 - `POST /api/playmode/input/perform` now handles Gamepad trigger Button bindings as trigger axis state instead of button bitfield flags, validates Vector2 values as finite numbers, and preserves held Button records when `tap` is called while the same action is pressed.
