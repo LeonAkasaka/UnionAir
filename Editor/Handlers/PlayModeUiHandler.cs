@@ -34,8 +34,13 @@ namespace LeonAkasaka.UnionAir.Editor
     internal static class UnityUiInteractionBackend
     {
         private const string UnityUiBackend = "unityUi";
-        private const string TmpInputFieldTypeName = "TMPro.TMP_InputField";
-        private const string TmpDropdownTypeName = "TMPro.TMP_Dropdown";
+
+        // Resolved once per domain load; null when TextMeshPro is not installed.
+        private static readonly Type TmpInputFieldType = ResolveTmpType("TMPro.TMP_InputField");
+        private static readonly Type TmpDropdownType = ResolveTmpType("TMPro.TMP_Dropdown");
+
+        private static Type ResolveTmpType(string fullName)
+            => Type.GetType(fullName + ", Unity.TextMeshPro") ?? ObjectRefUtils.ResolveType(fullName, typeof(Component));
 
         public static void HandleElements(HttpListenerRequest request, HttpListenerResponse response)
         {
@@ -45,14 +50,14 @@ namespace LeonAkasaka.UnionAir.Editor
             var sb = new StringBuilder();
             var count = 0;
             sb.Append("{\"backend\":\"unityUi\",\"elements\":[");
-            AppendElements<Button>(scene, sb, ref count, "Button", AppendButtonFields);
-            AppendElements<InputField>(scene, sb, ref count, "InputField", AppendInputFieldFields);
-            AppendElements<ScrollRect>(scene, sb, ref count, "ScrollRect", AppendScrollRectFields);
-            AppendElements<Toggle>(scene, sb, ref count, "Toggle", AppendToggleFields);
-            AppendElements<Slider>(scene, sb, ref count, "Slider", AppendSliderFields);
-            AppendElements<Dropdown>(scene, sb, ref count, "Dropdown", AppendDropdownFields);
-            AppendTmpElements(scene, sb, ref count, TmpInputFieldTypeName, AppendTmpInputFieldFields);
-            AppendTmpElements(scene, sb, ref count, TmpDropdownTypeName, AppendTmpDropdownFields);
+            AppendElements<Button>(scene, sb, ref count, AppendButtonFields);
+            AppendElements<InputField>(scene, sb, ref count, AppendInputFieldFields);
+            AppendElements<ScrollRect>(scene, sb, ref count, AppendScrollRectFields);
+            AppendElements<Toggle>(scene, sb, ref count, AppendToggleFields);
+            AppendElements<Slider>(scene, sb, ref count, AppendSliderFields);
+            AppendElements<Dropdown>(scene, sb, ref count, AppendDropdownFields);
+            AppendTmpElements(scene, sb, ref count, TmpInputFieldType, AppendTmpInputFieldFields);
+            AppendTmpElements(scene, sb, ref count, TmpDropdownType, AppendTmpDropdownFields);
             sb.Append("],\"count\":").Append(count).Append("}");
             RestResponse.Send(response, sb.ToString());
         }
@@ -127,7 +132,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var tmpInput = ResolveComponentByFullName(go, component, TmpInputFieldTypeName);
+            var tmpInput = ResolveComponentByType(go, component, TmpInputFieldType);
             if (tmpInput == null)
             {
                 RestResponse.SendError(response, $"target does not resolve to a UnityEngine.UI.InputField or TMPro.TMP_InputField: {GameObjectUtils.GetPath(go)}", 422);
@@ -275,7 +280,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var tmpDropdown = ResolveComponentByFullName(go, component, TmpDropdownTypeName);
+            var tmpDropdown = ResolveComponentByType(go, component, TmpDropdownType);
             if (tmpDropdown != null)
             {
                 var value = RequestBodyReader.GetInt(body, "value");
@@ -387,18 +392,12 @@ namespace LeonAkasaka.UnionAir.Editor
             return go == null ? null : go.GetComponent<T>();
         }
 
-        private static Component ResolveComponentByFullName(GameObject go, Component component, string fullName)
+        private static Component ResolveComponentByType(GameObject go, Component component, Type type)
         {
+            if (type == null) return null;
             if (component != null)
-                return component.GetType().FullName == fullName ? component : null;
-            if (go == null) return null;
-
-            foreach (var candidate in go.GetComponents<Component>())
-            {
-                if (candidate != null && candidate.GetType().FullName == fullName)
-                    return candidate;
-            }
-            return null;
+                return type.IsInstanceOfType(component) ? component : null;
+            return go == null ? null : go.GetComponent(type);
         }
 
         private static bool IsSelectableInteractable(Component component)
@@ -467,7 +466,6 @@ namespace LeonAkasaka.UnionAir.Editor
             UnityEngine.SceneManagement.Scene scene,
             StringBuilder sb,
             ref int count,
-            string typeName,
             Action<StringBuilder, T> appendFields) where T : Component
         {
             foreach (var component in UnityEngine.Object.FindObjectsByType<T>(FindObjectsInactive.Exclude))
@@ -477,7 +475,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 if (count > 0) sb.Append(',');
                 count++;
-                AppendElementBase(sb, component, typeName);
+                AppendElementBase(sb, component);
                 appendFields(sb, component);
                 sb.Append('}');
             }
@@ -487,31 +485,33 @@ namespace LeonAkasaka.UnionAir.Editor
             UnityEngine.SceneManagement.Scene scene,
             StringBuilder sb,
             ref int count,
-            string fullTypeName,
+            Type type,
             Action<StringBuilder, Component> appendFields)
         {
-            foreach (var component in UnityEngine.Object.FindObjectsByType<Component>(FindObjectsInactive.Exclude))
+            if (type == null) return;
+
+            foreach (var obj in UnityEngine.Object.FindObjectsByType(type, FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
-                if (component == null || component.gameObject.scene != scene || component.GetType().FullName != fullTypeName)
+                var component = obj as Component;
+                if (component == null || component.gameObject.scene != scene)
                     continue;
 
                 if (count > 0) sb.Append(',');
                 count++;
-                AppendElementBase(sb, component, fullTypeName);
+                AppendElementBase(sb, component);
                 appendFields(sb, component);
                 sb.Append('}');
             }
         }
 
-        private static void AppendElementBase(StringBuilder sb, Component component, string typeName)
+        private static void AppendElementBase(StringBuilder sb, Component component)
         {
             var go = component.gameObject;
             sb.Append('{');
             sb.Append($"\"path\":\"{RestResponse.EscapeJson(GameObjectUtils.GetPath(go))}\",");
             sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
             sb.Append($"\"componentGlobalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(component))}\",");
-            var emittedType = typeName.IndexOf(".", StringComparison.Ordinal) >= 0 ? typeName : "UnityEngine.UI." + typeName;
-            sb.Append($"\"type\":\"{RestResponse.EscapeJson(emittedType)}\",");
+            sb.Append($"\"type\":\"{RestResponse.EscapeJson(component.GetType().FullName)}\",");
         }
 
         private static void AppendSelectableFields(StringBuilder sb, Selectable selectable)
