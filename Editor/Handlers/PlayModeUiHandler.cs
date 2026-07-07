@@ -395,6 +395,18 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (candidate is IPointerClickHandler handler)
                     return handler;
             }
+
+            // Real pointer clicks bubble to the nearest ancestor handler via raycast,
+            // so mirror that when the targeted element itself is not clickable.
+            var handlerObject = ExecuteEvents.GetEventHandler<IPointerClickHandler>(go);
+            if (handlerObject != null && handlerObject != go)
+            {
+                foreach (var candidate in handlerObject.GetComponents<Component>())
+                {
+                    if (candidate is IPointerClickHandler handler)
+                        return handler;
+                }
+            }
             return null;
         }
 

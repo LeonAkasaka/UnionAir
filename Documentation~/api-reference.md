@@ -3370,6 +3370,11 @@ Lists active Unity UI (uGUI) and TextMeshPro UI elements in the loaded scene tha
 
 Clicks a Unity UI `Button` or a component implementing `IPointerClickHandler`.
 
+If the targeted element itself is not clickable (e.g. the `Text` child of a Button),
+the click falls back to the nearest ancestor click handler, mirroring how a real
+pointer click bubbles through the raycast. The response reports the component that
+actually received the click.
+
 > Can be called only in Play mode and only when the Play Mode category is enabled.
 > Requires an active `EventSystem` in the scene. UnionAir does not create one automatically.
 
