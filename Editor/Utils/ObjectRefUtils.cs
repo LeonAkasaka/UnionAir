@@ -259,7 +259,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            var componentType = ResolveType(typeName);
+            var componentType = ResolveType(typeName, typeof(Component));
             if (componentType == null)
             {
                 error = $"Unknown component type for {label}: {typeName}";
@@ -283,23 +283,30 @@ namespace LeonAkasaka.UnionAir.Editor
             return true;
         }
 
-        public static Type ResolveType(string typeName)
+        public static Type ResolveType(string typeName, Type requiredBaseType = null)
         {
             var t = Type.GetType(typeName);
-            if (t != null) return t;
+            if (Matches(t, requiredBaseType)) return t;
 
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
                 t = asm.GetType(typeName);
-                if (t != null) return t;
+                if (Matches(t, requiredBaseType)) return t;
 
                 foreach (var candidate in asm.GetTypes())
                 {
-                    if (candidate.Name == typeName || candidate.FullName == typeName)
+                    if ((candidate.Name == typeName || candidate.FullName == typeName) &&
+                        Matches(candidate, requiredBaseType))
                         return candidate;
                 }
             }
             return null;
+        }
+
+        private static bool Matches(Type type, Type requiredBaseType)
+        {
+            if (type == null) return false;
+            return requiredBaseType == null || requiredBaseType.IsAssignableFrom(type);
         }
 
         private static bool TryParseType(string typeName, out ObjectRefType type)

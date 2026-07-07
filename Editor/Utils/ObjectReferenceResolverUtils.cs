@@ -75,7 +75,6 @@ namespace LeonAkasaka.UnionAir.Editor
             string typeName,
             string label,
             string unknownTypeMessage,
-            string nonObjectTypeMessage,
             out string error,
             out int statusCode)
         {
@@ -83,12 +82,10 @@ namespace LeonAkasaka.UnionAir.Editor
             statusCode = 400;
             if (string.IsNullOrEmpty(typeName)) return null;
 
-            var type = ObjectRefUtils.ResolveType(typeName);
-            if (type != null && typeof(UnityEngine.Object).IsAssignableFrom(type)) return type;
+            var type = ObjectRefUtils.ResolveType(typeName, typeof(UnityEngine.Object));
+            if (type != null) return type;
 
-            error = type == null
-                ? string.Format(unknownTypeMessage, label, typeName)
-                : string.Format(nonObjectTypeMessage, label, typeName);
+            error = string.Format(unknownTypeMessage, label, typeName);
             return null;
         }
 
@@ -132,8 +129,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (typeName.StartsWith(prefix, StringComparison.Ordinal) && typeName.EndsWith(">", StringComparison.Ordinal))
                 typeName = typeName.Substring(prefix.Length, typeName.Length - prefix.Length - 1);
 
-            var type = ObjectRefUtils.ResolveType(typeName);
-            return type != null && typeof(UnityEngine.Object).IsAssignableFrom(type) ? type : null;
+            return ObjectRefUtils.ResolveType(typeName, typeof(UnityEngine.Object));
         }
     }
 }

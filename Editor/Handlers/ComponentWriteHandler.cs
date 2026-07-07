@@ -51,7 +51,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             scene = go.scene;
 
-            var type = ObjectRefUtils.ResolveType(typeName);
+            var type = ObjectRefUtils.ResolveType(typeName, typeof(Component));
             if (type == null)
             {
                 RestResponse.SendError(response, $"Unknown component type: {typeName}", 400);
@@ -234,7 +234,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            var type = ObjectRefUtils.ResolveType(typeName);
+            var type = ObjectRefUtils.ResolveType(typeName, typeof(Component));
             if (type == null)
             {
                 error = $"Unknown component type: {typeName}";
@@ -314,7 +314,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 requestedTypeName,
                 $"property {jsonKey}",
                 "Unknown object reference type for {0}: {1}",
-                "Type is not a UnityEngine.Object for {0}: {1}",
                 out error,
                 out statusCode);
             if (error != null) return false;

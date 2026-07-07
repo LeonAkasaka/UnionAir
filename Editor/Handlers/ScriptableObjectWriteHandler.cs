@@ -64,7 +64,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var type = ObjectRefUtils.ResolveType(typeName);
+            var type = ObjectRefUtils.ResolveType(typeName, typeof(ScriptableObject));
             if (type == null)
             {
                 RestResponse.SendError(response, $"Unknown type: {typeName}", 400);

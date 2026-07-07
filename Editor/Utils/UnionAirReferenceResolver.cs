@@ -378,7 +378,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 requestedTypeName,
                 label,
                 "Unknown object reference type for {0}: {1}",
-                "Type is not a UnityEngine.Object for {0}: {1}",
                 out error,
                 out statusCode);
             if (error != null) return false;
