@@ -282,7 +282,7 @@ namespace LeonAkasaka.UnionAir.Editor
             catch (System.Exception e) { UnityEngine.Debug.LogWarning($"[UnionAir] ListEnabledActions failed: {e.Message}"); }
 
             // PlayerInput components expose actions that may not be enabled yet.
-            foreach (var pi in Object.FindObjectsByType<PlayerInput>(FindObjectsInactive.Exclude))
+            foreach (var pi in Object.FindObjectsByType<PlayerInput>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
                 if (pi.actions == null) continue;
                 foreach (var map in pi.actions.actionMaps)

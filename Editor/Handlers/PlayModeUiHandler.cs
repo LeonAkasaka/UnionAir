@@ -497,7 +497,7 @@ namespace LeonAkasaka.UnionAir.Editor
             ref int count,
             Action<StringBuilder, T> appendFields) where T : Component
         {
-            foreach (var component in UnityEngine.Object.FindObjectsByType<T>(FindObjectsInactive.Exclude))
+            foreach (var component in UnityEngine.Object.FindObjectsByType<T>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
                 if (component == null || component.gameObject.scene != scene)
                     continue;

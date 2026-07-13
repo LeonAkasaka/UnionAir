@@ -83,7 +83,8 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var typeName = AssetDatabase.GetMainAssetTypeAtPath(assetPath)?.FullName ?? "Unknown";
             var deps     = AssetDatabase.GetDependencies(assetPath, false);
-            var labels   = AssetDatabase.GetLabels(new UnityEngine.GUID(guid));
+            var asset    = AssetDatabase.LoadMainAssetAtPath(assetPath);
+            var labels   = asset != null ? AssetDatabase.GetLabels(asset) : new string[0];
 
             var sb = new StringBuilder();
             sb.Append("{");
