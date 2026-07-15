@@ -79,7 +79,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         /// <summary>
         /// Performs a Button <see cref="UnityEngine.InputSystem.InputAction"/> via a virtual device.
-        /// The action is looked up by name (case-insensitive). Supported modes:
+        /// The action is looked up by Map/Action or by an unambiguous bare name (case-insensitive). Supported modes:
         /// <c>tap</c>, <c>press</c>, <c>release</c>.
         /// Responds with 409 when not in Play mode, 404 when the action is not found.
         /// </summary>
@@ -100,10 +100,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var action = FindAction(actionName);
+            var action = FindAction(actionName, out var candidates);
             if (action == null)
             {
-                RestResponse.SendError(response, $"Action not found: '{actionName}'", 404);
+                SendActionLookupError(response, actionName, candidates);
                 return;
             }
 
@@ -181,10 +181,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var action = FindAction(actionName);
+            var action = FindAction(actionName, out var candidates);
             if (action == null)
             {
-                RestResponse.SendError(response, $"Action not found: '{actionName}'", 404);
+                SendActionLookupError(response, actionName, candidates);
                 return;
             }
 
@@ -584,13 +584,57 @@ namespace LeonAkasaka.UnionAir.Editor
             return result;
         }
 
-        static InputAction FindAction(string name)
+        static InputAction FindAction(string identifier, out List<string> candidates)
         {
+            candidates = new List<string>();
+            InputAction match = null;
+            var slash = identifier.IndexOf('/');
+            var hasMap = slash > 0 && slash < identifier.Length - 1;
+            var requestedMap = hasMap ? identifier.Substring(0, slash) : null;
+            var requestedAction = hasMap ? identifier.Substring(slash + 1) : identifier;
+
             foreach (var a in CollectAllActions())
-                if (string.Equals(a.name, name, System.StringComparison.OrdinalIgnoreCase))
-                    return a;
-            return null;
+            {
+                if (!string.Equals(a.name, requestedAction, System.StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (hasMap && !string.Equals(a.actionMap?.name ?? "", requestedMap, System.StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                match = a;
+                candidates.Add(ActionIdentifier(a));
+            }
+
+            return candidates.Count == 1 ? match : null;
         }
+
+        static void SendActionLookupError(
+            HttpListenerResponse response,
+            string identifier,
+            List<string> candidates)
+        {
+            if (candidates.Count == 0)
+            {
+                RestResponse.SendError(response, $"Action not found: '{identifier}'", 404);
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("{\"error\":\"Action name is ambiguous: '")
+                .Append(RestResponse.EscapeJson(identifier))
+                .Append("'. Use Map/Action.\",\"candidates\":[");
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append("\"").Append(RestResponse.EscapeJson(candidates[i])).Append("\"");
+            }
+            sb.Append("]}");
+            RestResponse.Send(response, sb.ToString(), 409);
+        }
+
+        static string ActionIdentifier(InputAction action)
+            => string.IsNullOrEmpty(action.actionMap?.name)
+                ? action.name
+                : action.actionMap.name + "/" + action.name;
 
         static Gamepad EnsureVirtualGamepad()
         {

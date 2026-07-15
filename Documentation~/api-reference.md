@@ -3119,8 +3119,8 @@ Lists enabled Unity Input System actions in the running game.
 
 | Field | Description |
 |-------|-------------|
-| `actions[].name` | InputAction name used by `POST /api/playmode/input/perform` or `POST /api/playmode/input/set` |
-| `actions[].map` | Action map name, or empty string |
+| `actions[].name` | InputAction name. A bare name may be used by `perform` or `set` when it is unique |
+| `actions[].map` | Action map name, or empty string. Combine non-empty map and action names as `Map/Action` for an unambiguous identifier |
 | `actions[].actionType` | Unity InputAction type, such as `Button`, `Value`, or `PassThrough` |
 | `actions[].expectedControlType` | Expected control type declared by the action |
 | `actions[].bindings` | Non-empty effective binding paths exposed by the action |
@@ -3136,7 +3136,7 @@ Lists enabled Unity Input System actions in the running game.
 
 ## POST /api/playmode/input/perform
 
-Performs a Button InputAction through a UnionAir virtual device. The action is matched by name, case-insensitively.
+Performs a Button InputAction through a UnionAir virtual device. `action` accepts a case-insensitive `Map/Action` identifier or a bare action name when that name is unique.
 
 > Requires the optional `com.unity.inputsystem` package.
 > Can be called only when the Play Mode category is enabled.
@@ -3147,26 +3147,28 @@ Performs a Button InputAction through a UnionAir virtual device. The action is m
 Tap a Button action:
 
 ```json
-{ "action": "Jump" }
+{ "action": "Player/Jump" }
 ```
+
+The shorter `{ "action": "Jump" }` form is also accepted when only one collected action is named `Jump`.
 
 `mode` is optional and defaults to `tap`, which sends press -> update -> release -> update.
 
 Hold a Button action:
 
 ```json
-{ "action": "Jump", "mode": "press" }
+{ "action": "Player/Jump", "mode": "press" }
 ```
 
 Release all controls held by UnionAir for that action:
 
 ```json
-{ "action": "Jump", "mode": "release" }
+{ "action": "Player/Jump", "mode": "release" }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `action` | Yes | InputAction name |
+| `action` | Yes | `Map/Action` identifier, or a bare InputAction name when unique |
 | `mode` | No | `tap`, `press`, or `release`. Defaults to `tap` |
 
 `value` is not accepted by this endpoint. Axis, Vector2, and Stick actions use `POST /api/playmode/input/set`.
@@ -3223,14 +3225,14 @@ Release:
 | 400 | `action` is missing, `mode` is invalid, `value` was provided, or the action is not a Button action |
 | 403 | Play Mode category is disabled |
 | 404 | Action not found |
-| 409 | Unity Editor is not in Play mode, or a `/api/playmode/input/pointer` operation is in progress |
+| 409 | Unity Editor is not in Play mode, a pointer operation is in progress, or a bare action name matches multiple maps. Ambiguous responses include `candidates` |
 | 422 | Button action exists, but no supported Keyboard/Gamepad/Mouse/Pointer Button binding can be simulated |
 
 ---
 
 ## POST /api/playmode/input/set
 
-Sets an Axis, Vector2, or Stick InputAction value through a UnionAir virtual device. The value remains active until another `set` call changes it, Play mode changes, or UnionAir cleans up its virtual devices.
+Sets an Axis, Vector2, or Stick InputAction value through a UnionAir virtual device. `action` accepts a case-insensitive `Map/Action` identifier or a bare action name when that name is unique. The value remains active until another `set` call changes it, Play mode changes, or UnionAir cleans up its virtual devices.
 
 > Requires the optional `com.unity.inputsystem` package.
 > Can be called only when the Play Mode category is enabled.
@@ -3241,7 +3243,7 @@ Sets an Axis, Vector2, or Stick InputAction value through a UnionAir virtual dev
 Vector2 / Stick action:
 
 ```json
-{ "action": "Move", "value": [1.0, 0.0] }
+{ "action": "Player/Move", "value": [1.0, 0.0] }
 ```
 
 Return to neutral:
@@ -3264,7 +3266,7 @@ Return to neutral:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `action` | Yes | InputAction name |
+| `action` | Yes | `Map/Action` identifier, or a bare InputAction name when unique |
 | `value` | Yes | Axis: finite number; Vector2/Stick: `[x, y]` |
 
 For actions with multiple bindings, UnionAir uses the first supported direct Gamepad value binding in the action's binding order. Supported set bindings are `<Gamepad>/leftStick`, `<Gamepad>/rightStick`, `<Gamepad>/leftTrigger`, `<Gamepad>/rightTrigger`, and Gamepad stick x/y axes. Keyboard composites such as WASD, arrow-key composites, Touch, Pen, XR, custom devices, and other controls return `422`.
@@ -3308,7 +3310,7 @@ UnionAir reports the binding/control it wrote, but Unity Input System remains re
 | 400 | `action` is missing, `value` is malformed or missing, or the action is a Button action |
 | 403 | Play Mode category is disabled |
 | 404 | Action not found |
-| 409 | Unity Editor is not in Play mode, or a `/api/playmode/input/pointer` operation is in progress |
+| 409 | Unity Editor is not in Play mode, a pointer operation is in progress, or a bare action name matches multiple maps. Ambiguous responses include `candidates` |
 | 422 | Action exists, but no supported direct Gamepad Axis/Vector2 binding can be set |
 
 ---
