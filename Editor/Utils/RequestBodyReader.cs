@@ -171,8 +171,8 @@ namespace LeonAkasaka.UnionAir.Editor
             if (colonIdx < 0) return null;
 
             int start = colonIdx + 1;
-            while (start < json.Length && json[start] != '{') start++;
-            if (start >= json.Length) return null;
+            while (start < json.Length && char.IsWhiteSpace(json[start])) start++;
+            if (start >= json.Length || json[start] != '{') return null;
 
             int depth = 0;
             int end = start;

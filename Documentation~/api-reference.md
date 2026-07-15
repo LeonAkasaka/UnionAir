@@ -504,6 +504,8 @@ Reference shape:
 { "type": "hierarchyPath", "value": "Canvas/Button" }
 ```
 
+Object references must be JSON objects. A bare string such as `"Canvas/Button"` is not accepted.
+
 | Type | Value |
 |------|-------|
 | `hierarchyPath` | GameObject hierarchy path, such as `Canvas/Button`. This is the default when `type` is omitted |
@@ -3550,7 +3552,7 @@ actually received the click.
 
 | Status | Cause |
 |--------|-------|
-| 400 | Unsupported `backend` or malformed `target` |
+| 400 | Unsupported `backend`, missing `target`, or `target` is not an ObjectRef JSON object |
 | 403 | Play Mode category is disabled |
 | 404 | Target or scene was not found |
 | 409 | Not in Play mode, no active `EventSystem`, or target is not interactable |

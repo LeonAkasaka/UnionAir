@@ -44,7 +44,17 @@ namespace LeonAkasaka.UnionAir.Editor
             out string error,
             out int statusCode)
         {
-            return TryParse(RequestBodyReader.GetObject(body, fieldName), fieldName, out objectRef, out error, out statusCode);
+            var rawObject = RequestBodyReader.GetObject(body, fieldName);
+            if (rawObject == null && RequestBodyReader.GetString(body, fieldName) != null)
+            {
+                objectRef = default(ObjectRef);
+                error = $"Field {fieldName} must be an ObjectRef object such as " +
+                        "{\"type\":\"hierarchyPath\",\"value\":\"Canvas/Button\"}.";
+                statusCode = 400;
+                return false;
+            }
+
+            return TryParse(rawObject, fieldName, out objectRef, out error, out statusCode);
         }
 
         public static bool TryParse(
@@ -67,7 +77,7 @@ namespace LeonAkasaka.UnionAir.Editor
             rawValue = rawValue.Trim();
             if (rawValue.Length == 0 || rawValue[0] != '{')
             {
-                error = $"Field {fieldName} must be an object with type and value.";
+                error = $"Field {fieldName} must be an ObjectRef object with type and value.";
                 return false;
             }
 

@@ -176,7 +176,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "click",
             Category = UnionAirEndpointCategories.PlayMode,
             PlayModePolicy = UnionAirPlayModePolicy.Allowed,
-            Summary = "Clicks a Unity UI Button or IPointerClickHandler target. Only available in Play mode.",
+            Summary = "Clicks a Unity UI Button or IPointerClickHandler target. target must be an ObjectRef object such as {type: hierarchyPath, value: Canvas/Button}. Only available in Play mode.",
             RequiredBody = new string[] { "target" },
             OptionalBody = new string[] { "scenePath", "backend", "normalizedPosition" },
             RequestExample = "{\"target\":{\"type\":\"hierarchyPath\",\"value\":\"Canvas/Button\"}}",
