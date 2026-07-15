@@ -2038,7 +2038,7 @@ Reimports one project asset using `AssetDatabase.ImportAsset()`.
 | Field | Required | Description |
 |-------|----------|-------------|
 | `guid` | Conditional | GUID of the asset to reimport. Takes precedence when both fields are provided |
-| `assetPath` | Conditional | Project asset path. Required when `guid` is omitted |
+| `assetPath` | Conditional | Project-relative path under `Assets/` or `Packages/`. Required when `guid` is omitted. An existing file may be imported before Unity has assigned it a GUID |
 | `recursive` | ❌ | Adds `ImportAssetOptions.ImportRecursive` |
 | `forceUpdate` | ❌ | Adds `ImportAssetOptions.ForceUpdate` |
 
@@ -2062,6 +2062,7 @@ Reimports one project asset using `AssetDatabase.ImportAsset()`.
 | 403 | Asset Write category is disabled |
 | 404 | No matching asset exists |
 | 409 | The Unity Editor is in Play mode |
+| 422 | Unity imported the path but did not register an asset GUID |
 
 ---
 

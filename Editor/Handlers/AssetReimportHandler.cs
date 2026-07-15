@@ -12,6 +12,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     RequestBodyReader.GetString(body, "guid"),
                     RequestBodyReader.GetString(body, "assetPath"),
                     "asset",
+                    true,
                     out var guid,
                     out var assetPath,
                     out var error,
@@ -28,6 +29,12 @@ namespace LeonAkasaka.UnionAir.Editor
                 options |= ImportAssetOptions.ForceUpdate;
 
             AssetDatabase.ImportAsset(assetPath, options);
+            guid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (string.IsNullOrEmpty(guid))
+            {
+                RestResponse.SendError(response, "Asset import did not register a GUID: " + assetPath, 422);
+                return;
+            }
             RestResponse.Send(response,
                 "{\"reimported\":true,\"guid\":\"" + RestResponse.EscapeJson(guid) +
                 "\",\"assetPath\":\"" + RestResponse.EscapeJson(assetPath) +

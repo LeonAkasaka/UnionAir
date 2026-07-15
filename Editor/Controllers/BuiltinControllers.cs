@@ -504,7 +504,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "reimport",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Reimports one project asset.",
+            Summary = "Reimports one project asset by GUID or project-relative assetPath. Existing files under Assets/ or Packages/ may be imported before they have a GUID.",
             RequiredBody = new string[] { "guid or assetPath" },
             OptionalBody = new string[] { "recursive", "forceUpdate" })]
         private void Reimport(UnionAirRequestContext ctx)

@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text;
 using System.Reflection;
 using UnityEditor;
@@ -72,6 +73,21 @@ namespace LeonAkasaka.UnionAir.Editor
             out string error,
             out int statusCode)
         {
+            return TryResolveAssetPath(
+                guid, assetPath, label, false,
+                out resolvedGuid, out resolvedPath, out error, out statusCode);
+        }
+
+        public static bool TryResolveAssetPath(
+            string guid,
+            string assetPath,
+            string label,
+            bool allowUnimportedPath,
+            out string resolvedGuid,
+            out string resolvedPath,
+            out string error,
+            out int statusCode)
+        {
             resolvedGuid = "";
             resolvedPath = "";
             error = null;
@@ -97,7 +113,16 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            if (AssetDatabase.GetMainAssetTypeAtPath(assetPath) == null)
+            assetPath = assetPath.Replace('\\', '/');
+            if (!IsProjectAssetPath(assetPath))
+            {
+                error = label + " assetPath must be under Assets/ or Packages/: " + assetPath;
+                return false;
+            }
+
+            resolvedGuid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (string.IsNullOrEmpty(resolvedGuid) &&
+                (!allowUnimportedPath || (!File.Exists(assetPath) && !Directory.Exists(assetPath))))
             {
                 error = "Asset not found for " + label + ": " + assetPath;
                 statusCode = 404;
@@ -105,7 +130,24 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             resolvedPath = assetPath;
-            resolvedGuid = AssetDatabase.AssetPathToGUID(assetPath);
+            return true;
+        }
+
+        private static bool IsProjectAssetPath(string assetPath)
+        {
+            if (string.IsNullOrEmpty(assetPath) || Path.IsPathRooted(assetPath))
+                return false;
+
+            if (!(assetPath.StartsWith("Assets/", System.StringComparison.Ordinal) ||
+                  assetPath == "Assets" ||
+                  assetPath.StartsWith("Packages/", System.StringComparison.Ordinal) ||
+                  assetPath == "Packages"))
+                return false;
+
+            var segments = assetPath.Split('/');
+            foreach (var segment in segments)
+                if (segment == "..") return false;
+
             return true;
         }
 
