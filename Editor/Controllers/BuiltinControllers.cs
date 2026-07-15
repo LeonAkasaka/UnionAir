@@ -26,7 +26,7 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         [UnionAirEndpoint("GET", "status",
             Category = UnionAirEndpointCategories.Read,
-            Summary = "Returns the Unity Editor execution status. Poll this after POST /api/editor/refresh until isCompiling is false; connection-refused during domain reload is expected — retry with backoff.",
+            Summary = "Returns the Unity Editor execution status. After POST /api/editor/refresh, retry through any domain reload and wait until both isUpdating and isCompiling are false before making dependent calls.",
             ResponseExample = "{\"isPlaying\":false,\"isPaused\":false,\"isCompiling\":false,\"isUpdating\":false}")]
         private void Status(UnionAirRequestContext ctx)
             => new EditorStatusHandler().Handle(ctx.Request, ctx.Response);
@@ -68,7 +68,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "refresh",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Refreshes the Unity AssetDatabase and triggers script recompilation. If scripts changed, Unity performs a domain reload: the REST server restarts and will return connection-refused for a few seconds. Retry GET /api/editor/status until isCompiling is false before making further calls.",
+            Summary = "Refreshes the Unity AssetDatabase and triggers script recompilation. If scripts changed, retry GET /api/editor/status through the domain reload and wait until both isUpdating and isCompiling are false before making dependent calls.",
             ResponseExample = "{\"refreshed\":true,\"isCompiling\":true,\"isUpdating\":false,\"isPlaying\":false}")]
         private void Refresh(UnionAirRequestContext ctx)
             => new EditorRefreshHandler().Handle(ctx.Request, ctx.Response);

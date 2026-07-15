@@ -1564,7 +1564,7 @@ Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and asset
 }
 ```
 
-> Before attaching a new script component, poll `GET /api/editor/status` and wait until `isCompiling: false`.
+> Before using a newly written asset or attaching a new script component, poll `GET /api/editor/status` and wait until both `isUpdating: false` and `isCompiling: false`. Script changes can restart the server during a domain reload; retry connection failures with backoff and confirm the idle state again after the server returns.
 
 ---
 

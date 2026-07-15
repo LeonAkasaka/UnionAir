@@ -9,11 +9,11 @@ namespace LeonAkasaka.UnionAir.Editor
     /// POST /api/editor/refresh
     /// Triggers AssetDatabase.Refresh() so Unity picks up new or changed script files
     /// and starts recompilation. Returns current editor status so clients can immediately
-    /// begin polling isCompiling.
+    /// begin polling isUpdating and isCompiling.
     ///
     /// Typical workflow after writing a new .cs file:
     ///   1. POST /api/editor/refresh
-    ///   2. Poll GET /api/editor/status until isCompiling == false
+    ///   2. Poll GET /api/editor/status until isUpdating == false and isCompiling == false
     ///      (note: domain reload will briefly restart the server — handle connection retries)
     ///   3. POST /api/gameobjects/components with the newly compiled type
     /// </summary>
@@ -23,7 +23,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             AssetDatabase.Refresh();
 
-            // Return editor state so the caller can start polling isCompiling immediately.
+            // Return editor state so the caller can start polling asset updates and compilation immediately.
             var sb = new StringBuilder();
             sb.Append("{");
             sb.Append($"\"refreshed\":true,");
