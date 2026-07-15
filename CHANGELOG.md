@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `GET /api/editor/logs` now matches the `type` filter case-insensitively and returns 400 for unknown values instead of silently returning every log type.
 - `POST /api/assets/reimport` now accepts an existing project-relative `assetPath` even when Unity has not registered its main asset type or GUID yet, and returns the GUID assigned by the import.
 - Restored compatibility with earlier Unity 6 releases by using the established `FindObjectsByType` overload and object-based asset-label lookup.
 - `POST /api/playmode/ui/value` now reports `"clamped": true` when a Slider value was clamped to `[minValue, maxValue]`, instead of silently returning the adjusted value.

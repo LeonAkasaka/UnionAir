@@ -141,7 +141,7 @@ Returns Unity Console logs. Includes logs recorded since the editor started (or 
 
 | Parameter | Default | Description |
 |-------------|-----------|------|
-| `type` | `all` | `log` / `warning` / `error` / `exception` / `assert` / `all` |
+| `type` | `all` | Case-insensitive `log` / `warning` / `error` / `exception` / `assert` / `all` |
 | `search` | ―  | Case-insensitive partial-match filter on messages |
 | `limit` | `100` | Maximum number of results to return (max: 1000) |
 
@@ -169,6 +169,8 @@ Returns Unity Console logs. Includes logs recorded since the editor started (or 
 
 > Logs are returned in newest-first order (`timestamp` descending).
 > Because `StopCapturing()` is called before a domain reload, logs are not retained across reloads.
+
+Unknown `type` values return `400 Bad Request` instead of silently disabling the filter.
 
 ### Examples
 

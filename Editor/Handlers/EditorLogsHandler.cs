@@ -9,17 +9,20 @@ namespace LeonAkasaka.UnionAir.Editor
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
             var query  = request.QueryString;
-            var type   = query["type"]   ?? "all";
+            var type   = (query["type"] ?? "all").Trim().ToLowerInvariant();
             var search = query["search"] ?? "";
 
             int limit = 100;
             if (int.TryParse(query["limit"], out int parsed) && parsed > 0)
                 limit = System.Math.Min(parsed, 1000);
 
-            // Normalize type parameter
             if (type != "error" && type != "warning" && type != "log" &&
-                type != "exception" && type != "assert")
-                type = "all";
+                type != "exception" && type != "assert" && type != "all")
+            {
+                RestResponse.SendError(response,
+                    "Invalid log type. Expected log, warning, error, exception, assert, or all.", 400);
+                return;
+            }
 
             List<LogStore.LogEntry> entries = LogStore.GetLogs(type, search, limit);
 

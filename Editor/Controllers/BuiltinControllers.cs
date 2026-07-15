@@ -33,7 +33,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         [UnionAirEndpoint("GET", "logs",
             Category = UnionAirEndpointCategories.Read,
-            Summary = "Returns captured Unity Console logs.",
+            Summary = "Returns captured Unity Console logs. The type filter is case-insensitive; unknown types return 400.",
             OptionalQuery = new string[] { "type", "search", "limit" })]
         private void Logs(UnionAirRequestContext ctx)
             => new EditorLogsHandler().Handle(ctx.Request, ctx.Response);
