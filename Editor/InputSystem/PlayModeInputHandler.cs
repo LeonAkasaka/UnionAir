@@ -26,6 +26,10 @@ namespace LeonAkasaka.UnionAir.Editor
         static GamepadState _gamepadState;
         static float _setLeftTrigger;
         static float _setRightTrigger;
+        static Vector2 _mousePosition;
+        static PointerSequence _activeSequence;
+
+        const double PointerSequenceTimeoutSeconds = 5.0;
 
         // ── Public API (called from PlayModeInputController) ─────────────────
 
@@ -86,6 +90,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 RestResponse.SendError(response, "Not in Play mode.", 409);
                 return;
             }
+            if (!EnsureNoActiveSequence(response)) return;
 
             var body = RequestBodyReader.ReadString(request);
             var actionName = RequestBodyReader.GetString(body, "action");
@@ -166,6 +171,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 RestResponse.SendError(response, "Not in Play mode.", 409);
                 return;
             }
+            if (!EnsureNoActiveSequence(response)) return;
 
             var body = RequestBodyReader.ReadString(request);
             var actionName = RequestBodyReader.GetString(body, "action");
@@ -237,6 +243,288 @@ namespace LeonAkasaka.UnionAir.Editor
                 RestResponse.SendError(response,
                     $"Unsupported control type: '{controlType}'. Supported set types: Vector2, Stick, Axis.", 400);
             }
+        }
+
+        /// <summary>
+        /// Simulates a mouse click, press, release, or move at a screen coordinate through
+        /// the virtual mouse, spreading the phases across real player-loop frames so the
+        /// running game observes them like genuine input (raycast-based hit detection included).
+        /// The response is deferred and sent after the final phase has been consumed.
+        /// </summary>
+        public static void HandlePointer(UnionAirRequestContext ctx)
+        {
+            var response = ctx.Response;
+            if (!EditorApplication.isPlaying)
+            {
+                RestResponse.SendError(response, "Not in Play mode.", 409);
+                return;
+            }
+            if (EditorApplication.isPaused)
+            {
+                RestResponse.SendError(response, "The editor is paused; player frames are not advancing.", 409);
+                return;
+            }
+            if (_activeSequence != null)
+            {
+                RestResponse.SendError(response, "Another pointer operation is in progress.", 409);
+                return;
+            }
+
+            var body = RequestBodyReader.ReadString(ctx.Request);
+
+            var mode = (RequestBodyReader.GetString(body, "mode") ?? "tap").ToLowerInvariant();
+            if (mode != "tap" && mode != "press" && mode != "release" && mode != "move")
+            {
+                RestResponse.SendError(response, "Invalid mode. Expected tap, press, release, or move.", 400);
+                return;
+            }
+
+            var buttonName = (RequestBodyReader.GetString(body, "button") ?? "left").ToLowerInvariant();
+            MouseButton button;
+            switch (buttonName)
+            {
+                case "left": button = MouseButton.Left; break;
+                case "right": button = MouseButton.Right; break;
+                case "middle": button = MouseButton.Middle; break;
+                default:
+                    RestResponse.SendError(response, "Invalid button. Expected left, right, or middle.", 400);
+                    return;
+            }
+
+            var holdFramesPresent = RequestBodyReader.GetString(body, "holdFrames") != null;
+            var holdFrames = RequestBodyReader.GetInt(body, "holdFrames");
+            if (holdFramesPresent)
+            {
+                if (mode != "tap")
+                {
+                    RestResponse.SendError(response, "holdFrames is only valid with mode tap.", 400);
+                    return;
+                }
+                if (!holdFrames.HasValue || holdFrames.Value < 1 || holdFrames.Value > 300)
+                {
+                    RestResponse.SendError(response, "holdFrames must be an integer between 1 and 300.", 400);
+                    return;
+                }
+            }
+
+            var hasPositionField =
+                RequestBodyReader.GetObject(body, "position") != null ||
+                RequestBodyReader.GetObject(body, "normalizedPosition") != null;
+            Vector2 position;
+            int screenWidth = Screen.width;
+            int screenHeight = Screen.height;
+            if (mode != "release" || hasPositionField)
+            {
+                if (!ScreenPointUtils.TryResolve(body, out position, out screenWidth, out screenHeight,
+                        out var error, out var statusCode))
+                {
+                    RestResponse.SendError(response, error, statusCode);
+                    return;
+                }
+            }
+            else
+            {
+                position = _mousePosition;
+            }
+
+            var seq = new PointerSequence
+            {
+                Response = response,
+                Mode = mode,
+                Button = button,
+                ButtonName = buttonName,
+                Position = position,
+                ScreenWidth = screenWidth,
+                ScreenHeight = screenHeight,
+                HoldFrames = holdFrames ?? 1,
+                Phase = 0,
+                PhaseQueuedFrame = Time.frameCount,
+                FramesToWait = 1,
+                LastObservedFrame = Time.frameCount,
+                Deadline = EditorApplication.timeSinceStartup + PointerSequenceTimeoutSeconds
+            };
+
+            // Phase 0 runs on the request frame.
+            if (mode == "release")
+            {
+                seq.Released = _heldMouseButtons.ContainsKey(button);
+                _mousePosition = position;
+                Decrement(_heldMouseButtons, button);
+                QueueMouseStateNoUpdate();
+                seq.ReleaseFrame = Time.frameCount;
+            }
+            else
+            {
+                // Move first so the position is observable before any press
+                // (PhysicsRaycaster and pointer actions raycast at this point).
+                _mousePosition = position;
+                QueueMouseStateNoUpdate();
+            }
+
+            ctx.Defer();
+            _activeSequence = seq;
+            EditorApplication.update += PumpSequence;
+        }
+
+        static void PumpSequence()
+        {
+            var seq = _activeSequence;
+            if (seq == null)
+            {
+                EditorApplication.update -= PumpSequence;
+                return;
+            }
+
+            // The deadline detects stalled player frames, not slow ones: refresh it
+            // whenever a frame advances so a long holdFrames at a low frame rate does
+            // not get mistaken for a stall.
+            if (Time.frameCount != seq.LastObservedFrame)
+            {
+                seq.LastObservedFrame = Time.frameCount;
+                seq.Deadline = EditorApplication.timeSinceStartup + PointerSequenceTimeoutSeconds;
+            }
+            else if (EditorApplication.timeSinceStartup > seq.Deadline)
+            {
+                AbortSequence(
+                    "Timed out waiting for player frames to advance. Focus the Game view or check the Input System package's Background Behavior setting.",
+                    500);
+                return;
+            }
+
+            if (Time.frameCount - seq.PhaseQueuedFrame < seq.FramesToWait)
+                return;
+
+            switch (seq.Mode)
+            {
+                case "tap":
+                    if (seq.Phase == 0)
+                    {
+                        Increment(_heldMouseButtons, seq.Button);
+                        seq.PressOutstanding = true;
+                        QueueMouseStateNoUpdate();
+                        seq.PressFrame = Time.frameCount;
+                        AdvancePhase(seq, seq.HoldFrames);
+                    }
+                    else if (seq.Phase == 1)
+                    {
+                        Decrement(_heldMouseButtons, seq.Button);
+                        seq.PressOutstanding = false;
+                        QueueMouseStateNoUpdate();
+                        seq.ReleaseFrame = Time.frameCount;
+                        AdvancePhase(seq, 1);
+                    }
+                    else
+                    {
+                        CompleteSequence(
+                            $"{{\"success\":true,\"mode\":\"tap\",\"button\":\"{seq.ButtonName}\",{PositionJson(seq)},\"pressFrame\":{seq.PressFrame},\"releaseFrame\":{seq.ReleaseFrame}}}");
+                    }
+                    break;
+
+                case "press":
+                    if (seq.Phase == 0)
+                    {
+                        Increment(_heldMouseButtons, seq.Button);
+                        // A completed press intentionally leaves the button held, so this
+                        // is not treated as outstanding once the sequence responds.
+                        QueueMouseStateNoUpdate();
+                        seq.PressFrame = Time.frameCount;
+                        AdvancePhase(seq, 1);
+                    }
+                    else
+                    {
+                        CompleteSequence(
+                            $"{{\"success\":true,\"mode\":\"press\",\"button\":\"{seq.ButtonName}\",{PositionJson(seq)},\"pressFrame\":{seq.PressFrame}}}");
+                    }
+                    break;
+
+                case "release":
+                    CompleteSequence(
+                        $"{{\"success\":true,\"mode\":\"release\",\"button\":\"{seq.ButtonName}\",{PositionJson(seq)},\"releaseFrame\":{seq.ReleaseFrame},\"released\":{RestResponse.FormatBool(seq.Released)}}}");
+                    break;
+
+                default: // move
+                    CompleteSequence(
+                        $"{{\"success\":true,\"mode\":\"move\",{PositionJson(seq)}}}");
+                    break;
+            }
+        }
+
+        // A pointer sequence relies on the player loop consuming its queued mouse events;
+        // perform/set call InputSystem.Update() directly, which would flush those events
+        // outside the player loop and make the game miss the click. Reject until it finishes.
+        static bool EnsureNoActiveSequence(HttpListenerResponse response)
+        {
+            if (_activeSequence == null) return true;
+            RestResponse.SendError(response, "A pointer operation is in progress.", 409);
+            return false;
+        }
+
+        static void AdvancePhase(PointerSequence seq, int framesToWait)
+        {
+            seq.Phase++;
+            seq.PhaseQueuedFrame = Time.frameCount;
+            seq.FramesToWait = framesToWait;
+        }
+
+        static string PositionJson(PointerSequence seq)
+            => $"\"position\":{{\"x\":{RestResponse.FormatFloat(seq.Position.x)},\"y\":{RestResponse.FormatFloat(seq.Position.y)}}}," +
+               $"\"screenSize\":{{\"width\":{seq.ScreenWidth},\"height\":{seq.ScreenHeight}}}";
+
+        static void CompleteSequence(string json, int statusCode = 200)
+        {
+            var seq = _activeSequence;
+            _activeSequence = null;
+            EditorApplication.update -= PumpSequence;
+            if (seq == null) return;
+            try { RestResponse.Send(seq.Response, json, statusCode); } catch { /* client may have disconnected */ }
+            try { seq.Response.Close(); } catch { /* ignored */ }
+        }
+
+        // Aborts the active sequence without leaving virtual input state behind:
+        // any press the sequence had queued but not yet released is released first,
+        // so an interrupted tap does not leave the mouse button stuck down.
+        static void AbortSequence(string message, int statusCode)
+        {
+            var seq = _activeSequence;
+            if (seq != null && seq.PressOutstanding)
+            {
+                Decrement(_heldMouseButtons, seq.Button);
+                seq.PressOutstanding = false;
+                QueueMouseStateNoUpdate();
+            }
+            CompleteSequence($"{{\"error\":\"{RestResponse.EscapeJson(message)}\"}}", statusCode);
+        }
+
+        sealed class PointerSequence
+        {
+            public HttpListenerResponse Response;
+            public string Mode;
+            public MouseButton Button;
+            public string ButtonName;
+            public Vector2 Position;
+            public int ScreenWidth;
+            public int ScreenHeight;
+            public int HoldFrames;
+            public int Phase;
+            public int PhaseQueuedFrame;
+            public int FramesToWait;
+            public int LastObservedFrame;
+            public double Deadline;
+            public int PressFrame;
+            public int ReleaseFrame;
+            public bool Released;
+            public bool PressOutstanding;
+        }
+
+        /// <summary>
+        /// Aborts any in-flight pointer sequence, answering its deferred HTTP response so
+        /// the client is not left hanging. Called by <see cref="PlayModeInputInit"/> before
+        /// a domain reload, which would otherwise wipe the sequence state and its update hook.
+        /// </summary>
+        public static void AbortActiveSequence()
+        {
+            if (_activeSequence != null)
+                AbortSequence("The pointer sequence was interrupted by a domain reload.", 503);
         }
 
         /// <summary>
@@ -593,12 +881,19 @@ namespace LeonAkasaka.UnionAir.Editor
 
         static void QueueMouseState()
         {
+            QueueMouseStateNoUpdate();
+            InputSystem.Update();
+        }
+
+        // The pointer sequence relies on the player loop's own input update so that
+        // presses are observable via wasPressedThisFrame; it must not call InputSystem.Update().
+        static void QueueMouseStateNoUpdate()
+        {
             var mouse = EnsureVirtualMouse();
             ushort buttons = 0;
             foreach (var button in _heldMouseButtons.Keys)
                 buttons |= (ushort)(1 << (int)button);
-            InputSystem.QueueStateEvent(mouse, new MouseState { buttons = buttons });
-            InputSystem.Update();
+            InputSystem.QueueStateEvent(mouse, new MouseState { buttons = buttons, position = _mousePosition });
         }
 
         static void Increment<T>(Dictionary<T, int> counts, T key)
@@ -645,6 +940,10 @@ namespace LeonAkasaka.UnionAir.Editor
 
         static void ResetVirtualInputState()
         {
+            if (_activeSequence != null)
+                AbortSequence("Play mode ended during the pointer sequence.", 409);
+
+            _mousePosition = default(Vector2);
             _heldKeys.Clear();
             _heldGamepadButtons.Clear();
             _heldMouseButtons.Clear();

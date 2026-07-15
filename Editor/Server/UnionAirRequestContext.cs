@@ -46,5 +46,20 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Metadata descriptor for the matched endpoint.
         /// </summary>
         public UnionAirEndpointDescriptor Endpoint { get; }
+
+        /// <summary>
+        /// Gets whether the handler has taken ownership of the response lifetime via <see cref="Defer"/>.
+        /// </summary>
+        internal bool IsDeferred { get; private set; }
+
+        /// <summary>
+        /// Marks the response as deferred: the server will not close it when the handler returns.
+        /// The handler then owns the response and must eventually write it (for example with
+        /// <see cref="RestResponse.Send"/>) and call <c>Response.Close()</c> itself, on the main thread.
+        /// </summary>
+        public void Defer()
+        {
+            IsDeferred = true;
+        }
     }
 }

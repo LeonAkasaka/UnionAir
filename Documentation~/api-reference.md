@@ -3218,7 +3218,7 @@ Release:
 | 400 | `action` is missing, `mode` is invalid, `value` was provided, or the action is not a Button action |
 | 403 | Play Mode category is disabled |
 | 404 | Action not found |
-| 409 | Unity Editor is not in Play mode |
+| 409 | Unity Editor is not in Play mode, or a `/api/playmode/input/pointer` operation is in progress |
 | 422 | Button action exists, but no supported Keyboard/Gamepad/Mouse/Pointer Button binding can be simulated |
 
 ---
@@ -3303,8 +3303,141 @@ UnionAir reports the binding/control it wrote, but Unity Input System remains re
 | 400 | `action` is missing, `value` is malformed or missing, or the action is a Button action |
 | 403 | Play Mode category is disabled |
 | 404 | Action not found |
-| 409 | Unity Editor is not in Play mode |
+| 409 | Unity Editor is not in Play mode, or a `/api/playmode/input/pointer` operation is in progress |
 | 422 | Action exists, but no supported direct Gamepad Axis/Vector2 binding can be set |
+
+---
+
+## POST /api/playmode/input/pointer
+
+Simulates a mouse click, press, release, or move at a screen coordinate through the UnionAir virtual mouse. The move, press, and release phases are queued on separate player-loop frames, so the running game observes them exactly like real input: `InputSystemUIInputModule` raycasts (including `PhysicsRaycaster` hits on 3D objects), `<Pointer>`/`<Mouse>` action bindings, and code polling `Mouse.current` all react as they would to a genuine click.
+
+> Requires the optional `com.unity.inputsystem` package.
+> Can be called only in Play mode and only when the Play Mode category is enabled.
+> The response is sent after the final input frame has been consumed — a `tap` takes about 3–4 player frames. Player frames must be advancing (focus the Game view, or set the Input System package's Background Behavior accordingly); otherwise the request times out after 5 seconds.
+> Only one pointer operation can run at a time; concurrent requests return `409`.
+> Limitations: legacy Input Manager APIs (`Input.GetMouseButton`, `OnMouseDown`, …) do not observe Input System events, and a virtual `Touchscreen` device (EnhancedTouch) is not yet supported. To verify what a coordinate would hit before clicking, use `POST /api/playmode/screen/hittest`.
+
+### Request Body (JSON)
+
+```json
+{
+  "normalizedPosition": { "x": 0.5, "y": 0.5 },
+  "origin": "topLeft",
+  "mode": "tap"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `position` | ✅* | Pixel coordinate `{ "x", "y" }` in the Game view (`Screen.width` × `Screen.height`). Out-of-range values return `422` |
+| `normalizedPosition` | ✅* | Normalized coordinate `{ "x", "y" }` in `0`–`1`, clamped |
+| `origin` | ❌ | `bottomLeft` (default, Unity screen space) or `topLeft`. Use `topLeft` when picking coordinates from `/api/editor/capture` screenshots |
+| `mode` | ❌ | `tap` (default), `press`, `release`, or `move` |
+| `button` | ❌ | `left` (default), `right`, or `middle` |
+| `holdFrames` | ❌ | `tap` only: player frames to hold the button between press and release, `1`–`300` (default `1`) |
+
+*Provide exactly one of `position` or `normalizedPosition`. For `mode: "release"` the coordinate is optional and defaults to the current virtual mouse position.
+
+`press` keeps the button held (released automatically when Play mode ends); pair it with `release` for drags or long presses. `move` only updates the virtual mouse position. The position persists between calls and is also used by `POST /api/playmode/input/perform` for Mouse/Pointer bindings.
+
+### Response
+
+```json
+{
+  "success": true,
+  "mode": "tap",
+  "button": "left",
+  "position": { "x": 640, "y": 360 },
+  "screenSize": { "width": 1280, "height": 720 },
+  "pressFrame": 1204,
+  "releaseFrame": 1205
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `position` | Resolved pixel coordinate in Unity screen space (bottom-left origin) |
+| `screenSize` | Game view resolution the coordinate was resolved against |
+| `pressFrame` / `releaseFrame` | `Time.frameCount` when the press / release event was queued (`press` mode omits `releaseFrame`; `move` omits both) |
+| `released` | `release` mode only: `false` when the button was not held by a previous `press` |
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | Both or neither of `position`/`normalizedPosition` given; invalid `origin`, `mode`, `button`, or `holdFrames` |
+| 403 | Play Mode category is disabled |
+| 409 | Not in Play mode, the editor is paused, another pointer operation is in progress, or Play mode ended during the sequence |
+| 422 | Pixel `position` is outside the screen |
+| 500 | Player frames did not advance within 5 seconds |
+
+---
+
+## POST /api/playmode/screen/hittest
+
+Read-only: raycasts a screen coordinate and reports what a pointer click there would hit, without sending any input. Combines the active `EventSystem`'s raycast (all raycasters — `GraphicRaycaster` for uGUI, `PhysicsRaycaster` for 3D colliders — honoring their event masks) with a plain `Physics.Raycast` from `Camera.main`. Use it to verify a coordinate before `POST /api/playmode/input/pointer`.
+
+> Can be called only in Play mode and only when the Play Mode category is enabled.
+> Does not require the `com.unity.inputsystem` package.
+
+### Request Body (JSON)
+
+```json
+{
+  "normalizedPosition": { "x": 0.5, "y": 0.5 },
+  "origin": "topLeft"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `position` | ✅* | Pixel coordinate `{ "x", "y" }` in the Game view. Out-of-range values return `422` |
+| `normalizedPosition` | ✅* | Normalized coordinate `{ "x", "y" }` in `0`–`1`, clamped |
+| `origin` | ❌ | `bottomLeft` (default) or `topLeft`. Use `topLeft` when picking coordinates from `/api/editor/capture` screenshots |
+
+*Provide exactly one of `position` or `normalizedPosition`.
+
+### Response
+
+```json
+{
+  "success": true,
+  "position": { "x": 640, "y": 360 },
+  "screenSize": { "width": 1280, "height": 720 },
+  "eventSystemHits": [
+    {
+      "path": "Cube",
+      "globalObjectId": "GlobalObjectId_V1-...",
+      "module": "UnityEngine.EventSystems.PhysicsRaycaster",
+      "distance": 9.4
+    }
+  ],
+  "physicsCamera": "Main Camera",
+  "physicsHit": {
+    "path": "Cube",
+    "globalObjectId": "GlobalObjectId_V1-...",
+    "distance": 9.4,
+    "point": [0.1, 0.5, -2.0]
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `eventSystemHits` | Raycast results in EventSystem order (what a pointer event would hit first); `null` when no `EventSystem` is active |
+| `eventSystemHits[].module` | Raycaster type that produced the hit |
+| `physicsCamera` | Hierarchy path of `Camera.main`, or `null` when absent |
+| `physicsHit` | First `Physics.Raycast` hit from `Camera.main` through the point, or `null` when nothing was hit |
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | Both or neither of `position`/`normalizedPosition` given, or invalid `origin` |
+| 403 | Play Mode category is disabled |
+| 409 | Unity Editor is not in Play mode |
+| 422 | Pixel `position` is outside the screen, or neither an `EventSystem` nor `Camera.main` exists |
 
 ---
 

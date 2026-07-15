@@ -93,11 +93,12 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             while (_pending != null && _pending.TryDequeue(out var ctx))
             {
+                var completed = true;
                 try
                 {
                     var requestLine = $"{ctx.Request.HttpMethod} {ctx.Request.Url.AbsolutePath}";
                     OnRequest?.Invoke(requestLine);
-                    _router.Handle(ctx);
+                    completed = _router.Handle(ctx);
                 }
                 catch (Exception ex)
                 {
@@ -106,7 +107,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
                 finally
                 {
-                    try { ctx.Response.Close(); } catch { /* ignored */ }
+                    if (completed)
+                    {
+                        try { ctx.Response.Close(); } catch { /* ignored */ }
+                    }
                 }
             }
         }

@@ -19,7 +19,11 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Dispatches an HTTP listener context to the matching route descriptor.
         /// </summary>
         /// <param name="context">HTTP listener context received by the server.</param>
-        public void Handle(HttpListenerContext context)
+        /// <returns>
+        /// <c>true</c> when the response is complete and the server should close it;
+        /// <c>false</c> when the handler deferred the response and owns its lifetime.
+        /// </returns>
+        public bool Handle(HttpListenerContext context)
         {
             var request = context.Request;
             var response = context.Response;
@@ -28,7 +32,7 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 RestResponse.AddCorsHeaders(response);
                 response.StatusCode = 204;
-                return;
+                return true;
             }
 
             var pathMatched = false;
@@ -49,11 +53,11 @@ namespace LeonAkasaka.UnionAir.Editor
                             ? descriptor.CategoryDefinition.DisplayName + " category is disabled."
                             : descriptor.Error,
                         403);
-                    return;
+                    return true;
                 }
 
                 if (!CanCallInCurrentPlayModeState(descriptor, request, response))
-                    return;
+                    return true;
 
                 var routeContext = new UnionAirRequestContext(request, response, routeValues, descriptor);
                 try
@@ -62,20 +66,29 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
                 catch (TargetInvocationException ex)
                 {
+                    // A handler that already deferred owns the response (and its completion
+                    // path), so surface the error without letting the server close it.
+                    if (routeContext.IsDeferred)
+                    {
+                        UnityEngine.Debug.LogError(
+                            $"[UnionAir] Deferred handler for {request.Url.AbsolutePath} threw: {(ex.InnerException ?? ex).Message}");
+                        return false;
+                    }
                     throw ex.InnerException ?? ex;
                 }
-                return;
+                return !routeContext.IsDeferred;
             }
 
             if (pathMatched)
             {
                 RestResponse.SendError(response,
                     $"Method not allowed for {request.Url.AbsolutePath}", 405);
-                return;
+                return true;
             }
 
             RestResponse.SendNotFound(response,
                 $"No handler for {request.HttpMethod} {request.Url.AbsolutePath}");
+            return true;
         }
 
         private static bool CanCallInCurrentPlayModeState(

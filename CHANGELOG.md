@@ -30,6 +30,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `POST /api/playmode/ui/text` — sets text on a Unity UI `InputField` or TextMeshPro `TMP_InputField` and optionally submits it during Play mode.
 - `POST /api/playmode/ui/scroll` — scrolls a Unity UI `ScrollRect` by wheel delta or normalized position during Play mode.
 - `POST /api/playmode/ui/value` — sets a Unity UI `Toggle`, `Slider`, `Dropdown`, or TextMeshPro `TMP_Dropdown` value during Play mode.
+- `POST /api/playmode/input/pointer` — simulates a mouse click/press/release/move at a screen coordinate through the virtual mouse, spreading the phases across real player frames so the game's own raycast-based hit detection (`PhysicsRaycaster`, `Mouse.current` polling) reacts like it would to genuine input.
+- `POST /api/playmode/screen/hittest` — read-only raycast at a screen coordinate (EventSystem raycasters + `Physics.Raycast` from `Camera.main`) reporting what a pointer click there would hit.
 
 ### Fixed
 

@@ -218,6 +218,20 @@ namespace LeonAkasaka.UnionAir.Editor
             => new PlayModeUiHandler().HandleValue(ctx.Request, ctx.Response);
     }
 
+    [UnionAirController("playmode/screen")]
+    internal sealed class PlayModeScreenController
+    {
+        [UnionAirEndpoint("POST", "hittest",
+            Category = UnionAirEndpointCategories.PlayMode,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            Summary = "Read-only: raycasts a screen point (EventSystem + Physics) and reports what a pointer click there would hit. Only available in Play mode.",
+            OptionalBody = new string[] { "position", "normalizedPosition", "origin" },
+            RequestExample = "{\"normalizedPosition\":{\"x\":0.5,\"y\":0.5},\"origin\":\"topLeft\"}",
+            ResponseExample = "{\"success\":true,\"position\":{\"x\":640,\"y\":360},\"screenSize\":{\"width\":1280,\"height\":720},\"eventSystemHits\":[{\"path\":\"Cube\",\"globalObjectId\":\"<id>\",\"module\":\"UnityEngine.EventSystems.PhysicsRaycaster\",\"distance\":9.4}],\"physicsCamera\":\"Main Camera\",\"physicsHit\":{\"path\":\"Cube\",\"globalObjectId\":\"<id>\",\"distance\":9.4,\"point\":[0.1,0.5,-2]}}")]
+        private void HitTest(UnionAirRequestContext ctx)
+            => PlayModeScreenHandler.HandleHitTest(ctx.Request, ctx.Response);
+    }
+
     [UnionAirController("scene")]
     internal sealed class SceneController
     {
