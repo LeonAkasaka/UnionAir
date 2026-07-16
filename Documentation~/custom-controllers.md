@@ -1,4 +1,5 @@
 # Custom Controllers
+**English** | [日本語](custom-controllers.ja.md)
 
 Custom controllers let application-side Editor assemblies add project-specific REST endpoints without modifying UnionAir itself. Controllers in UnionAir's own assembly are treated as built-in; controllers in other Editor assemblies are treated as custom and are exposed under `/api/custom/...`.
 

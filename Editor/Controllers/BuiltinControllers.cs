@@ -27,7 +27,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "status",
             Category = UnionAirEndpointCategories.Read,
             Summary = "Returns the Unity Editor execution status. After POST /api/editor/refresh, retry through any domain reload and wait until both isUpdating and isCompiling are false before making dependent calls.",
-            ResponseExample = "{\"isPlaying\":false,\"isPaused\":false,\"isCompiling\":false,\"isUpdating\":false}")]
+            ResponseExample = "{\"isPlaying\":false,\"isPaused\":false,\"isCompiling\":false,\"isUpdating\":false,\"unityVersion\":\"6000.0.23f1\"}")]
         private void Status(UnionAirRequestContext ctx)
             => new EditorStatusHandler().Handle(ctx.Request, ctx.Response);
 

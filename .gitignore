@@ -8,5 +8,9 @@ Thumbs.db
 .vs/
 .idea/
 
+# AI development tooling (local only)
+.claude/
+.agents/
+
 # Note: .meta files are intentionally tracked in this package repository.
 # Unity uses them to maintain stable GUIDs for package assets.

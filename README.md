@@ -1,6 +1,39 @@
 # UnionAir — Unity REST Bridge
 
+**English** | [日本語](README.ja.md)
+
+> **⚠️ Experimental**
+> This package is an experimental, pre-beta prototype. There are **no guarantees** of backward compatibility, versioning stability, or behavior. Any API may change or be removed without notice.
+
 UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making it easy to integrate with LLM MCP bridges, development bots, CI tooling, or any HTTP client.
+
+## Requirements
+
+- Unity **6000.0** or later
+
+## Installation
+
+### Via Package Manager (Git URL)
+
+1. Open **Window > Package Manager**.
+2. Click **+** and choose **Install package from git URL...**
+3. Enter:
+
+```
+https://github.com/LeonAkasaka/UnionAir.git
+```
+
+### Via manifest.json
+
+Add the dependency to `Packages/manifest.json`:
+
+```json
+{
+  "dependencies": {
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git"
+  }
+}
+```
 
 ## Setup
 
@@ -24,8 +57,16 @@ UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making i
 > Edit mode write operations are Undo-able in the Unity Editor (Ctrl+Z).
 > Scene GameObjects and Components include `globalObjectId` values in read responses and can be targeted with typed object references in write requests.
 > Write APIs declare Play Mode safety in `GET /api/help`; persistent scene/asset changes are blocked during Play Mode, while selected scene-object changes require both the Editor setting and `allowWhilePlaying=true`.
-> Editor Actions include Editor state operations and request-dependent menu execution; enable that category only for trusted local clients.
 > See **[API Reference](Documentation~/api-reference.md)** for the full endpoint list and request/response details.
+
+## Security
+
+Read this before enabling any write category:
+
+- The server binds to **`localhost` only** — it is not reachable from other machines on the network.
+- There is **no authentication**. Any process running on the same machine can call every enabled endpoint.
+- Responses include `Access-Control-Allow-Origin: *`, so **any web page open in a browser on the same machine** can also call the API and read the responses (scene hierarchy, assets, logs, screenshots).
+- Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, and Editor Actions categories are opt-in; enabling them exposes state-changing operations — including Unity Editor menu execution and asset deletion — to any local client or browser origin. Enable them only when every local client (and browser tab) is trusted.
 
 ## Quick Example
 
@@ -61,3 +102,18 @@ To use with an LLM MCP client, run a separate Node.js MCP bridge that calls thes
 - **[Getting Started](Documentation~/index.md)** — Setup, EditorWindow guide, lifecycle
 - **[API Reference](Documentation~/api-reference.md)** — Full endpoint reference with request/response examples
 - **[Custom Controllers](Documentation~/custom-controllers.md)** — Extension guide for application-side UnionAir APIs
+
+## Known Limitations
+
+- No automated tests or CI yet.
+- Request-body JSON parsing is a lightweight custom reader; deeply nested or unusual JSON bodies may hit edge cases.
+- JSON response serialization is hand-written per endpoint; a shared serializer is a planned refactor.
+- The wildcard CORS policy (`Access-Control-Allow-Origin: *`) may be tightened in a future release.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Development conventions live in [AGENTS.md](AGENTS.md).
+
+## License
+
+[MIT](LICENSE)

@@ -1,4 +1,5 @@
 # UnionAir — Unity REST Bridge
+**English** | [日本語](index.ja.md)
 
 UnionAir is an Editor-only package that exposes the state of the Unity Editor externally as a simple **REST API**.  
 It allows any HTTP-capable client—such as LLM MCP bridges, development bots, and CI tools—to retrieve information from Unity.
@@ -7,9 +8,25 @@ It allows any HTTP-capable client—such as LLM MCP bridges, development bots, a
 
 ## Setup
 
-### 1. Import the package
+### 1. Install the package
 
-If the project's `Packages/com.leonakasaka.unionair/` folder exists, Unity will detect it automatically (embedded package). No special action is required.
+Open **Window > Package Manager**, click **+**, choose **Install package from git URL...**, and enter:
+
+```
+https://github.com/LeonAkasaka/UnionAir.git
+```
+
+Alternatively, add the dependency to `Packages/manifest.json` directly:
+
+```json
+{
+  "dependencies": {
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git"
+  }
+}
+```
+
+If the package is placed in the project's `Packages/com.leonakasaka.unionair/` folder instead, Unity detects it automatically as an embedded package.
 
 ### 2. Check the server
 
@@ -62,7 +79,8 @@ curl http://localhost:8765/api/scene/hierarchy
 ### Check the components of a specific GameObject
 
 ```bash
-curl "http://localhost:8765/api/gameobjects?path=Main Camera"
+curl --get "http://localhost:8765/api/gameobjects" \
+  --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 ```
 
 ### Search the asset list

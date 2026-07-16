@@ -11,10 +11,14 @@ All implementation lives under `Editor/` and is excluded from runtime builds via
 
 | File | Purpose |
 |------|---------|
-| `README.md` | Package overview, setup, and quick-start |
+| `README.md` | Package overview, setup, security notes, and quick-start |
 | `Documentation~/index.md` | Detailed setup, EditorWindow guide, and lifecycle |
-| `Documentation~/api-reference.md` | Full endpoint reference (requests, responses, and examples) |
+| `Documentation~/api-reference.md` | API reference index: conventions, categories, and links to per-category pages |
+| `Documentation~/api/<category>.md` | Per-category endpoint reference (requests, responses, and examples): `general`, `editor`, `scenes`, `gameobjects`, `assets`, `animation`, `playmode` |
 | `CHANGELOG.md` | Version history in Keep a Changelog format |
+| `CONTRIBUTING.md` / `SECURITY.md` | Contributor guide and security policy |
+
+English documents are the canonical source. Japanese translations live next to each English document with a `.ja.md` suffix (e.g., `README.ja.md`, `Documentation~/api/editor.ja.md`). `CHANGELOG.md` and `AGENTS.md` are not translated.
 
 ## Language Policy
 
@@ -22,18 +26,20 @@ All implementation lives under `Editor/` and is excluded from runtime builds via
 
 - Exception: Markdown table cell content may use English to maintain international clarity.
 - Source files: C# code comments, XML docs, and inline comments must be English.
-- Documentation: All `.md` files must be English.
+- Documentation: All `.md` files must be English, except `.ja.md` files, which are Japanese translations of their English counterparts. The English document is always canonical.
 - Commit messages: Use English. Include a co-authored-by trailer for AI contributions.
 
 ## Documentation Update Rules
 
 **Whenever an API endpoint is added, changed, or removed, update the following in the same commit:**
 
-1. **`Documentation~/api-reference.md`** — add or update the relevant endpoint section
+1. **`Documentation~/api/<category>.md`** — add or update the relevant endpoint section in the matching category page, and keep the endpoint list in `Documentation~/api-reference.md` (the index) in sync
 2. **`[UnionAirEndpoint]` on the controller method** — keep routing, `GET /api/help`, and the EditorWindow endpoint list in sync
 3. **`CHANGELOG.md`** — record the change under `[Unreleased]`
 
 Update `README.md` only for overview-level changes (e.g., a new capability being introduced).
+
+**Translation sync:** whenever an English document changes, update its `.ja.md` counterpart in the same commit. If a translation is intentionally deferred, note it in the commit message.
 
 ## Coding Conventions
 

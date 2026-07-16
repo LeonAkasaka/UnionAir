@@ -307,7 +307,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var layerIndex = RequestBodyReader.GetInt(body, "layerIndex") ?? 0;
             if (layerIndex < 0 || layerIndex >= controller.layers.Length)
             {
-                RestResponse.SendError(response, $"layerIndex {layerIndex} is out of range (0–{controller.layers.Length - 1})", 400);
+                RestResponse.SendError(response, $"layerIndex {layerIndex} is out of range (0-{controller.layers.Length - 1})", 400);
                 return;
             }
 
@@ -550,7 +550,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var transition = FindTransition(sm, fromName, toName);
             if (transition == null)
             {
-                RestResponse.SendNotFound(response, $"Transition not found: {fromName} → {toName}");
+                RestResponse.SendNotFound(response, $"Transition not found: {fromName} -> {toName}");
                 return;
             }
 
@@ -595,7 +595,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 var removed = anyTransitions.RemoveAll(t => t.destinationState != null && t.destinationState.name == toName);
                 if (removed == 0)
                 {
-                    RestResponse.SendNotFound(response, $"AnyState → {toName} transition not found");
+                    RestResponse.SendNotFound(response, $"AnyState -> {toName} transition not found");
                     return;
                 }
                 sm.anyStateTransitions = anyTransitions.ToArray();
@@ -618,7 +618,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 if (removed == 0)
                 {
-                    RestResponse.SendNotFound(response, $"Transition {fromName} → {toName} not found");
+                    RestResponse.SendNotFound(response, $"Transition {fromName} -> {toName} not found");
                     return;
                 }
                 fromState.transitions = stateTransitions.ToArray();
