@@ -215,7 +215,7 @@ Release:
 
 ## POST /api/playmode/input/set
 
-Sets an Axis, Vector2, or Stick InputAction value through a UnionAir virtual device. `action` accepts a case-insensitive `Map/Action` identifier or a bare action name when that name is unique. The value remains active until another `set` call changes it, Play mode changes, or UnionAir cleans up its virtual devices.
+Sets an Axis, Vector2, or Stick InputAction value through a UnionAir virtual device. `action` accepts a case-insensitive `Map/Action` identifier or a bare action name when that name is unique. Gamepad values remain active until another `set` call changes them, Play mode changes, or UnionAir cleans up its virtual devices. Mouse scroll values are one-shot deltas that reset on the next Input System update.
 
 > Requires the optional `com.unity.inputsystem` package.
 > Can be called only when the Play Mode category is enabled.
@@ -247,12 +247,18 @@ Return to neutral:
 { "action": "Throttle", "value": 0.0 }
 ```
 
+Mouse scroll action:
+
+```json
+{ "action": "UI/ScrollWheel", "value": [0.0, 120.0] }
+```
+
 | Field | Required | Description |
 |-------|----------|-------------|
 | `action` | Yes | `Map/Action` identifier, or a bare InputAction name when unique |
 | `value` | Yes | Axis: finite number; Vector2/Stick: `[x, y]` |
 
-For actions with multiple bindings, UnionAir uses the first supported direct Gamepad value binding in the action's binding order. Supported set bindings are `<Gamepad>/leftStick`, `<Gamepad>/rightStick`, `<Gamepad>/leftTrigger`, `<Gamepad>/rightTrigger`, and Gamepad stick x/y axes. Keyboard composites such as WASD, arrow-key composites, Touch, Pen, XR, custom devices, and other controls return `422`.
+For actions with multiple bindings, UnionAir uses the first supported direct value binding in the action's binding order. Supported set bindings are `<Gamepad>/leftStick`, `<Gamepad>/rightStick`, `<Gamepad>/leftTrigger`, `<Gamepad>/rightTrigger`, Gamepad stick x/y axes, `<Mouse>/scroll`, and Mouse scroll x/y axes. Keyboard composites such as WASD, arrow-key composites, Touch, Pen, XR, custom devices, and other controls return `422`.
 
 ### Response
 
@@ -282,9 +288,24 @@ Axis:
 }
 ```
 
+Mouse scroll:
+
+```json
+{
+  "success": true,
+  "action": "UI/ScrollWheel",
+  "controlType": "Vector2",
+  "value": [0.0, 120.0],
+  "setBinding": "<Mouse>/scroll",
+  "setControl": "/UnionAirVirtualMouse/scroll"
+}
+```
+
 ### Notes
 
 UnionAir reports the binding/control it wrote, but Unity Input System remains responsible for action resolution after the virtual device event is queued. `PlayerInput` device pairing, control schemes, binding masks, interactions, processors, and action enablement can still prevent an action from observing the virtual device.
+
+Mouse scroll uses the Input System's delta-control semantics: each `set` call queues one scroll delta while preserving the virtual Mouse position and held buttons. The delta is reset by the next Input System update rather than remaining active like a Gamepad stick or trigger value.
 
 ### Errors
 
@@ -294,7 +315,7 @@ UnionAir reports the binding/control it wrote, but Unity Input System remains re
 | 403 | Play Mode category is disabled |
 | 404 | Action not found |
 | 409 | Unity Editor is not in Play mode, a pointer operation is in progress, or a bare action name matches multiple maps. Ambiguous responses include `candidates` |
-| 422 | Action exists, but no supported direct Gamepad Axis/Vector2 binding can be set |
+| 422 | Action exists, but no supported direct Gamepad or Mouse scroll Axis/Vector2 binding can be set |
 
 ---
 

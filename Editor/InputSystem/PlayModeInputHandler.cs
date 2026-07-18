@@ -4,6 +4,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.LowLevel;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -162,7 +163,8 @@ namespace LeonAkasaka.UnionAir.Editor
 
         /// <summary>
         /// Sets an Axis, Vector2, or Stick <see cref="UnityEngine.InputSystem.InputAction"/>
-        /// value on a virtual device. Values remain active until the next set or cleanup.
+        /// value on a virtual device. Gamepad values remain active until the next set or cleanup;
+        /// Mouse scroll values are one-shot deltas.
         /// </summary>
         public static void HandleSet(HttpListenerRequest request, HttpListenerResponse response)
         {
@@ -699,9 +701,10 @@ namespace LeonAkasaka.UnionAir.Editor
             switch (deviceName.ToLowerInvariant())
             {
                 case "keyboard":
-                    if (!System.Enum.TryParse<Key>(controlPath, true, out var key))
+                    var keyControl = EnsureVirtualKeyboard().TryGetChildControl(controlPath) as KeyControl;
+                    if (keyControl == null)
                         return false;
-                    target = ButtonTarget.Keyboard(key, controlPath);
+                    target = ButtonTarget.Keyboard(keyControl.keyCode, keyControl.name);
                     return true;
                 case "gamepad":
                     if (!TryParseGamepadButton(controlPath, out var gamepadButton))
@@ -771,10 +774,20 @@ namespace LeonAkasaka.UnionAir.Editor
                         return true;
                     }
                 }
+
+                if (TryParseDeviceControlPath(path, out deviceName, out controlPath) &&
+                    deviceName.ToLowerInvariant() == "mouse" &&
+                    ControlPathEquals(controlPath, "scroll"))
+                {
+                    QueueMouseScroll(new Vector2(x, y));
+                    result = new InputSimulationResult(path, "/UnionAirVirtualMouse/scroll");
+                    error = null;
+                    return true;
+                }
             }
 
             result = default(InputSimulationResult);
-            error = "No supported Vector2/Stick binding found. Supported set bindings: <Gamepad>/leftStick, <Gamepad>/rightStick.";
+            error = "No supported Vector2/Stick binding found. Supported set bindings: <Gamepad>/leftStick, <Gamepad>/rightStick, and <Mouse>/scroll.";
             return false;
         }
 
@@ -842,10 +855,29 @@ namespace LeonAkasaka.UnionAir.Editor
                         return true;
                     }
                 }
+
+                if (TryParseDeviceControlPath(path, out deviceName, out controlPath) &&
+                    deviceName.ToLowerInvariant() == "mouse")
+                {
+                    if (ControlPathEquals(controlPath, "scroll/x"))
+                    {
+                        QueueMouseScroll(new Vector2(value, 0f));
+                        result = new InputSimulationResult(path, "/UnionAirVirtualMouse/scroll/x");
+                        error = null;
+                        return true;
+                    }
+                    if (ControlPathEquals(controlPath, "scroll/y"))
+                    {
+                        QueueMouseScroll(new Vector2(0f, value));
+                        result = new InputSimulationResult(path, "/UnionAirVirtualMouse/scroll/y");
+                        error = null;
+                        return true;
+                    }
+                }
             }
 
             result = default(InputSimulationResult);
-            error = "No supported Axis binding found. Supported set bindings: <Gamepad>/leftTrigger, <Gamepad>/rightTrigger, and Gamepad stick x/y axes.";
+            error = "No supported Axis binding found. Supported set bindings: <Gamepad>/leftTrigger, <Gamepad>/rightTrigger, Gamepad stick x/y axes, and Mouse scroll x/y axes.";
             return false;
         }
 
@@ -929,15 +961,27 @@ namespace LeonAkasaka.UnionAir.Editor
             InputSystem.Update();
         }
 
+        static void QueueMouseScroll(Vector2 scroll)
+        {
+            var mouse = EnsureVirtualMouse();
+            InputSystem.QueueStateEvent(mouse, CreateMouseState(scroll));
+            InputSystem.Update();
+        }
+
         // The pointer sequence relies on the player loop's own input update so that
         // presses are observable via wasPressedThisFrame; it must not call InputSystem.Update().
         static void QueueMouseStateNoUpdate()
         {
             var mouse = EnsureVirtualMouse();
+            InputSystem.QueueStateEvent(mouse, CreateMouseState(default(Vector2)));
+        }
+
+        static MouseState CreateMouseState(Vector2 scroll)
+        {
             ushort buttons = 0;
             foreach (var button in _heldMouseButtons.Keys)
                 buttons |= (ushort)(1 << (int)button);
-            InputSystem.QueueStateEvent(mouse, new MouseState { buttons = buttons, position = _mousePosition });
+            return new MouseState { buttons = buttons, position = _mousePosition, scroll = scroll };
         }
 
         static void Increment<T>(Dictionary<T, int> counts, T key)

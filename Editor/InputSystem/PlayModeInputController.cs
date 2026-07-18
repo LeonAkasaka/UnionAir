@@ -31,7 +31,7 @@ namespace LeonAkasaka.UnionAir.Editor
             UseRiskOverride = true,
             Risk = UnionAirEndpointRisk.Custom,
             PlayModePolicy = UnionAirPlayModePolicy.Allowed,
-            Summary = "Sets an Axis, Vector2, or Stick InputAction value on a virtual device. action accepts Map/Action or an unambiguous bare name; ambiguous names return 409 with candidates. Values remain until the next set or Play mode cleanup.",
+            Summary = "Sets an Axis, Vector2, or Stick InputAction value on a virtual device. action accepts Map/Action or an unambiguous bare name; ambiguous names return 409 with candidates. Gamepad values remain until the next set or Play mode cleanup; Mouse scroll is a one-shot delta.",
             RequiredBody = new string[] { "action", "value" })]
         private void Set(UnionAirRequestContext ctx)
             => PlayModeInputHandler.HandleSet(ctx.Request, ctx.Response);

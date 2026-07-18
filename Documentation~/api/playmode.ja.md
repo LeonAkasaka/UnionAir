@@ -218,7 +218,7 @@ Release:
 
 ## POST /api/playmode/input/set
 
-UnionAir の仮想デバイスを通じて Axis、Vector2、または Stick InputAction の値を設定します。`action` には、大文字小文字を区別しない `Map/Action` 識別子、または名前が一意な場合は裸のアクション名を指定できます。値は別の `set` 呼び出しによる変更、Play モードの変化、または UnionAir による仮想デバイスのクリーンアップまで維持されます。
+UnionAir の仮想デバイスを通じて Axis、Vector2、または Stick InputAction の値を設定します。`action` には、大文字小文字を区別しない `Map/Action` 識別子、または名前が一意な場合は裸のアクション名を指定できます。Gamepad の値は別の `set` 呼び出しによる変更、Play モードの変化、または UnionAir による仮想デバイスのクリーンアップまで維持されます。Mouse scroll の値は一回限りの delta で、次の Input System update でリセットされます。
 
 > オプションの `com.unity.inputsystem` パッケージが必要です。
 > Play Mode カテゴリが有効な場合のみ呼び出せます。
@@ -250,12 +250,18 @@ Axis アクション:
 { "action": "Throttle", "value": 0.0 }
 ```
 
+Mouse scroll アクション:
+
+```json
+{ "action": "UI/ScrollWheel", "value": [0.0, 120.0] }
+```
+
 | フィールド | 必須 | 説明 |
 |-------|----------|-------------|
 | `action` | ✅ | `Map/Action` 識別子、または一意な場合は裸の InputAction 名 |
 | `value` | ✅ | Axis: 有限の数値、Vector2/Stick: `[x, y]` |
 
-複数のバインディングを持つアクションでは、UnionAir はバインディング順で最初にサポートされる直接的な Gamepad 値バインディングを使用します。サポートされる set バインディングは `<Gamepad>/leftStick`、`<Gamepad>/rightStick`、`<Gamepad>/leftTrigger`、`<Gamepad>/rightTrigger`、および Gamepad スティックの x/y 軸です。WASD などのキーボードコンポジット、矢印キーコンポジット、Touch、Pen、XR、カスタムデバイス、その他のコントロールは `422` を返します。
+複数のバインディングを持つアクションでは、UnionAir はバインディング順で最初にサポートされる直接的な値バインディングを使用します。サポートされる set バインディングは `<Gamepad>/leftStick`、`<Gamepad>/rightStick`、`<Gamepad>/leftTrigger`、`<Gamepad>/rightTrigger`、Gamepad スティックの x/y 軸、`<Mouse>/scroll`、および Mouse scroll の x/y 軸です。WASD などのキーボードコンポジット、矢印キーコンポジット、Touch、Pen、XR、カスタムデバイス、その他のコントロールは `422` を返します。
 
 ### レスポンス
 
@@ -285,9 +291,24 @@ Axis:
 }
 ```
 
+Mouse scroll:
+
+```json
+{
+  "success": true,
+  "action": "UI/ScrollWheel",
+  "controlType": "Vector2",
+  "value": [0.0, 120.0],
+  "setBinding": "<Mouse>/scroll",
+  "setControl": "/UnionAirVirtualMouse/scroll"
+}
+```
+
 ### 注意
 
 UnionAir は書き込んだバインディング/コントロールを報告しますが、仮想デバイスイベントのキュー投入後のアクション解決は Unity Input System の責務です。`PlayerInput` のデバイスペアリング、コントロールスキーム、バインディングマスク、インタラクション、プロセッサ、アクションの有効化状態により、アクションが仮想デバイスを観測できない場合があります。
+
+Mouse scroll は Input System の delta control semantics に従います。各 `set` 呼び出しは仮想 Mouse の位置と押下中のボタンを維持しながら、1 回分の scroll delta をキューに投入します。この delta は Gamepad のスティックやトリガーの値のように維持されず、次の Input System update でリセットされます。
 
 ### エラー
 
@@ -297,7 +318,7 @@ UnionAir は書き込んだバインディング/コントロールを報告し�
 | 403 | Play Mode カテゴリが無効 |
 | 404 | アクションが見つからない |
 | 409 | Unity Editor が Play モードでない、ポインタ操作が進行中、または裸のアクション名が複数のマップに一致。曖昧な場合のレスポンスには `candidates` が含まれる |
-| 422 | アクションは存在するが、設定可能な直接的な Gamepad Axis/Vector2 バインディングがない |
+| 422 | アクションは存在するが、設定可能な直接的な Gamepad または Mouse scroll の Axis/Vector2 バインディングがない |
 
 ---
 

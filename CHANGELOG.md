@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `POST /api/playmode/input/set` now supports one-shot Mouse scroll deltas through `<Mouse>/scroll`, `<Mouse>/scroll/x`, and `<Mouse>/scroll/y` bindings while preserving the virtual Mouse position and held buttons.
+
+### Fixed
+
+- `POST /api/playmode/input/perform` now resolves Keyboard bindings through the virtual device's actual `KeyControl`, preventing top-row numeric paths such as `<Keyboard>/1` from being parsed as numeric `Key` enum values and pressing unrelated keys.
+
 ## [0.2.0] - 2026-07-16
 
 ### Added
