@@ -5,7 +5,8 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         [UnionAirEndpoint("GET", "",
             Category = UnionAirEndpointCategories.Read,
-            Summary = "Returns the API manifest. Use ?detail=full for examples, ?category=<id> to filter by category (e.g. sceneWrite, read, assetWrite, playMode, editorActions).",
+            TestRunPolicy = UnionAirTestRunPolicy.Allowed,
+            Summary = "Returns the API manifest. Use ?detail=full for examples, ?category=<id> to filter by category (e.g. sceneWrite, read, assetWrite, playMode, editorActions, testRunner).",
             OptionalQuery = new string[] { "detail", "category", "source", "includeDisabled" })]
         private void Help(UnionAirRequestContext ctx)
             => new HelpHandler().Handle(ctx.Request, ctx.Response);
@@ -16,6 +17,7 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         [UnionAirEndpoint("GET", "",
             Category = UnionAirEndpointCategories.Read,
+            TestRunPolicy = UnionAirTestRunPolicy.Allowed,
             Summary = "Checks whether the server is running.")]
         private void Health(UnionAirRequestContext ctx)
             => new HealthHandler().Handle(ctx.Request, ctx.Response);
@@ -26,13 +28,15 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         [UnionAirEndpoint("GET", "status",
             Category = UnionAirEndpointCategories.Read,
+            TestRunPolicy = UnionAirTestRunPolicy.Allowed,
             Summary = "Returns the Unity Editor execution status. After POST /api/editor/refresh, retry through any domain reload and wait until both isUpdating and isCompiling are false before making dependent calls.",
-            ResponseExample = "{\"isPlaying\":false,\"isPaused\":false,\"isCompiling\":false,\"isUpdating\":false,\"unityVersion\":\"6000.0.23f1\"}")]
+            ResponseExample = "{\"isPlaying\":false,\"isPaused\":false,\"isCompiling\":false,\"isUpdating\":false,\"unityVersion\":\"6000.0.23f1\",\"isTestRunning\":false,\"testRunSource\":null,\"testRunId\":null}")]
         private void Status(UnionAirRequestContext ctx)
             => new EditorStatusHandler().Handle(ctx.Request, ctx.Response);
 
         [UnionAirEndpoint("GET", "logs",
             Category = UnionAirEndpointCategories.Read,
+            TestRunPolicy = UnionAirTestRunPolicy.Allowed,
             Summary = "Returns captured Unity Console logs. The type filter is case-insensitive; unknown types return 400.",
             OptionalQuery = new string[] { "type", "search", "limit" })]
         private void Logs(UnionAirRequestContext ctx)

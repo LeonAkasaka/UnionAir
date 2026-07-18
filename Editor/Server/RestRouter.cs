@@ -46,6 +46,9 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (descriptor.Method != request.HttpMethod)
                     continue;
 
+                if (!CanCallDuringTestRun(descriptor, response))
+                    return true;
+
                 if (!descriptor.Enabled)
                 {
                     RestResponse.SendError(response,
@@ -89,6 +92,22 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.SendNotFound(response,
                 $"No handler for {request.HttpMethod} {request.Url.AbsolutePath}");
             return true;
+        }
+
+        private static bool CanCallDuringTestRun(
+            UnionAirEndpointDescriptor descriptor,
+            HttpListenerResponse response)
+        {
+            if (!UnionAirTestRunGate.IsActive ||
+                descriptor.TestRunPolicy == UnionAirTestRunPolicy.Allowed)
+                return true;
+
+            var source = RestResponse.FormatNullableString(UnionAirTestRunGate.PublicSource);
+            var id = RestResponse.FormatNullableString(UnionAirTestRunGate.PublicRunId);
+            RestResponse.Send(response,
+                $"{{\"error\":\"This endpoint cannot be used while a Unity Test Framework run is active.\",\"activeTestRun\":{{\"source\":{source},\"id\":{id}}}}}",
+                409);
+            return false;
         }
 
         private static bool CanCallInCurrentPlayModeState(

@@ -64,9 +64,10 @@ Each endpoint item includes the HTTP method, path, category, short summary, risk
 | `endpoints[].source` | string | `builtin` or `custom` |
 | `endpoints[].enabled` | bool | Whether the endpoint is currently enabled |
 | `endpoints[].routeTemplate` | string | Route template used by the attribute router |
-| `endpoints[].category` | string | Category used for discovery/UI grouping. Built-in constants include `read`, `sceneWrite`, `assetWrite`, `playMode`, `editorActions`, and `custom`; custom endpoints may use any stable category string. |
+| `endpoints[].category` | string | Category used for discovery/UI grouping. Built-in constants include `read`, `sceneWrite`, `assetWrite`, `playMode`, `editorActions`, `testRunner`, and `custom`; custom endpoints may use any stable category string. |
 | `endpoints[].risk` | string[] | Risk inherited from the endpoint category, unless the endpoint declares a more specific risk override |
 | `endpoints[].playModePolicy` | string | `allowed`, `blocked`, or `explicitOptIn`. `blocked` endpoints return `409` in Play mode. `explicitOptIn` endpoints require both the Editor setting and `allowWhilePlaying=true` in Play mode. |
+| `endpoints[].testRunPolicy` | string | `allowed` or `blocked`. Endpoints are blocked during a test run unless explicitly allowed. |
 | `endpoints[].requiredQuery` | string[] | Required query string parameters |
 | `endpoints[].optionalQuery` | string[] | Optional query string parameters |
 | `endpoints[].requiredBody` | string[] | Required JSON body fields |
@@ -77,7 +78,7 @@ Each endpoint item includes the HTTP method, path, category, short summary, risk
 | Parameter | Default | Description |
 |-------------|-----------|------|
 | `detail` | (compact) | `full` adds per-endpoint detail fields such as request/response examples to each endpoint item. |
-| `category` | (all) | Filters categories and endpoints to a single category ID (case-insensitive), e.g. `read`, `sceneWrite`, `assetWrite`, `playMode`, `editorActions`. |
+| `category` | (all) | Filters categories and endpoints to a single category ID (case-insensitive), e.g. `read`, `sceneWrite`, `assetWrite`, `playMode`, `editorActions`, `testRunner`. |
 | `includeDisabled` | `false` | When `true`, includes disabled custom categories/endpoints and endpoints with route conflicts. Built-in categories/endpoints are always listed with their current `enabled` state. |
 | `source` | `all` | `builtin`, `custom`, or `all` |
 

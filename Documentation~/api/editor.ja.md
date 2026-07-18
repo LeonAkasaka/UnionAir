@@ -20,7 +20,10 @@ Unity Editor の実行状態を返します。
   "isPaused":    false,
   "isCompiling": false,
   "isUpdating":  false,
-  "unityVersion": "6000.3.5f2"
+  "unityVersion": "6000.3.5f2",
+  "isTestRunning": false,
+  "testRunSource": null,
+  "testRunId": null
 }
 ```
 
@@ -31,6 +34,11 @@ Unity Editor の実行状態を返します。
 | `isCompiling` | bool | スクリプトのコンパイル中かどうか(`EditorApplication.isCompiling`) |
 | `isUpdating` | bool | アセット更新処理中かどうか(`EditorApplication.isUpdating`) |
 | `unityVersion` | string | Unity バージョン文字列 |
+| `isTestRunning` | bool | Unity Test Framework の run が実行中か |
+| `testRunSource` | string \| null | API 開始 run は `unionAir`、別ツールから開始した run は `external`、アイドル時は `null` |
+| `testRunId` | string \| null | UnionAir run ID。外部 run とアイドル時は `null` |
+
+このエンドポイントはテスト実行中も利用できます。health、help、logs、Test Runner の status/result/cancel 操作以外のエンドポイントは、active run が終了するまで `409` を返します。
 
 ---
 

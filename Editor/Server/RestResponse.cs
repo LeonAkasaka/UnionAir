@@ -88,6 +88,13 @@ namespace LeonAkasaka.UnionAir.Editor
         public static string FormatBool(bool b) => b ? "true" : "false";
 
         /// <summary>
+        /// Formats a nullable string as a complete JSON string literal or <c>null</c>.
+        /// Empty strings remain empty JSON strings; callers must explicitly map them to null when required.
+        /// </summary>
+        public static string FormatNullableString(string value)
+            => value == null ? "null" : $"\"{EscapeJson(value)}\"";
+
+        /// <summary>
         /// Escapes a string for safe inclusion in a JSON string literal.
         /// </summary>
         /// <param name="s">Input string to escape.</param>
@@ -140,4 +147,3 @@ namespace LeonAkasaka.UnionAir.Editor
         }
     }
 }
-

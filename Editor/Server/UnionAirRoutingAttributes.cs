@@ -2,6 +2,7 @@ using System;
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.InputSystem")]
+[assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.TestRunner")]
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -78,6 +79,18 @@ namespace LeonAkasaka.UnionAir.Editor
     }
 
     /// <summary>
+    /// Declares whether an endpoint may be called while a Unity Test Framework run is active.
+    /// </summary>
+    public enum UnionAirTestRunPolicy
+    {
+        /// <summary>The endpoint is rejected while any test run is active.</summary>
+        Blocked,
+
+        /// <summary>The endpoint may be called while a test run is active.</summary>
+        Allowed
+    }
+
+    /// <summary>
     /// Built-in category identifiers used by UnionAir endpoint metadata.
     /// </summary>
     public static class UnionAirEndpointCategories
@@ -96,6 +109,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         /// <summary>Built-in endpoints that execute request-dependent Unity Editor actions.</summary>
         public const string EditorActions = "editorActions";
+
+        /// <summary>Built-in endpoints that discover and execute Unity Test Framework tests.</summary>
+        public const string TestRunner = "testRunner";
 
         /// <summary>Default category identifier for custom endpoints when no more specific category is supplied.</summary>
         public const string Custom = "custom";
@@ -222,6 +238,11 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Whether this endpoint can be called while the Unity Editor is in Play mode.
         /// </summary>
         public UnionAirPlayModePolicy PlayModePolicy { get; set; } = UnionAirPlayModePolicy.Allowed;
+
+        /// <summary>
+        /// Whether this endpoint can be called while a Unity Test Framework run is active.
+        /// </summary>
+        public UnionAirTestRunPolicy TestRunPolicy { get; set; } = UnionAirTestRunPolicy.Blocked;
 
         /// <summary>
         /// Optional endpoint-specific risk metadata used when it differs from the category risk.

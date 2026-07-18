@@ -17,7 +17,10 @@ Returns the execution status of the Unity Editor.
   "isPaused":    false,
   "isCompiling": false,
   "isUpdating":  false,
-  "unityVersion": "6000.3.5f2"
+  "unityVersion": "6000.3.5f2",
+  "isTestRunning": false,
+  "testRunSource": null,
+  "testRunId": null
 }
 ```
 
@@ -28,6 +31,11 @@ Returns the execution status of the Unity Editor.
 | `isCompiling` | bool | Whether scripts are being compiled (`EditorApplication.isCompiling`) |
 | `isUpdating` | bool | Whether asset update processing is in progress (`EditorApplication.isUpdating`) |
 | `unityVersion` | string | Unity version string |
+| `isTestRunning` | bool | Whether a Unity Test Framework run is active |
+| `testRunSource` | string \| null | `unionAir` for an API-started run, `external` for a run started by another tool, otherwise `null` |
+| `testRunId` | string \| null | UnionAir run ID; `null` for external runs and when idle |
+
+This endpoint remains available while tests run. Other than health, help, logs, and Test Runner status/result/cancel operations, endpoints return `409` until the active run finishes.
 
 ---
 

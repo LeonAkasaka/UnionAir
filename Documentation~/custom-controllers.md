@@ -35,7 +35,7 @@ This example registers `GET /api/custom/my-tool/status`.
 
 Custom handlers are disabled by default. Enable them in **Window > UnionAir > REST Bridge > Custom Handlers**. Custom categories can also be enabled or disabled independently.
 
-`Category` is a string so custom extensions can define their own grouping labels in `/api/help` and the EditorWindow. Built-in endpoints use `UnionAirEndpointCategories.Read`, `SceneWrite`, `AssetWrite`, `PlayMode`, and `EditorActions`. Category metadata controls enablement and default risk reporting. `Risk` is descriptive metadata for tools and LLMs; category enablement controls whether requests are accepted. Endpoints can set `UseRiskOverride = true` and `Risk = ...` when a route has a narrower risk profile than its category.
+`Category` is a string so custom extensions can define their own grouping labels in `/api/help` and the EditorWindow. Built-in endpoints use `UnionAirEndpointCategories.Read`, `SceneWrite`, `AssetWrite`, `PlayMode`, `EditorActions`, and the optional `TestRunner`. Category metadata controls enablement and default risk reporting. `Risk` is descriptive metadata for tools and LLMs; category enablement controls whether requests are accepted. Endpoints can set `UseRiskOverride = true` and `Risk = ...` when a route has a narrower risk profile than its category.
 
 ## Requests and Responses
 
@@ -47,7 +47,11 @@ Use `UnionAirRequestContext.Request` to inspect the incoming request, `UnionAirR
 var body = RequestBodyReader.ReadString(ctx.Request);
 var name = RequestBodyReader.GetString(body, "name");
 var targetJson = RequestBodyReader.GetObject(body, "target");
+if (!RequestBodyReader.TryGetStringArray(body, "tags", out var tags))
+    RestResponse.SendError(ctx.Response, "tags must be a string array", 400);
 ```
+
+`TryGetStringArray` reads only a top-level key, returns an empty array when the key is absent, and returns `false` when a present value is not a valid array of strings.
 
 `RestResponse` writes JSON responses with the same content type, UTF-8 encoding, CORS headers, and error shape as built-in endpoints:
 
@@ -55,6 +59,8 @@ var targetJson = RequestBodyReader.GetObject(body, "target");
 RestResponse.Send(ctx.Response, "{\"status\":\"ok\"}");
 RestResponse.SendError(ctx.Response, "Missing required field: target", 400);
 ```
+
+`RestResponse.FormatNullableString(value)` returns an escaped JSON string literal, or the JSON literal `null` only when `value` is null. Empty strings remain `""`.
 
 ## Reference Resolution
 
@@ -192,5 +198,9 @@ Use category metadata and `PlayModePolicy` deliberately:
 | `UnionAirEndpointRisk.EditorState` | Endpoints that change Editor UI or selection state without directly modifying scene or asset data |
 | `UnionAirPlayModePolicy.Blocked` | Persistent scene or asset writes that should never run in Play mode |
 | `UnionAirPlayModePolicy.ExplicitOptIn` | Transient scene-object changes that require both Editor-side permission and `allowWhilePlaying=true` |
+| `UnionAirTestRunPolicy.Blocked` | Default. Rejects the endpoint while any Unity Test Framework run is active |
+| `UnionAirTestRunPolicy.Allowed` | Reserve for operational observation or control that is safe during tests |
+
+UnionAir applies the test-run lock to custom endpoints as well as built-in endpoints. Leave the default `Blocked` policy unless the route is specifically designed to observe or control an active run.
 
 Custom handlers are disabled by default, and custom categories can be disabled independently from the EditorWindow. Keep custom endpoints narrowly scoped, validate all request fields, and return explicit errors for rejected operations.

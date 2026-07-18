@@ -127,6 +127,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 category,
                 categoryDefinition,
                 endpoint.PlayModePolicy,
+                endpoint.TestRunPolicy,
                 endpoint.UseRiskOverride,
                 endpoint.Risk,
                 endpoint.Summary,
@@ -256,8 +257,8 @@ namespace LeonAkasaka.UnionAir.Editor
                     attribute.DisplayName,
                     source,
                     attribute.Risk,
-                    source == UnionAirRouteSource.Custom && attribute.CanDisable,
-                    source == UnionAirRouteSource.Builtin || attribute.EnabledByDefault));
+                    attribute.CanDisable,
+                    attribute.EnabledByDefault));
             }
         }
 

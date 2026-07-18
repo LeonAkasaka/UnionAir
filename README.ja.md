@@ -12,6 +12,7 @@ UnionAir は Unity Editor の状態をシンプルな **REST API**(HTTP)とし�
 ## 動作要件
 
 - Unity **6000.0** 以降
+- Unity Test Framework(任意。Test Runner API を使う場合のみ必要)
 
 ## インストール
 
@@ -55,6 +56,7 @@ https://github.com/LeonAkasaka/UnionAir.git
 | **Asset Write** | プレハブ、マテリアル、アセットファイル、AssetDatabase リフレッシュ | 既定で無効 |
 | **Play Mode** | Play モードの開始/終了/一時停止/ステップ、Input System アクション、Canvas UI 操作 | 既定で無効 |
 | **Editor Actions** | 選択、オブジェクトの ping、アセットのオープン、Unity Editor メニュー項目の実行 | 既定で無効 |
+| **Test Runner** | EditMode / PlayMode テストの発見、実行、監視、キャンセル、結果ダウンロード | 既定で無効。Unity Test Framework 導入時のみ利用可能 |
 
 > Edit モードでの書き込み操作は Unity Editor 上で Undo(Ctrl+Z)できます。
 > シーン上の GameObject と Component は読み取りレスポンスに `globalObjectId` を含み、書き込みリクエストでは型付きオブジェクト参照で指定できます。
@@ -68,7 +70,7 @@ https://github.com/LeonAkasaka/UnionAir.git
 - サーバは **`localhost` のみ**にバインドされ、ネットワーク上の他のマシンからは到達できません。
 - **認証はありません。** 同じマシン上で動作する任意のプロセスが、有効化されているすべてのエンドポイントを呼び出せます。
 - レスポンスには `Access-Control-Allow-Origin: *` が含まれるため、**同じマシンのブラウザで開いている任意の Web ページ**からも API を呼び出してレスポンス(シーン階層、アセット、ログ、スクリーンショット)を読み取れます。
-- 既定で有効なのは **Read** カテゴリのみです。Scene Write / Asset Write / Play Mode / Editor Actions はオプトインであり、有効化すると Unity Editor のメニュー実行やアセット削除を含む状態変更操作が、任意のローカルクライアントとブラウザオリジンに公開されます。すべてのローカルクライアント(およびブラウザタブ)を信頼できる場合にのみ有効化してください。
+- 既定で有効なのは **Read** カテゴリのみです。Scene Write / Asset Write / Play Mode / Editor Actions / Test Runner はオプトインであり、有効化するとプロジェクトの任意のテストコード、Unity Editor のメニュー実行、アセット削除を含む操作が、任意のローカルクライアントとブラウザオリジンに公開されます。すべてのローカルクライアント(およびブラウザタブ)を信頼できる場合にのみ有効化してください。
 
 ## クイックサンプル
 

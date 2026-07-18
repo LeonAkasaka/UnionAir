@@ -8,10 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added an optional, disabled-by-default Test Runner API when Unity Test Framework is installed: leaf-test discovery, asynchronous EditMode/PlayMode execution, current/latest status, cancellation, and complete NUnit XML download.
+- Test Runner results retain only the current run metadata and latest completed UnionAir result. Complete NUnit XML is atomically stored under `Library/UnionAir/TestRuns` and exposed through HTTP for callers that need durable history.
+- `GET /api/editor/status` now reports active Unity Test Framework runs and whether they were started by UnionAir or an external tool.
+- Endpoint metadata now declares whether each route is allowed during a test run. Active UnionAir and external runs block all endpoints except health, help, editor status/logs, run status/result/cancel, and CORS preflight.
 - `POST /api/playmode/input/set` now supports one-shot Mouse scroll deltas through `<Mouse>/scroll`, `<Mouse>/scroll/x`, and `<Mouse>/scroll/y` bindings while preserving the virtual Mouse position and held buttons.
 
 ### Fixed
 
+- Test Runner request filters now use the shared top-level JSON parser, avoiding false matches for filter names embedded inside string values.
+- Test-run progress metadata is now persisted at a bounded interval and at lifecycle boundaries instead of performing an atomic disk write for every test callback.
+- Unity Test Framework active-run inspection now uses a cached delegate at a bounded polling interval, reports compatibility failures, and safely rejects new runs when concurrency cannot be verified.
+- Test execution and discovery now share a correctly created, domain-scoped `TestRunnerApi` ScriptableObject instead of constructing an undisposed instance for each request.
+- Test-run source identifiers, public run IDs, nullable JSON string formatting, and the EditorWindow's core category order now each use a single definition to prevent silent drift between API responses and UI rendering.
+- Test-run gates now reconcile in both directions after a grace period when Unity Test Framework is positively observed as idle, preventing missed completion callbacks from leaving external or UnionAir runs locked until an Editor restart.
+- Latest NUnit XML and metadata now use a recoverable transaction and SHA-256 integrity check, preventing a crash between file replacements from serving one run's XML under another run ID.
 - `POST /api/playmode/input/perform` now resolves Keyboard bindings through the virtual device's actual `KeyControl`, preventing top-row numeric paths such as `<Keyboard>/1` from being parsed as numeric `Key` enum values and pressing unrelated keys.
 
 ## [0.2.0] - 2026-07-16

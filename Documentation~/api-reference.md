@@ -3,13 +3,13 @@
 
 Base URL: `http://localhost:<port>/api/` (default port: **8765**)
 
-All responses are returned with `Content-Type: application/json; charset=utf-8` and include the CORS header (`Access-Control-Allow-Origin: *`).
+Responses are returned with `Content-Type: application/json; charset=utf-8` unless an endpoint documents another media type. NUnit result downloads use `application/xml`. All responses include the CORS header (`Access-Control-Allow-Origin: *`).
 String fields in JSON responses are escaped consistently, including control characters.
 Non-finite floating-point values (`NaN`, `Infinity`, `-Infinity`) are emitted as `null` in JSON numeric fields.
 
 POST endpoints whose body is optional or unused accept an empty body. Clients must frame an empty POST with `Content-Length: 0`; Windows `HttpListener` may reject a POST that has neither `Content-Length` nor `Transfer-Encoding` with `411 Length Required` before UnionAir receives it. Standard HTTP libraries and `curl -X POST` normally add the zero-length header automatically.
 
-Errors are returned as JSON: `{"error":"<message>"}` with an appropriate HTTP status code. Endpoints in a disabled category return `403`.
+Errors are returned as JSON: `{"error":"<message>"}` with an appropriate HTTP status code. Endpoints in a disabled category normally return `403`. While a test run is active, the test-run lock is evaluated first, so a non-allowed endpoint returns `409` with `activeTestRun` even when its category is disabled; a retry after the run may then return `403`.
 
 The machine-readable manifest for all endpoints is available at [`GET /api/help`](api/general.md#get-apihelp).
 
@@ -26,6 +26,7 @@ Endpoints are grouped into categories that can be enabled or disabled in the Uni
 | Asset Write | `assetWrite` | Disabled |
 | Play Mode | `playMode` | Disabled |
 | Editor Actions | `editorActions` | Disabled |
+| Test Runner | `testRunner` | Disabled; present only with Unity Test Framework |
 | Custom | `custom` | Per custom category |
 
 ---
@@ -71,6 +72,12 @@ AnimationClip and AnimatorController authoring:
 Play mode control, Input System simulation, screen queries, and UI interaction:
 
 `POST /api/editor/play` · `POST /api/editor/stop` · `POST /api/editor/pause` · `POST /api/editor/step` · `GET /api/playmode/input/actions` · `POST /api/playmode/input/perform` · `POST /api/playmode/input/set` · `POST /api/playmode/input/pointer` · `POST /api/playmode/screen/hittest` · `GET /api/playmode/ui/elements` · `POST /api/playmode/ui/click` · `POST /api/playmode/ui/text` · `POST /api/playmode/ui/scroll` · `POST /api/playmode/ui/value`
+
+### [Test Runner](api/testing.md)
+
+Unity Test Framework discovery, asynchronous execution, monitoring, cancellation, and NUnit XML download:
+
+`GET /api/tests` · `POST /api/test-runs` · `GET /api/test-runs/{id}` · `DELETE /api/test-runs/{id}` · `GET /api/test-runs/{id}/results.xml`
 
 ---
 

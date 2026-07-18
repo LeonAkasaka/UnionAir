@@ -22,6 +22,7 @@ namespace LeonAkasaka.UnionAir.Editor
             string category,
             UnionAirCategoryDefinition categoryDefinition,
             UnionAirPlayModePolicy playModePolicy,
+            UnionAirTestRunPolicy testRunPolicy,
             bool useRiskOverride,
             UnionAirEndpointRisk riskOverride,
             string summary,
@@ -44,6 +45,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Category = category;
             CategoryDefinition = categoryDefinition;
             PlayModePolicy = playModePolicy;
+            TestRunPolicy = testRunPolicy;
             UseRiskOverride = useRiskOverride;
             RiskOverride = riskOverride;
             Summary = summary;
@@ -117,6 +119,11 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Whether this endpoint may be called while the Unity Editor is in Play mode.
         /// </summary>
         public UnionAirPlayModePolicy PlayModePolicy { get; }
+
+        /// <summary>
+        /// Whether this endpoint may be called while a Unity Test Framework run is active.
+        /// </summary>
+        public UnionAirTestRunPolicy TestRunPolicy { get; }
 
         /// <summary>
         /// Short help text for the endpoint.

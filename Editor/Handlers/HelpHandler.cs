@@ -146,6 +146,8 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append(",");
             AppendString(sb, "playModePolicy", PlayModePolicyName(endpoint.PlayModePolicy));
             sb.Append(",");
+            AppendString(sb, "testRunPolicy", TestRunPolicyName(endpoint.TestRunPolicy));
+            sb.Append(",");
             AppendStringArray(sb, "pathParams", endpoint.PathParams);
             sb.Append(",");
             AppendStringArray(sb, "requiredQuery", endpoint.RequiredQuery);
@@ -193,6 +195,9 @@ namespace LeonAkasaka.UnionAir.Editor
                     return "allowed";
             }
         }
+
+        private static string TestRunPolicyName(UnionAirTestRunPolicy policy)
+            => policy == UnionAirTestRunPolicy.Allowed ? "allowed" : "blocked";
 
         private static void AppendRiskArray(StringBuilder sb, string key, UnionAirEndpointRisk risk)
         {

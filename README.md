@@ -10,6 +10,7 @@ UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making i
 ## Requirements
 
 - Unity **6000.0** or later
+- Unity Test Framework (optional; required only for the Test Runner API)
 
 ## Installation
 
@@ -53,6 +54,7 @@ Add the dependency to `Packages/manifest.json`:
 | **Asset Write** | Prefabs, materials, asset files, AssetDatabase refresh | Disabled by default |
 | **Play Mode** | Enter/exit/pause/step play mode, Input System actions, and Canvas UI interaction | Disabled by default |
 | **Editor Actions** | Selection, object ping, asset open, and Unity Editor menu item execution | Disabled by default |
+| **Test Runner** | Discover, execute, monitor, cancel, and download results for EditMode and PlayMode tests | Disabled by default; available when Unity Test Framework is installed |
 
 > Edit mode write operations are Undo-able in the Unity Editor (Ctrl+Z).
 > Scene GameObjects and Components include `globalObjectId` values in read responses and can be targeted with typed object references in write requests.
@@ -66,7 +68,7 @@ Read this before enabling any write category:
 - The server binds to **`localhost` only** — it is not reachable from other machines on the network.
 - There is **no authentication**. Any process running on the same machine can call every enabled endpoint.
 - Responses include `Access-Control-Allow-Origin: *`, so **any web page open in a browser on the same machine** can also call the API and read the responses (scene hierarchy, assets, logs, screenshots).
-- Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, and Editor Actions categories are opt-in; enabling them exposes state-changing operations — including Unity Editor menu execution and asset deletion — to any local client or browser origin. Enable them only when every local client (and browser tab) is trusted.
+- Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, Editor Actions, and Test Runner categories are opt-in; enabling them exposes state-changing operations — including arbitrary project test code, Unity Editor menu execution, and asset deletion — to any local client or browser origin. Enable them only when every local client (and browser tab) is trusted.
 
 ## Quick Example
 

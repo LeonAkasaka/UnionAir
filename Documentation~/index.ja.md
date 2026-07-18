@@ -31,6 +31,8 @@ https://github.com/LeonAkasaka/UnionAir.git
 
 パッケージをプロジェクトの `Packages/com.leonakasaka.unionair/` フォルダに配置した場合は、埋め込みパッケージとして Unity が自動検出します。
 
+Test Runner API は任意機能です。プロジェクトに Unity Test Framework パッケージ(`com.unity.test-framework`)が導入されている場合のみ表示され、UnionAir EditorWindow で **Test Runner** カテゴリを明示的に有効化するまで無効です。
+
 ### 2. サーバの確認
 
 Unity Editor を開くと、REST サーバが自動的に起動します(デフォルトポート: **8765**)。

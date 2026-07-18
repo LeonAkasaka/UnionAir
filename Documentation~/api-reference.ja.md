@@ -6,13 +6,13 @@
 
 ベース URL: `http://localhost:<port>/api/`(デフォルトポート: **8765**)
 
-すべてのレスポンスは `Content-Type: application/json; charset=utf-8` で返され、CORS ヘッダー(`Access-Control-Allow-Origin: *`)を含みます。
+エンドポイントに別の media type の記載がない限り、レスポンスは `Content-Type: application/json; charset=utf-8` で返されます。NUnit 結果のダウンロードは `application/xml` です。すべてのレスポンスは CORS ヘッダー(`Access-Control-Allow-Origin: *`)を含みます。
 JSON レスポンス内の文字列フィールドは制御文字を含め一貫してエスケープされます。
 非有限の浮動小数点値(`NaN`、`Infinity`、`-Infinity`)は JSON 数値フィールドでは `null` として出力されます。
 
 ボディが任意または未使用の POST エンドポイントは空のボディを受け付けます。クライアントは空の POST に `Content-Length: 0` を付ける必要があります。`Content-Length` と `Transfer-Encoding` のどちらもない POST は、UnionAir に到達する前に Windows の `HttpListener` によって `411 Length Required` で拒否される場合があります。標準的な HTTP ライブラリと `curl -X POST` は通常、長さゼロのヘッダーを自動的に追加します。
 
-エラーは `{"error":"<message>"}` 形式の JSON と適切な HTTP ステータスコードで返されます。無効化されたカテゴリのエンドポイントは `403` を返します。
+エラーは `{"error":"<message>"}` 形式の JSON と適切な HTTP ステータスコードで返されます。無効化されたカテゴリの endpoint は通常 `403` を返します。テスト実行中はtest-run lockが先に評価されるため、許可対象外のendpointはカテゴリが無効でも`activeTestRun`を含む`409`を返します。run終了後の再試行では`403`になる場合があります。
 
 全エンドポイントの機械可読マニフェストは [`GET /api/help`](api/general.ja.md#get-apihelp) から取得できます。
 
@@ -29,6 +29,7 @@ JSON レスポンス内の文字列フィールドは制御文字を含め一貫
 | Asset Write | `assetWrite` | 無効 |
 | Play Mode | `playMode` | 無効 |
 | Editor Actions | `editorActions` | 無効 |
+| Test Runner | `testRunner` | 無効。Unity Test Framework 導入時のみ表示 |
 | Custom | `custom` | カスタムカテゴリごと |
 
 ---
@@ -74,6 +75,12 @@ AnimationClip / AnimatorController のオーサリング:
 Play モード制御、Input System シミュレーション、画面クエリ、UI 操作:
 
 `POST /api/editor/play` · `POST /api/editor/stop` · `POST /api/editor/pause` · `POST /api/editor/step` · `GET /api/playmode/input/actions` · `POST /api/playmode/input/perform` · `POST /api/playmode/input/set` · `POST /api/playmode/input/pointer` · `POST /api/playmode/screen/hittest` · `GET /api/playmode/ui/elements` · `POST /api/playmode/ui/click` · `POST /api/playmode/ui/text` · `POST /api/playmode/ui/scroll` · `POST /api/playmode/ui/value`
+
+### [Test Runner](api/testing.ja.md)
+
+Unity Test Framework のテスト発見、非同期実行、監視、キャンセル、NUnit XML ダウンロード:
+
+`GET /api/tests` · `POST /api/test-runs` · `GET /api/test-runs/{id}` · `DELETE /api/test-runs/{id}` · `GET /api/test-runs/{id}/results.xml`
 
 ---
 

@@ -67,9 +67,10 @@
 | `endpoints[].source` | string | `builtin` または `custom` |
 | `endpoints[].enabled` | bool | エンドポイントが現在有効かどうか |
 | `endpoints[].routeTemplate` | string | 属性ルーターが使用するルートテンプレート |
-| `endpoints[].category` | string | ディスカバリ/UI グループ分けに使うカテゴリ。built-in 定数は `read`、`sceneWrite`、`assetWrite`、`playMode`、`editorActions`、`custom`。カスタムエンドポイントは任意の安定的なカテゴリ文字列を使用可能 |
+| `endpoints[].category` | string | ディスカバリ/UI グループ分けに使うカテゴリ。built-in 定数は `read`、`sceneWrite`、`assetWrite`、`playMode`、`editorActions`、`testRunner`、`custom`。カスタムエンドポイントは任意の安定的なカテゴリ文字列を使用可能 |
 | `endpoints[].risk` | string[] | カテゴリから継承したリスク。エンドポイントがより具体的なリスクオーバーライドを宣言している場合はそちら |
 | `endpoints[].playModePolicy` | string | `allowed`、`blocked`、または `explicitOptIn`。`blocked` のエンドポイントは Play モード中 `409` を返します。`explicitOptIn` のエンドポイントは Play モード中、Editor 設定と `allowWhilePlaying=true` の両方が必要です |
+| `endpoints[].testRunPolicy` | string | `allowed` または `blocked`。明示的に許可されない endpoint はテスト実行中 blocked |
 | `endpoints[].requiredQuery` | string[] | 必須のクエリ文字列パラメータ |
 | `endpoints[].optionalQuery` | string[] | 任意のクエリ文字列パラメータ |
 | `endpoints[].requiredBody` | string[] | 必須の JSON ボディフィールド |
@@ -80,7 +81,7 @@
 | パラメータ | 既定値 | 説明 |
 |-------------|-----------|------|
 | `detail` | (compact) | `full` を指定すると、各エンドポイント項目にリクエスト/レスポンス例などの詳細フィールドが追加されます。 |
-| `category` | (all) | カテゴリとエンドポイントを単一のカテゴリ ID で絞り込みます(大文字小文字は区別しない)。例: `read`、`sceneWrite`、`assetWrite`、`playMode`、`editorActions`。 |
+| `category` | (all) | カテゴリとエンドポイントを単一のカテゴリ ID で絞り込みます(大文字小文字は区別しない)。例: `read`、`sceneWrite`、`assetWrite`、`playMode`、`editorActions`、`testRunner`。 |
 | `includeDisabled` | `false` | `true` を指定すると、無効化されたカスタムカテゴリ/エンドポイントおよびルート競合のあるエンドポイントも含めます。built-in のカテゴリ/エンドポイントは常に現在の `enabled` 状態付きで一覧されます。 |
 | `source` | `all` | `builtin`、`custom`、または `all` |
 

@@ -106,6 +106,62 @@ namespace LeonAkasaka.UnionAir.Editor
             => GetArray(ReadString(request), key);
 
         /// <summary>
+        /// Extracts an optional top-level JSON array whose elements must all be strings.
+        /// </summary>
+        /// <remarks>
+        /// A missing key is valid and returns an empty array. The method returns false when the
+        /// key is present but its value is not a well-formed array of JSON strings.
+        /// </remarks>
+        /// <param name="json">JSON object text to inspect.</param>
+        /// <param name="key">Top-level field name to read.</param>
+        /// <param name="values">The decoded strings, or an empty array when the key is absent.</param>
+        /// <returns>True when the field is absent or is a valid string array; otherwise false.</returns>
+        public static bool TryGetStringArray(string json, string key, out string[] values)
+        {
+            values = new string[0];
+            if (string.IsNullOrEmpty(json)) return true;
+
+            int keyIdx = FindTopLevelKey(json, key);
+            if (keyIdx < 0) return true;
+
+            int colonIdx = json.IndexOf(':', keyIdx);
+            if (colonIdx < 0) return false;
+
+            int position = colonIdx + 1;
+            SkipWhitespace(json, ref position);
+            if (position >= json.Length || json[position] != '[') return false;
+            position++;
+
+            var result = new List<string>();
+            SkipWhitespace(json, ref position);
+            if (position < json.Length && json[position] == ']')
+            {
+                values = result.ToArray();
+                return true;
+            }
+
+            while (position < json.Length)
+            {
+                string value;
+                if (!TryReadJsonString(json, ref position, out value)) return false;
+                result.Add(value);
+
+                SkipWhitespace(json, ref position);
+                if (position >= json.Length) return false;
+                if (json[position] == ']')
+                {
+                    values = result.ToArray();
+                    return true;
+                }
+                if (json[position] != ',') return false;
+                position++;
+                SkipWhitespace(json, ref position);
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Extracts a bool value from a flat JSON object body.
         /// Returns null when the key is absent or the value is not a JSON boolean.
         /// </summary>
@@ -291,6 +347,48 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
             }
             return sb.ToString();
+        }
+
+        private static bool TryReadJsonString(string json, ref int position, out string value)
+        {
+            value = null;
+            if (position >= json.Length || json[position] != '"') return false;
+
+            int start = ++position;
+            while (position < json.Length)
+            {
+                if (json[position] == '\\')
+                {
+                    if (position + 1 >= json.Length) return false;
+                    var escape = json[position + 1];
+                    if (escape == 'u')
+                    {
+                        if (position + 5 >= json.Length || !IsHex(json, position + 2, 4)) return false;
+                        position += 6;
+                        continue;
+                    }
+                    if (escape != '"' && escape != '\\' && escape != '/' &&
+                        escape != 'b' && escape != 'f' && escape != 'n' &&
+                        escape != 'r' && escape != 't')
+                        return false;
+                    position += 2;
+                    continue;
+                }
+                if (json[position] == '"')
+                {
+                    value = UnescapeJsonString(json.Substring(start, position - start));
+                    position++;
+                    return true;
+                }
+                if (json[position] < ' ') return false;
+                position++;
+            }
+            return false;
+        }
+
+        private static void SkipWhitespace(string json, ref int position)
+        {
+            while (position < json.Length && char.IsWhiteSpace(json[position])) position++;
         }
 
         private static bool IsHex(string s, int start, int count)

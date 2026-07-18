@@ -1,0 +1,28 @@
+{
+    "name": "LeonAkasaka.UnionAir.Editor.TestRunner",
+    "rootNamespace": "LeonAkasaka.UnionAir.Editor",
+    "references": [
+        "LeonAkasaka.UnionAir.Editor",
+        "UnityEditor.TestRunner",
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNION_AIR_TEST_FRAMEWORK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "",
+            "define": "UNION_AIR_TEST_FRAMEWORK"
+        }
+    ],
+    "noEngineReferences": false
+}

@@ -12,6 +12,14 @@ namespace LeonAkasaka.UnionAir.Editor
         private const int MaxLogLines = 100;
         private const string PrefKeyTab = "UnionAir.UI.Tab";
         private const string PrefKeyCategoryExpandedPrefix = "UnionAir.UI.CategoryExpanded.";
+        private static readonly string[] CoreBuiltInCategoryIds =
+        {
+            UnionAirEndpointCategories.Read,
+            UnionAirEndpointCategories.SceneWrite,
+            UnionAirEndpointCategories.AssetWrite,
+            UnionAirEndpointCategories.PlayMode,
+            UnionAirEndpointCategories.EditorActions
+        };
 
         private readonly List<string> _log = new List<string>();
         private Vector2 _scroll;
@@ -145,11 +153,22 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private void DrawBuiltInApiTab()
         {
-            DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.Read));
-            DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.SceneWrite));
-            DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.AssetWrite));
-            DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.PlayMode));
-            DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, UnionAirEndpointCategories.EditorActions));
+            foreach (var categoryId in CoreBuiltInCategoryIds)
+                DrawEndpointGroup(FindCategory(UnionAirRouteSource.Builtin, categoryId));
+
+            foreach (var category in UnionAirRouteRegistry.Categories)
+            {
+                if (category.Source != UnionAirRouteSource.Builtin || IsCoreBuiltInCategory(category.Id))
+                    continue;
+                DrawEndpointGroup(category);
+            }
+        }
+
+        private static bool IsCoreBuiltInCategory(string id)
+        {
+            foreach (var categoryId in CoreBuiltInCategoryIds)
+                if (id == categoryId) return true;
+            return false;
         }
 
         private void DrawCustomHandlersTab()

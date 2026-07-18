@@ -38,7 +38,7 @@ public class MyToolController
 
 カスタムハンドラーは既定で無効です。**Window > UnionAir > REST Bridge > Custom Handlers** で有効化してください。カスタムカテゴリも個別に有効/無効を切り替えられます。
 
-`Category` は文字列であり、カスタム拡張は `/api/help` と EditorWindow に表示される独自のグループ名を定義できます。built-in エンドポイントは `UnionAirEndpointCategories.Read`、`SceneWrite`、`AssetWrite`、`PlayMode`、`EditorActions` を使用します。カテゴリメタデータは有効化状態と既定のリスク報告を制御します。`Risk` はツールや LLM 向けの説明用メタデータであり、リクエストを受け付けるかどうかはカテゴリの有効化状態が決めます。ルートがカテゴリより狭いリスクプロファイルを持つ場合、エンドポイントは `UseRiskOverride = true` と `Risk = ...` を設定できます。
+`Category` は文字列であり、カスタム拡張は `/api/help` と EditorWindow に表示される独自のグループ名を定義できます。built-in エンドポイントは `UnionAirEndpointCategories.Read`、`SceneWrite`、`AssetWrite`、`PlayMode`、`EditorActions`、任意機能の `TestRunner` を使用します。カテゴリメタデータは有効化状態と既定のリスク報告を制御します。`Risk` はツールや LLM 向けの説明用メタデータであり、リクエストを受け付けるかどうかはカテゴリの有効化状態が決めます。ルートがカテゴリより狭いリスクプロファイルを持つ場合、エンドポイントは `UseRiskOverride = true` と `Risk = ...` を設定できます。
 
 ## リクエストとレスポンス
 
@@ -50,7 +50,11 @@ public class MyToolController
 var body = RequestBodyReader.ReadString(ctx.Request);
 var name = RequestBodyReader.GetString(body, "name");
 var targetJson = RequestBodyReader.GetObject(body, "target");
+if (!RequestBodyReader.TryGetStringArray(body, "tags", out var tags))
+    RestResponse.SendError(ctx.Response, "tags must be a string array", 400);
 ```
+
+`TryGetStringArray` は top-level key のみを読み取り、key がない場合は空配列を返し、存在する値が有効な文字列配列でない場合は `false` を返します。
 
 `RestResponse` は built-in エンドポイントと同じ Content-Type、UTF-8 エンコーディング、CORS ヘッダー、エラー形式で JSON レスポンスを書き込みます:
 
@@ -58,6 +62,8 @@ var targetJson = RequestBodyReader.GetObject(body, "target");
 RestResponse.Send(ctx.Response, "{\"status\":\"ok\"}");
 RestResponse.SendError(ctx.Response, "Missing required field: target", 400);
 ```
+
+`RestResponse.FormatNullableString(value)` はescape済みJSON文字列リテラルを返し、`value`がnullの場合だけJSONリテラル`null`を返します。空文字列は`""`のままです。
 
 ## 参照解決
 
@@ -195,5 +201,9 @@ if (!UnionAirReferenceResolver.TryResolveAssetReference(
 | `UnionAirEndpointRisk.EditorState` | シーンやアセットのデータを直接変更せず、Editor の UI や選択状態を変更するエンドポイント |
 | `UnionAirPlayModePolicy.Blocked` | Play モード中に決して実行すべきでない、永続的なシーン/アセット書き込み |
 | `UnionAirPlayModePolicy.ExplicitOptIn` | Editor 側の許可と `allowWhilePlaying=true` の両方を要する一時的なシーンオブジェクト変更 |
+| `UnionAirTestRunPolicy.Blocked` | 既定。Unity Test Framework の run 中は endpoint を拒否 |
+| `UnionAirTestRunPolicy.Allowed` | テスト中も安全な運用監視・制御に限定して使用 |
+
+UnionAir は built-in endpoint と同様に custom endpoint にも test-run lock を適用します。active run の監視・制御専用に設計した route でない限り、既定の `Blocked` を維持してください。
 
 カスタムハンドラーは既定で無効であり、カスタムカテゴリは EditorWindow から個別に無効化できます。カスタムエンドポイントのスコープは狭く保ち、すべてのリクエストフィールドを検証し、拒否した操作には明示的なエラーを返してください。
