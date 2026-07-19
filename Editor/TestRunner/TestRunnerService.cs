@@ -50,6 +50,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 _current.currentTest = "";
                 _current.resultFileAvailable = false;
                 _current.resultFileSha256 = "";
+                if (!string.IsNullOrEmpty(_current.profilingSessionId))
+                    ProfilingService.FinishAttached(_current.id, "Unity Test Framework run state was lost during reload.");
                 SaveCurrentNow();
             }
         }
@@ -123,6 +125,28 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
             }
 
+            var profilingJson = RequestBodyReader.GetObject(body, "profiling");
+            string profilingSessionId = "";
+            if (profilingJson == null && RequestBodyReader.HasTopLevelField(body, "profiling"))
+            {
+                RestResponse.SendError(ctx.Response, "Body field 'profiling' must be a JSON object.", 400);
+                return;
+            }
+            if (profilingJson != null)
+            {
+                if (!ProfilingService.IsCategoryEnabled())
+                {
+                    RestResponse.SendError(ctx.Response, "Profiling category is disabled.", 403);
+                    return;
+                }
+                if (!ProfilingService.TryParseSettings(profilingJson, out var profilingSettings, out error, out var profilingStatus) ||
+                    !ProfilingService.TryCreateArmed(profilingSettings, true, out profilingSessionId, out error, out profilingStatus))
+                {
+                    RestResponse.SendError(ctx.Response, error, profilingStatus);
+                    return;
+                }
+            }
+
             var filter = new Filter
             {
                 testMode = mode,
@@ -138,9 +162,12 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             catch (Exception ex)
             {
+                if (!string.IsNullOrEmpty(profilingSessionId)) ProfilingService.DeleteArmed(profilingSessionId);
                 RestResponse.SendError(ctx.Response, "The test run could not be started: " + ex.Message, 500);
                 return;
             }
+
+            if (!string.IsNullOrEmpty(profilingSessionId)) ProfilingService.BindToTest(profilingSessionId, id);
 
             _current = new TestRunRecord
             {
@@ -148,12 +175,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 mode = modeName,
                 state = "queued",
                 filters = filters,
-                startedAt = UtcNow()
+                startedAt = UtcNow(),
+                profilingSessionId = profilingSessionId
             };
             SaveCurrentNow();
             UnionAirTestRunGate.Begin(UnionAirTestRunGate.UnionAirSource, id);
             RestResponse.Send(ctx.Response,
-                $"{{\"id\":\"{RestResponse.EscapeJson(id)}\",\"state\":\"queued\",\"statusUrl\":\"/api/test-runs/{RestResponse.EscapeJson(id)}\",\"resultUrl\":\"/api/test-runs/{RestResponse.EscapeJson(id)}/results.xml\"}}",
+                $"{{\"id\":\"{RestResponse.EscapeJson(id)}\",\"state\":\"queued\",\"statusUrl\":\"/api/test-runs/{RestResponse.EscapeJson(id)}\",\"resultUrl\":\"/api/test-runs/{RestResponse.EscapeJson(id)}/results.xml\",\"profilingSessionId\":{RestResponse.FormatNullableString(string.IsNullOrEmpty(profilingSessionId) ? null : profilingSessionId)},\"profilingUrl\":{RestResponse.FormatNullableString(string.IsNullOrEmpty(profilingSessionId) ? null : $"/api/profiling/sessions/{profilingSessionId}")}}}",
                 202);
         }
 
@@ -228,6 +256,16 @@ namespace LeonAkasaka.UnionAir.Editor
             _current.state = "running";
             _current.total = testsToRun?.TestCaseCount ?? 0;
             SaveCurrentNow();
+            if (!string.IsNullOrEmpty(_current.profilingSessionId))
+            {
+                try { ProfilingService.StartAttached(_current.id); }
+                catch (Exception ex)
+                {
+                    _current.error = "Profiling could not be started: " + ex.Message;
+                    ProfilingService.FinishAttached(_current.id, _current.error);
+                    SaveCurrentNow();
+                }
+            }
         }
 
         internal static void OnTestStarted(ITestAdaptor test)
@@ -272,6 +310,9 @@ namespace LeonAkasaka.UnionAir.Editor
             _current.duration = result.Duration;
             _current.assertCount = result.AssertCount;
 
+            if (!string.IsNullOrEmpty(_current.profilingSessionId))
+                ProfilingService.FinishAttached(_current.id);
+
             try
             {
                 CommitLatestResult(result);
@@ -306,6 +347,8 @@ namespace LeonAkasaka.UnionAir.Editor
             _current.resultFileAvailable = false;
             _current.resultFileSha256 = "";
             _current.error = message ?? "The Unity Test Framework aborted the run.";
+            if (!string.IsNullOrEmpty(_current.profilingSessionId))
+                ProfilingService.FinishAttached(_current.id, _current.error);
             SaveCurrentNow();
             UnionAirTestRunGate.End(UnionAirTestRunGate.UnionAirSource, _current.id);
         }
@@ -415,6 +458,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 _current.resultFileAvailable = false;
                 _current.resultFileSha256 = "";
                 _current.error = "Unity Test Framework became idle without delivering a completion callback.";
+                if (!string.IsNullOrEmpty(_current.profilingSessionId))
+                    ProfilingService.FinishAttached(_current.id, _current.error);
                 try
                 {
                     SaveCurrentNow();

@@ -61,11 +61,16 @@ Starts one asynchronous EditMode or PlayMode test run and returns `202 Accepted`
   "testNames": ["Example.EditorTests.SavesAsset"],
   "groupNames": ["^Example\\."],
   "categoryNames": ["Smoke"],
-  "assemblyNames": ["Example.EditorTests"]
+  "assemblyNames": ["Example.EditorTests"],
+  "profiling": {
+    "metrics": ["mainThreadTime", "gcAllocInFrame"],
+    "warmupFrames": 30,
+    "maxFrames": 300
+  }
 }
 ```
 
-`mode` is required. The four filters are optional arrays of non-empty strings. `groupNames` entries are regular expressions and are validated before execution.
+`mode` is required. The four filters are optional arrays of non-empty strings. `groupNames` entries are regular expressions and are validated before execution. `profiling` is optional and uses the [Profiling session configuration](profiling.md#post-apiprofilingsessions). Both the Test Runner and Profiling categories must be enabled when it is present.
 
 ### Response — 202
 
@@ -74,7 +79,9 @@ Starts one asynchronous EditMode or PlayMode test run and returns `202 Accepted`
   "id": "0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352",
   "state": "queued",
   "statusUrl": "/api/test-runs/0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352",
-  "resultUrl": "/api/test-runs/0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352/results.xml"
+  "resultUrl": "/api/test-runs/0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352/results.xml",
+  "profilingSessionId": "8c3fe76a-4a6a-4dd9-a678-02b628ce5d12",
+  "profilingUrl": "/api/profiling/sessions/8c3fe76a-4a6a-4dd9-a678-02b628ce5d12"
 }
 ```
 
@@ -111,7 +118,9 @@ Returns the current run or the latest completed UnionAir run. Older IDs return `
     "assertCount": 1
   },
   "resultFileAvailable": true,
-  "resultUrl": "/api/test-runs/0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352/results.xml"
+  "resultUrl": "/api/test-runs/0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352/results.xml",
+  "profilingSessionId": null,
+  "profilingUrl": null
 }
 ```
 

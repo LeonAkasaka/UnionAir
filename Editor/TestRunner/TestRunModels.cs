@@ -35,6 +35,7 @@ namespace LeonAkasaka.UnionAir.Editor
         public bool resultFileAvailable;
         public string resultFileSha256 = "";
         public string error = "";
+        public string profilingSessionId = "";
 
         internal bool IsActive => state == "queued" || state == "running" || state == "canceling";
 
@@ -62,6 +63,10 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($",\"resultFileAvailable\":{RestResponse.FormatBool(resultFileAvailable)}");
             sb.Append(",\"resultUrl\":");
             sb.Append(RestResponse.FormatNullableString(resultFileAvailable ? $"/api/test-runs/{id}/results.xml" : null));
+            sb.Append(",\"profilingSessionId\":");
+            sb.Append(RestResponse.FormatNullableString(string.IsNullOrEmpty(profilingSessionId) ? null : profilingSessionId));
+            sb.Append(",\"profilingUrl\":");
+            sb.Append(RestResponse.FormatNullableString(string.IsNullOrEmpty(profilingSessionId) ? null : $"/api/profiling/sessions/{profilingSessionId}"));
             if (!string.IsNullOrEmpty(error))
             {
                 sb.Append(",");

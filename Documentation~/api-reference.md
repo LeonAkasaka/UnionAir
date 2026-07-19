@@ -27,6 +27,7 @@ Endpoints are grouped into categories that can be enabled or disabled in the Uni
 | Play Mode | `playMode` | Disabled |
 | Editor Actions | `editorActions` | Disabled |
 | Test Runner | `testRunner` | Disabled; present only with Unity Test Framework |
+| Profiling | `profiling` | Disabled |
 | Custom | `custom` | Per custom category |
 
 ---
@@ -78,6 +79,12 @@ Play mode control, Input System simulation, screen queries, and UI interaction:
 Unity Test Framework discovery, asynchronous execution, monitoring, cancellation, and NUnit XML download:
 
 `GET /api/tests` · `POST /api/test-runs` · `GET /api/test-runs/{id}` · `DELETE /api/test-runs/{id}` · `GET /api/test-runs/{id}/results.xml`
+
+### [Profiling](api/profiling.md)
+
+ProfilerRecorder metrics, NDJSON samples, Profiler raw captures, Memory Profiler snapshots, and Test Runner attachment:
+
+`GET /api/profiling/metrics` · `POST|GET /api/profiling/sessions` · `GET|DELETE /api/profiling/sessions/{id}` · `POST .../{id}/stop` · `GET .../{id}/samples.ndjson` · `GET .../{id}/profile.raw` · `POST|GET /api/memory-snapshots` · `GET|DELETE /api/memory-snapshots/{id}` · `GET .../{id}/snapshot`
 
 ---
 

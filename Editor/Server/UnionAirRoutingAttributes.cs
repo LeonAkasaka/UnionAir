@@ -60,7 +60,10 @@ namespace LeonAkasaka.UnionAir.Editor
         RequestDependent = 1 << 4,
 
         /// <summary>The endpoint may change Unity Editor UI or selection state without directly modifying scene or asset data.</summary>
-        EditorState = 1 << 5
+        EditorState = 1 << 5,
+
+        /// <summary>The endpoint may enable profiling or capture diagnostic artifacts containing project data.</summary>
+        Profiling = 1 << 6
     }
 
     /// <summary>
@@ -112,6 +115,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         /// <summary>Built-in endpoints that discover and execute Unity Test Framework tests.</summary>
         public const string TestRunner = "testRunner";
+
+        /// <summary>Built-in endpoints that capture performance and memory diagnostics.</summary>
+        public const string Profiling = "profiling";
 
         /// <summary>Default category identifier for custom endpoints when no more specific category is supplied.</summary>
         public const string Custom = "custom";

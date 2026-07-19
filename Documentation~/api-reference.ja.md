@@ -30,6 +30,7 @@ JSON レスポンス内の文字列フィールドは制御文字を含め一貫
 | Play Mode | `playMode` | 無効 |
 | Editor Actions | `editorActions` | 無効 |
 | Test Runner | `testRunner` | 無効。Unity Test Framework 導入時のみ表示 |
+| Profiling | `profiling` | 無効 |
 | Custom | `custom` | カスタムカテゴリごと |
 
 ---
@@ -81,6 +82,12 @@ Play モード制御、Input System シミュレーション、画面クエリ�
 Unity Test Framework のテスト発見、非同期実行、監視、キャンセル、NUnit XML ダウンロード:
 
 `GET /api/tests` · `POST /api/test-runs` · `GET /api/test-runs/{id}` · `DELETE /api/test-runs/{id}` · `GET /api/test-runs/{id}/results.xml`
+
+### [Profiling](api/profiling.ja.md)
+
+ProfilerRecorder metric、NDJSON sample、Profiler raw capture、Memory Profiler snapshot、Test Runner連携:
+
+`GET /api/profiling/metrics` · `POST|GET /api/profiling/sessions` · `GET|DELETE /api/profiling/sessions/{id}` · `POST .../{id}/stop` · `GET .../{id}/samples.ndjson` · `GET .../{id}/profile.raw` · `POST|GET /api/memory-snapshots` · `GET|DELETE /api/memory-snapshots/{id}` · `GET .../{id}/snapshot`
 
 ---
 

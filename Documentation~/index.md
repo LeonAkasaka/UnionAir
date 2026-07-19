@@ -30,6 +30,8 @@ If the package is placed in the project's `Packages/com.leonakasaka.unionair/` f
 
 The Test Runner API is optional. It appears only when the project has the Unity Test Framework package (`com.unity.test-framework`) installed, and its **Test Runner** category remains disabled until explicitly enabled in the UnionAir EditorWindow.
 
+The **Profiling** category is also disabled by default. It provides AI-oriented metric summaries, frame-level NDJSON, Unity Profiler raw captures, and Memory Profiler snapshots. See the [Profiling API](api/profiling.md).
+
 ### 2. Check the server
 
 When you open the Unity Editor, the REST server starts automatically (default port: **8765**).

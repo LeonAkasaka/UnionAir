@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added a disabled-by-default Profiling API for AI-oriented `ProfilerRecorder` discovery and sessions, versioned JSON statistics, frame-level NDJSON, optional Unity Profiler raw captures, and downloadable Memory Profiler snapshots.
+- Profiling sessions can be attached atomically to UnionAir EditMode and PlayMode Test Runner runs and report discontinuous segments across assembly reloads.
+- Profiling and memory artifacts are stored under `Library/UnionAir`, include project-relative paths, sizes, and SHA-256 hashes, and use bounded count and shared-size retention.
+
 - Added an optional, disabled-by-default Test Runner API when Unity Test Framework is installed: leaf-test discovery, asynchronous EditMode/PlayMode execution, current/latest status, cancellation, and complete NUnit XML download.
 - Test Runner results retain only the current run metadata and latest completed UnionAir result. Complete NUnit XML is atomically stored under `Library/UnionAir/TestRuns` and exposed through HTTP for callers that need durable history.
 - `GET /api/editor/status` now reports active Unity Test Framework runs and whether they were started by UnionAir or an external tool.
@@ -16,6 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Prevented failed profiling restoration from leaving undeletable active sessions or owned Profiler settings behind.
+- Moved profiling artifact downloads off the Unity Editor update loop and cached finalized session statistics instead of reparsing NDJSON on every status request.
+- Made active NDJSON downloads share-safe and length-bounded, handled background-transfer queue failures, and limited sessions to 64 metrics to bound memory use.
 - Active object searches now select the Unity 6000.4 no-sort-parameter API while retaining the established overload on earlier Unity 6 releases, removing new obsolete warnings without raising the minimum supported Unity version.
 - Test Runner request filters now use the shared top-level JSON parser, avoiding false matches for filter names embedded inside string values.
 - Test-run progress metadata is now persisted at a bounded interval and at lifecycle boundaries instead of performing an atomic disk write for every test callback.

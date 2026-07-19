@@ -55,7 +55,8 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Marks the response as deferred: the server will not close it when the handler returns.
         /// The handler then owns the response and must eventually write it (for example with
-        /// <see cref="RestResponse.Send"/>) and call <c>Response.Close()</c> itself, on the main thread.
+        /// <see cref="RestResponse.Send"/>) and call <c>Response.Close()</c> itself. Background
+        /// response I/O must not call Unity APIs.
         /// </summary>
         public void Defer()
         {

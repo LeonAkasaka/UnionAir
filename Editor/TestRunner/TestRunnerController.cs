@@ -21,9 +21,9 @@ namespace LeonAkasaka.UnionAir.Editor
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
             Summary = "Starts an asynchronous EditMode or PlayMode Unity Test Framework run.",
             RequiredBody = new string[] { "mode" },
-            OptionalBody = new string[] { "testNames", "groupNames", "categoryNames", "assemblyNames" },
-            RequestExample = "{\"mode\":\"editMode\",\"categoryNames\":[\"Smoke\"]}",
-            ResponseExample = "{\"id\":\"...\",\"state\":\"queued\",\"statusUrl\":\"/api/test-runs/...\",\"resultUrl\":\"/api/test-runs/.../results.xml\"}")]
+            OptionalBody = new string[] { "testNames", "groupNames", "categoryNames", "assemblyNames", "profiling" },
+            RequestExample = "{\"mode\":\"editMode\",\"categoryNames\":[\"Smoke\"],\"profiling\":{\"metrics\":[\"mainThreadTime\"],\"maxFrames\":300}}",
+            ResponseExample = "{\"id\":\"...\",\"state\":\"queued\",\"statusUrl\":\"/api/test-runs/...\",\"resultUrl\":\"/api/test-runs/.../results.xml\",\"profilingSessionId\":\"...\",\"profilingUrl\":\"/api/profiling/sessions/...\"}")]
         private void Start(UnionAirRequestContext ctx)
             => TestRunnerService.Start(ctx);
 

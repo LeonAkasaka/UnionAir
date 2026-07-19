@@ -35,7 +35,7 @@ This example registers `GET /api/custom/my-tool/status`.
 
 Custom handlers are disabled by default. Enable them in **Window > UnionAir > REST Bridge > Custom Handlers**. Custom categories can also be enabled or disabled independently.
 
-`Category` is a string so custom extensions can define their own grouping labels in `/api/help` and the EditorWindow. Built-in endpoints use `UnionAirEndpointCategories.Read`, `SceneWrite`, `AssetWrite`, `PlayMode`, `EditorActions`, and the optional `TestRunner`. Category metadata controls enablement and default risk reporting. `Risk` is descriptive metadata for tools and LLMs; category enablement controls whether requests are accepted. Endpoints can set `UseRiskOverride = true` and `Risk = ...` when a route has a narrower risk profile than its category.
+`Category` is a string so custom extensions can define their own grouping labels in `/api/help` and the EditorWindow. Built-in endpoints use `UnionAirEndpointCategories.Read`, `SceneWrite`, `AssetWrite`, `PlayMode`, `EditorActions`, `Profiling`, and the optional `TestRunner`. Category metadata controls enablement and default risk reporting. `Risk` is descriptive metadata for tools and LLMs; category enablement controls whether requests are accepted. Endpoints can set `UseRiskOverride = true` and `Risk = ...` when a route has a narrower risk profile than its category.
 
 ## Requests and Responses
 
@@ -59,6 +59,8 @@ if (!RequestBodyReader.TryGetStringArray(body, "tags", out var tags))
 RestResponse.Send(ctx.Response, "{\"status\":\"ok\"}");
 RestResponse.SendError(ctx.Response, "Missing required field: target", 400);
 ```
+
+Handlers that complete later must call `ctx.Defer()` before returning and eventually close the response themselves. Deferred background I/O may use the .NET response stream, but it must not call Unity APIs from a worker thread.
 
 `RestResponse.FormatNullableString(value)` returns an escaped JSON string literal, or the JSON literal `null` only when `value` is null. Empty strings remain `""`.
 
@@ -196,6 +198,7 @@ Use category metadata and `PlayModePolicy` deliberately:
 | `UnionAirEndpointRisk.Custom` | Tool-specific or mixed behavior |
 | `UnionAirEndpointRisk.RequestDependent` | Endpoints whose side effects depend on request parameters or payload |
 | `UnionAirEndpointRisk.EditorState` | Endpoints that change Editor UI or selection state without directly modifying scene or asset data |
+| `UnionAirEndpointRisk.Profiling` | Endpoints that enable profiling or capture diagnostic artifacts containing project data |
 | `UnionAirPlayModePolicy.Blocked` | Persistent scene or asset writes that should never run in Play mode |
 | `UnionAirPlayModePolicy.ExplicitOptIn` | Transient scene-object changes that require both Editor-side permission and `allowWhilePlaying=true` |
 | `UnionAirTestRunPolicy.Blocked` | Default. Rejects the endpoint while any Unity Test Framework run is active |

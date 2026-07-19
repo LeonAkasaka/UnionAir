@@ -18,7 +18,8 @@ namespace LeonAkasaka.UnionAir.Editor
             UnionAirEndpointCategories.SceneWrite,
             UnionAirEndpointCategories.AssetWrite,
             UnionAirEndpointCategories.PlayMode,
-            UnionAirEndpointCategories.EditorActions
+            UnionAirEndpointCategories.EditorActions,
+            UnionAirEndpointCategories.Profiling
         };
 
         private readonly List<string> _log = new List<string>();
@@ -390,6 +391,7 @@ namespace LeonAkasaka.UnionAir.Editor
             AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.Custom, "custom");
             AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.RequestDependent, "request-dependent");
             AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.EditorState, "editor state");
+            AppendRiskLabel(ref label, risk, UnionAirEndpointRisk.Profiling, "profiling");
             return label;
         }
 

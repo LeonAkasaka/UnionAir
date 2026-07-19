@@ -33,6 +33,8 @@ https://github.com/LeonAkasaka/UnionAir.git
 
 Test Runner API は任意機能です。プロジェクトに Unity Test Framework パッケージ(`com.unity.test-framework`)が導入されている場合のみ表示され、UnionAir EditorWindow で **Test Runner** カテゴリを明示的に有効化するまで無効です。
 
+**Profiling** カテゴリも既定で無効です。AI向けのmetric要約、frame単位NDJSON、Unity Profiler raw capture、Memory Profiler snapshotを提供します。詳細は[Profiling API](api/profiling.ja.md)を参照してください。
+
 ### 2. サーバの確認
 
 Unity Editor を開くと、REST サーバが自動的に起動します(デフォルトポート: **8765**)。

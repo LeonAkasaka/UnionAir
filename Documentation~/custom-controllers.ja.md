@@ -38,7 +38,7 @@ public class MyToolController
 
 カスタムハンドラーは既定で無効です。**Window > UnionAir > REST Bridge > Custom Handlers** で有効化してください。カスタムカテゴリも個別に有効/無効を切り替えられます。
 
-`Category` は文字列であり、カスタム拡張は `/api/help` と EditorWindow に表示される独自のグループ名を定義できます。built-in エンドポイントは `UnionAirEndpointCategories.Read`、`SceneWrite`、`AssetWrite`、`PlayMode`、`EditorActions`、任意機能の `TestRunner` を使用します。カテゴリメタデータは有効化状態と既定のリスク報告を制御します。`Risk` はツールや LLM 向けの説明用メタデータであり、リクエストを受け付けるかどうかはカテゴリの有効化状態が決めます。ルートがカテゴリより狭いリスクプロファイルを持つ場合、エンドポイントは `UseRiskOverride = true` と `Risk = ...` を設定できます。
+`Category` は文字列であり、カスタム拡張は `/api/help` と EditorWindow に表示される独自のグループ名を定義できます。built-in エンドポイントは `UnionAirEndpointCategories.Read`、`SceneWrite`、`AssetWrite`、`PlayMode`、`EditorActions`、`Profiling`、任意機能の `TestRunner` を使用します。カテゴリメタデータは有効化状態と既定のリスク報告を制御します。`Risk` はツールや LLM 向けの説明用メタデータであり、リクエストを受け付けるかどうかはカテゴリの有効化状態が決めます。ルートがカテゴリより狭いリスクプロファイルを持つ場合、エンドポイントは `UseRiskOverride = true` と `Risk = ...` を設定できます。
 
 ## リクエストとレスポンス
 
@@ -62,6 +62,8 @@ if (!RequestBodyReader.TryGetStringArray(body, "tags", out var tags))
 RestResponse.Send(ctx.Response, "{\"status\":\"ok\"}");
 RestResponse.SendError(ctx.Response, "Missing required field: target", 400);
 ```
+
+後で完了するhandlerはreturn前に`ctx.Defer()`を呼び、最終的に自分でresponseをcloseする必要があります。deferしたbackground I/Oでは.NET response streamを使用できますが、worker threadからUnity APIを呼び出してはいけません。
 
 `RestResponse.FormatNullableString(value)` はescape済みJSON文字列リテラルを返し、`value`がnullの場合だけJSONリテラル`null`を返します。空文字列は`""`のままです。
 
@@ -199,6 +201,7 @@ if (!UnionAirReferenceResolver.TryResolveAssetReference(
 | `UnionAirEndpointRisk.Custom` | ツール固有または複合的な動作 |
 | `UnionAirEndpointRisk.RequestDependent` | 副作用がリクエストパラメータやペイロードに依存するエンドポイント |
 | `UnionAirEndpointRisk.EditorState` | シーンやアセットのデータを直接変更せず、Editor の UI や選択状態を変更するエンドポイント |
+| `UnionAirEndpointRisk.Profiling` | profilingを有効化、またはプロジェクトデータを含む診断成果物を取得するエンドポイント |
 | `UnionAirPlayModePolicy.Blocked` | Play モード中に決して実行すべきでない、永続的なシーン/アセット書き込み |
 | `UnionAirPlayModePolicy.ExplicitOptIn` | Editor 側の許可と `allowWhilePlaying=true` の両方を要する一時的なシーンオブジェクト変更 |
 | `UnionAirTestRunPolicy.Blocked` | 既定。Unity Test Framework の run 中は endpoint を拒否 |

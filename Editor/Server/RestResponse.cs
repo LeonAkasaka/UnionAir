@@ -1,6 +1,8 @@
 ﻿using System.Globalization;
+using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -41,6 +43,102 @@ namespace LeonAkasaka.UnionAir.Editor
             response.ContentLength64 = data.Length;
             response.OutputStream.Write(data, 0, data.Length);
         }
+
+        /// <summary>
+        /// Streams a completed UnionAir artifact on a background thread without loading it into memory.
+        /// </summary>
+        /// <param name="context">Request context whose response lifetime will be deferred.</param>
+        /// <param name="path">Artifact path below <c>Library/UnionAir</c>.</param>
+        /// <param name="mimeType">Response MIME type.</param>
+        /// <param name="downloadName">Safe file name advertised through Content-Disposition.</param>
+        public static void SendArtifactFile(
+            UnionAirRequestContext context,
+            string path,
+            string mimeType,
+            string downloadName)
+        {
+            var response = context.Response;
+            var fullPath = Path.GetFullPath(path);
+            var artifactRoot = Path.GetFullPath(Path.Combine("Library", "UnionAir"))
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!fullPath.StartsWith(artifactRoot, System.StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
+            {
+                SendNotFound(response, "Artifact is not available.");
+                return;
+            }
+
+            FileStream stream;
+            try
+            {
+                stream = new FileStream(
+                    fullPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+            }
+            catch (IOException)
+            {
+                SendNotFound(response, "Artifact is not available.");
+                return;
+            }
+            catch (System.UnauthorizedAccessException)
+            {
+                SendNotFound(response, "Artifact is not available.");
+                return;
+            }
+
+            var contentLength = stream.Length;
+            string queueError = null;
+
+            try
+            {
+                if (ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        response.StatusCode = 200;
+                        response.ContentType = mimeType;
+                        AddCorsHeaders(response);
+                        response.AddHeader("Content-Disposition",
+                            $"attachment; filename=\"{EscapeHeaderFileName(downloadName)}\"");
+                        response.ContentLength64 = contentLength;
+                        using (stream)
+                        {
+                            var buffer = new byte[64 * 1024];
+                            var remaining = contentLength;
+                            while (remaining > 0)
+                            {
+                                var read = stream.Read(buffer, 0, (int)System.Math.Min(buffer.Length, remaining));
+                                if (read <= 0) break;
+                                response.OutputStream.Write(buffer, 0, read);
+                                remaining -= read;
+                            }
+                        }
+                    }
+                    catch (System.Exception) { }
+                    finally
+                    {
+                        try { response.Close(); } catch { }
+                    }
+                }))
+                {
+                    context.Defer();
+                    return;
+                }
+
+                queueError = "The .NET thread pool rejected the artifact transfer.";
+            }
+            catch (System.Exception ex) { queueError = ex.Message; }
+
+            stream.Dispose();
+            UnityEngine.Debug.LogWarning("[UnionAir] Could not queue artifact transfer: " + queueError);
+            SendError(response, "Artifact transfer could not be queued. Try the request again.", 503);
+        }
+
+        private static string EscapeHeaderFileName(string value)
+            => string.IsNullOrEmpty(value)
+                ? "artifact.bin"
+                : value.Replace("\"", "_").Replace("\r", "_").Replace("\n", "_");
 
         /// <summary>
         /// Writes a JSON error response using the standard <c>{"error":"..."}</c> shape.

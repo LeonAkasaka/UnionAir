@@ -232,12 +232,21 @@ namespace LeonAkasaka.UnionAir.Editor
 
             int depth = 0;
             int end = start;
+            bool inString = false;
             while (end < json.Length)
             {
-                if (json[end] == '{') depth++;
-                else if (json[end] == '}') { depth--; if (depth == 0) break; }
+                var c = json[end];
+                if (inString)
+                {
+                    if (c == '\\') end++;
+                    else if (c == '"') inString = false;
+                }
+                else if (c == '"') inString = true;
+                else if (c == '{') depth++;
+                else if (c == '}') { depth--; if (depth == 0) break; }
                 end++;
             }
+            if (end >= json.Length || depth != 0) return null;
             return json.Substring(start, end - start + 1);
         }
 
@@ -310,6 +319,10 @@ namespace LeonAkasaka.UnionAir.Editor
 
             return result;
         }
+
+        /// <summary>Returns whether a field is present at the top level of a JSON object.</summary>
+        public static bool HasTopLevelField(string json, string key)
+            => !string.IsNullOrEmpty(json) && FindTopLevelKey(json, key) >= 0;
 
         // ── Private helpers ──────────────────────────────────────────────────────
 

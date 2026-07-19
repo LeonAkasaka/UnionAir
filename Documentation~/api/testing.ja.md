@@ -64,11 +64,16 @@ EditMode または PlayMode の非同期 run を1件開始し、`202 Accepted` �
   "testNames": ["Example.EditorTests.SavesAsset"],
   "groupNames": ["^Example\\."],
   "categoryNames": ["Smoke"],
-  "assemblyNames": ["Example.EditorTests"]
+  "assemblyNames": ["Example.EditorTests"],
+  "profiling": {
+    "metrics": ["mainThreadTime", "gcAllocInFrame"],
+    "warmupFrames": 30,
+    "maxFrames": 300
+  }
 }
 ```
 
-`mode` は必須です。4つの filter は空でない文字列の配列として任意指定できます。`groupNames` は正規表現であり、実行前に検証されます。
+`mode` は必須です。4つの filter は空でない文字列の配列として任意指定できます。`groupNames` は正規表現であり、実行前に検証されます。`profiling`は任意で、[Profiling session設定](profiling.ja.md#post-apiprofilingsessions)を使用します。指定時はTest RunnerとProfilingの両カテゴリを有効にする必要があります。
 
 ### レスポンス — 202
 
@@ -77,7 +82,9 @@ EditMode または PlayMode の非同期 run を1件開始し、`202 Accepted` �
   "id": "0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352",
   "state": "queued",
   "statusUrl": "/api/test-runs/0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352",
-  "resultUrl": "/api/test-runs/0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352/results.xml"
+  "resultUrl": "/api/test-runs/0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352/results.xml",
+  "profilingSessionId": "8c3fe76a-4a6a-4dd9-a678-02b628ce5d12",
+  "profilingUrl": "/api/profiling/sessions/8c3fe76a-4a6a-4dd9-a678-02b628ce5d12"
 }
 ```
 
@@ -114,7 +121,9 @@ current run または最後に完了した UnionAir run を返します。それ
     "assertCount": 1
   },
   "resultFileAvailable": true,
-  "resultUrl": "/api/test-runs/0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352/results.xml"
+  "resultUrl": "/api/test-runs/0dc6f2b8-9c31-4da0-82df-7dc8fb0dc352/results.xml",
+  "profilingSessionId": null,
+  "profilingUrl": null
 }
 ```
 
