@@ -112,6 +112,10 @@ namespace LeonAkasaka.UnionAir.Editor
 
             UnionAirSettings.AutoStart =
                 EditorGUILayout.Toggle("Auto Start on Load", UnionAirSettings.AutoStart);
+            UnionAirSettings.DiagnosticLifecycleLogging =
+                EditorGUILayout.Toggle(
+                    "Diagnostic Lifecycle Logging",
+                    UnionAirSettings.DiagnosticLifecycleLogging);
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Play Mode Safety", EditorStyles.boldLabel);
@@ -129,21 +133,20 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (GUILayout.Button("Start"))
                     {
                         UnionAirSettings.Port = _portInput;
-                        server.Start(_portInput);
+                        UnionAirInit.StartServerManually(_portInput);
                     }
                 }
 
                 using (new EditorGUI.DisabledScope(!isRunning))
                 {
                     if (GUILayout.Button("Stop"))
-                        server.Stop();
+                        UnionAirInit.StopServerManually();
                 }
 
                 if (GUILayout.Button("Restart"))
                 {
-                    server.Stop();
                     UnionAirSettings.Port = _portInput;
-                    server.Start(_portInput);
+                    UnionAirInit.RestartServerManually(_portInput);
                 }
             }
 

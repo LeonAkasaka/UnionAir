@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using UnityEditor;
 using UnityEngine;
@@ -13,15 +15,59 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     public class RestHttpServer
     {
-        private HttpListener _listener;
-        private Thread _listenerThread;
-        private ConcurrentQueue<HttpListenerContext> _pending;
-        private RestRouter _router;
+        private sealed class ListenerState
+        {
+            internal readonly HttpListener Listener;
+            internal readonly ConcurrentQueue<HttpListenerContext> Pending;
+            internal readonly RestRouter Router;
+            internal Thread Thread;
+            internal volatile bool Stopping;
+            internal volatile bool ThreadExited;
+
+            internal ListenerState(
+                HttpListener listener,
+                ConcurrentQueue<HttpListenerContext> pending,
+                RestRouter router)
+            {
+                Listener = listener;
+                Pending = pending;
+                Router = router;
+            }
+        }
+
+        private readonly string _instanceId = Guid.NewGuid().ToString("N").Substring(0, 8);
+        private ListenerState _state;
+        private int _lifecycleGeneration;
+
+        /// <summary>Raised on the main thread after an unexpected listener thread exit is cleaned up.</summary>
+        internal event Action<string> UnexpectedlyStopped;
 
         /// <summary>
         /// Gets whether the HTTP listener is currently running.
         /// </summary>
-        public bool IsRunning => _listener != null && _listener.IsListening;
+        public bool IsRunning
+        {
+            get
+            {
+                var state = _state;
+                if (state == null)
+                    return false;
+
+                if (state.ThreadExited)
+                    return false;
+
+                try
+                {
+                    return state.Listener.IsListening &&
+                           state.Thread != null &&
+                           state.Thread.IsAlive;
+                }
+                catch (ObjectDisposedException)
+                {
+                    return false;
+                }
+            }
+        }
 
         /// <summary>
         /// Gets the port currently assigned to the server.
@@ -31,74 +77,158 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>Raised on the main thread for each incoming request path.</summary>
         public event Action<string> OnRequest;
 
+        internal bool LastStartFailureWasAddressInUse { get; private set; }
+
         /// <summary>
         /// Starts the HTTP listener on <c>localhost</c>.
         /// </summary>
         /// <param name="port">TCP port to bind, usually from <see cref="UnionAirSettings.Port"/>.</param>
         public void Start(int port)
         {
-            if (IsRunning) Stop();
+            TryStart(port, "manual", false);
+        }
 
-            Port = port;
-            _pending = new ConcurrentQueue<HttpListenerContext>();
+        internal void SetLifecycleGeneration(int generation)
+            => _lifecycleGeneration = generation;
 
-            _router = new RestRouter();
+        internal bool TryStart(int port, string reason, bool suppressAddressInUseError)
+        {
+            if (_state != null)
+                StopInternal("replacement-start");
 
-            _listener = new HttpListener();
-            _listener.Prefixes.Add($"http://localhost:{port}/");
+            LastStartFailureWasAddressInUse = false;
+            var listener = new HttpListener();
+            var pending = new ConcurrentQueue<HttpListenerContext>();
+            var state = new ListenerState(listener, pending, new RestRouter());
+
+            LogLifecycle($"start begin reason={reason} port={port}");
 
             try
             {
-                _listener.Start();
+                listener.Prefixes.Add($"http://localhost:{port}/");
+                listener.Start();
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[UnionAir] Failed to start server on port {port}: {ex.Message}");
-                _listener = null;
-                return;
+                CloseAfterFailedStart(
+                    listener,
+                    port,
+                    ex,
+                    suppressAddressInUseError);
+                return false;
             }
 
-            _listenerThread = new Thread(ListenLoop)
+            var listenerThread = new Thread(() => ListenLoop(state))
             {
                 IsBackground = true,
-                Name = "UnionAir-HttpListener"
+                Name = $"UnionAir-HttpListener-g{_lifecycleGeneration}"
             };
-            _listenerThread.Start();
+            state.Thread = listenerThread;
 
+            try
+            {
+                listenerThread.Start();
+            }
+            catch (Exception ex)
+            {
+                var message =
+                    $"{LifecyclePrefix} listener thread failed to start port={port} {DescribeException(ex)}";
+                UnionAirLifecycleDiagnostics.Record(message);
+                Debug.LogError(
+                    $"[UnionAir] Failed to start the listener thread on port {port}: {ex.Message}");
+                UnionAirLifecycleDiagnostics.DumpFailure("listener thread failed to start");
+                CloseListener(listener, "failed-thread-start");
+                return false;
+            }
+
+            _state = state;
+            Port = port;
+            EditorApplication.update -= ProcessPending;
             EditorApplication.update += ProcessPending;
+            LogLifecycle(
+                $"start complete reason={reason} port={port} thread={listenerThread.ManagedThreadId}");
             Debug.Log($"[UnionAir] REST API server started on http://localhost:{port}/");
+            return true;
         }
 
-        private void ListenLoop()
+        private void ListenLoop(ListenerState state)
         {
-            while (_listener != null && _listener.IsListening)
+            var exitReason = "listener-stopped";
+            Exception exitException = null;
+
+            while (SafeIsListening(state.Listener))
             {
                 try
                 {
-                    var ctx = _listener.GetContext();
-                    _pending.Enqueue(ctx);
+                    var ctx = state.Listener.GetContext();
+                    state.Pending.Enqueue(ctx);
                 }
-                catch (HttpListenerException)
+                catch (HttpListenerException ex)
                 {
+                    exitReason = "http-listener-exception";
+                    exitException = ex;
                     break;
                 }
-                catch (ObjectDisposedException)
+                catch (ObjectDisposedException ex)
                 {
+                    exitReason = "listener-disposed";
+                    exitException = ex;
                     break;
                 }
+                catch (Exception ex)
+                {
+                    exitReason = "unexpected-exception";
+                    exitException = ex;
+                    break;
+                }
+            }
+
+            try
+            {
+                var exceptionDetails =
+                    exitException == null ? "" : " " + DescribeException(exitException);
+                UnionAirLifecycleDiagnostics.RecordFromBackground(
+                    $"{LifecyclePrefix} listener thread exit thread={Thread.CurrentThread.ManagedThreadId} " +
+                    $"reason={exitReason}{exceptionDetails}");
+            }
+            finally
+            {
+                state.ThreadExited = true;
             }
         }
 
         private void ProcessPending()
         {
-            while (_pending != null && _pending.TryDequeue(out var ctx))
+            UnionAirLifecycleDiagnostics.FlushBackground();
+            var state = _state;
+            if (state == null)
+                return;
+
+            if (state.ThreadExited && !state.Stopping)
+            {
+                const string reason = "listener-thread-died";
+                LogLifecycle($"unexpected stop detected reason={reason}");
+                StopInternal(reason);
+                try
+                {
+                    UnexpectedlyStopped?.Invoke(reason);
+                }
+                finally
+                {
+                    UnionAirLifecycleDiagnostics.DumpFailure(
+                        "listener thread exited unexpectedly");
+                }
+                return;
+            }
+
+            while (state.Pending.TryDequeue(out var ctx))
             {
                 var completed = true;
                 try
                 {
                     var requestLine = $"{ctx.Request.HttpMethod} {ctx.Request.Url.AbsolutePath}";
                     OnRequest?.Invoke(requestLine);
-                    completed = _router.Handle(ctx);
+                    completed = state.Router.Handle(ctx);
                 }
                 catch (Exception ex)
                 {
@@ -119,21 +249,224 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Stops the HTTP listener and detaches pending request processing from the Unity editor update loop.
         /// </summary>
         public void Stop()
+            => StopInternal("manual");
+
+        internal void Stop(string reason)
+            => StopInternal(reason);
+
+        private void StopInternal(string reason)
         {
             EditorApplication.update -= ProcessPending;
 
+            var state = _state;
+            _state = null;
+            if (state == null)
+            {
+                LogLifecycle($"stop skipped reason={reason} state=none");
+                return;
+            }
+
+            state.Stopping = true;
+            var listener = state.Listener;
+            var listenerThread = state.Thread;
+            int pendingCount;
+            try { pendingCount = state.Pending.Count; }
+            catch { pendingCount = -1; }
+            LogLifecycle(
+                $"stop begin reason={reason} port={Port} listening={SafeIsListening(listener)} " +
+                $"pending={pendingCount} thread={DescribeThread(listenerThread)}");
+
             try
             {
-                _listener?.Stop();
-                _listener?.Close();
+                listener.Stop();
+                LogLifecycle("listener.Stop succeeded");
             }
-            catch { /* ignored */ }
+            catch (Exception ex)
+            {
+                var message = $"{LifecyclePrefix} listener.Stop failed {DescribeException(ex)}";
+                UnionAirLifecycleDiagnostics.Record(message);
+                Debug.LogWarning(message);
+                UnionAirLifecycleDiagnostics.DumpFailure("listener.Stop failed");
+            }
 
-            _listener = null;
-            _listenerThread = null;
-            _pending = null;
+            CloseListener(listener, reason);
 
+            if (listenerThread != null &&
+                listenerThread != Thread.CurrentThread &&
+                listenerThread.IsAlive)
+            {
+                try
+                {
+                    if (listenerThread.Join(1000))
+                        LogLifecycle($"listener thread joined thread={listenerThread.ManagedThreadId}");
+                    else
+                    {
+                        var message =
+                            $"{LifecyclePrefix} listener thread join timed out " +
+                            $"thread={listenerThread.ManagedThreadId} state={listenerThread.ThreadState}";
+                        UnionAirLifecycleDiagnostics.Record(message);
+                        Debug.LogWarning(message);
+                        UnionAirLifecycleDiagnostics.DumpFailure("listener thread join timed out");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    var message =
+                        $"{LifecyclePrefix} listener thread join failed {DescribeException(ex)}";
+                    UnionAirLifecycleDiagnostics.Record(message);
+                    Debug.LogWarning(message);
+                    UnionAirLifecycleDiagnostics.DumpFailure("listener thread join failed");
+                }
+            }
+
+            UnionAirLifecycleDiagnostics.FlushBackground();
+            var closedPending = 0;
+            while (state.Pending.TryDequeue(out var context))
+            {
+                try { context.Response.Close(); }
+                catch { /* The listener may already have aborted the response. */ }
+                closedPending++;
+            }
+
+            LogLifecycle(
+                $"stop complete reason={reason} port={Port} closedPending={closedPending} " +
+                $"thread={DescribeThread(listenerThread)}");
             Debug.Log("[UnionAir] REST API server stopped.");
         }
+
+        private void CloseAfterFailedStart(
+            HttpListener listener,
+            int port,
+            Exception startException,
+            bool suppressAddressInUseError)
+        {
+            LastStartFailureWasAddressInUse = IsAddressAlreadyInUse(startException);
+            var diagnosticMessage =
+                $"{LifecyclePrefix} start failed addressInUse={LastStartFailureWasAddressInUse} " +
+                $"{DescribeException(startException)}";
+            UnionAirLifecycleDiagnostics.Record(diagnosticMessage);
+            if (!LastStartFailureWasAddressInUse || !suppressAddressInUseError)
+            {
+                Debug.LogError(
+                    $"[UnionAir] Failed to start server on port {port}: {startException.Message}");
+                UnionAirLifecycleDiagnostics.DumpFailure(
+                    $"server startup failed on port {port}: {startException.Message}");
+            }
+            CloseListener(listener, "failed-start");
+        }
+
+        private void CloseListener(HttpListener listener, string reason)
+        {
+            try
+            {
+                listener.Close();
+                LogLifecycle($"listener.Close succeeded reason={reason}");
+                return;
+            }
+            catch (Exception ex)
+            {
+                var message =
+                    $"{LifecyclePrefix} listener.Close failed reason={reason} {DescribeException(ex)}";
+                UnionAirLifecycleDiagnostics.Record(message);
+                Debug.LogWarning(message);
+                UnionAirLifecycleDiagnostics.DumpFailure("listener.Close failed");
+            }
+
+            try
+            {
+                listener.Abort();
+                LogLifecycle($"listener.Abort succeeded reason={reason}");
+            }
+            catch (Exception ex)
+            {
+                var message =
+                    $"{LifecyclePrefix} listener.Abort failed reason={reason} {DescribeException(ex)}";
+                UnionAirLifecycleDiagnostics.Record(message);
+                Debug.LogError(message);
+                UnionAirLifecycleDiagnostics.DumpFailure("listener.Abort failed");
+            }
+        }
+
+        private static bool SafeIsListening(HttpListener listener)
+        {
+            try { return listener != null && listener.IsListening; }
+            catch { return false; }
+        }
+
+        private static string DescribeThread(Thread thread)
+        {
+            if (thread == null)
+                return "none";
+
+            try
+            {
+                return $"{thread.ManagedThreadId}:{thread.ThreadState}";
+            }
+            catch
+            {
+                return "unavailable";
+            }
+        }
+
+        private static bool IsAddressAlreadyInUse(Exception exception)
+        {
+            for (var current = exception; current != null; current = current.InnerException)
+            {
+                if (current is SocketException socketException &&
+                    socketException.SocketErrorCode == SocketError.AddressAlreadyInUse)
+                    return true;
+
+                if (current is HttpListenerException listenerException &&
+                    (listenerException.NativeErrorCode == 10048 ||
+                     listenerException.NativeErrorCode == 183 ||
+                     listenerException.NativeErrorCode == 32))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static string DescribeException(Exception exception)
+        {
+            var sb = new StringBuilder();
+            for (var current = exception; current != null; current = current.InnerException)
+            {
+                if (sb.Length > 0)
+                    sb.Append(" inner=");
+
+                sb.Append(current.GetType().FullName);
+                sb.Append(" message=\"");
+                sb.Append(current.Message.Replace("\"", "\\\""));
+                sb.Append("\" hresult=0x");
+                sb.Append(current.HResult.ToString("X8"));
+
+                if (current is SocketException socketException)
+                {
+                    sb.Append(" socketError=");
+                    sb.Append(socketException.SocketErrorCode);
+                    sb.Append(" nativeCode=");
+                    sb.Append(socketException.NativeErrorCode);
+                }
+                else if (current is HttpListenerException listenerException)
+                {
+                    sb.Append(" nativeCode=");
+                    sb.Append(listenerException.NativeErrorCode);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(exception.StackTrace))
+            {
+                sb.Append("\nstack=");
+                sb.Append(exception.StackTrace);
+            }
+            return sb.ToString();
+        }
+
+        private string LifecyclePrefix =>
+            $"[UnionAir] lifecycle process={System.Diagnostics.Process.GetCurrentProcess().Id} " +
+            $"generation={_lifecycleGeneration} server={_instanceId}";
+
+        private void LogLifecycle(string message)
+            => UnionAirLifecycleDiagnostics.Record($"{LifecyclePrefix} {message}");
     }
 }

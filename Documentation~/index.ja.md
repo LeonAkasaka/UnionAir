@@ -109,6 +109,7 @@ curl "http://localhost:8765/api/assets?path=Assets/UI"
 | **Status** | サーバの稼働状態とポート番号を表示 |
 | **Port** | サーバの待ち受けポート(停止中のみ変更可能) |
 | **Auto Start on Load** | Editor 起動時にサーバを自動起動するかどうか |
+| **Diagnostic Lifecycle Logging** | listener の詳細なライフサイクルイベントを Console へ逐次出力するかどうか(デフォルトでは無効) |
 | **Start / Stop / Restart** | サーバの手動制御 |
 | **Request Log** | 受信リクエストのログ(最新100件) |
 
@@ -124,5 +125,9 @@ curl "http://localhost:8765/api/assets?path=Assets/UI"
 ## ライフサイクル
 
 - **Editor 起動時**: `[InitializeOnLoad]` によりサーバが自動起動
-- **Domain reload 中**: ポートを解放してスレッドを停止し、リロード後に自動再起動
+- **Domain reload 中**: listener を閉じ、background thread の終了を短時間待機し、キュー内の response を閉じ、listener が所有する処理中または deferred の接続を中断してから、リロード後に自動再起動
 - **Play モード中**: サーバは稼働し続けます。Play モード終了後に停止していた場合は自動的に再起動します
+
+リロード直後の自動起動で一時的な address-in-use エラーが発生した場合、UnionAir は初回の試行に続いて約4秒間に最大5回再試行します。途中の address-in-use エラーはライフサイクルトレースにだけ保持され、Console や `/api/editor/logs` には出力されません。その他の起動失敗は常に短いエラーとして Console に出力されます。listener thread が予期せず終了した場合は、listener の清掃を完了してから診断トレースを出力し、ドメインあたり最大3回の遅延付き復旧を行います。それ以降の予期せぬ終了では自動復旧を停止し、無制限の再起動ループに入らず短いエラーを出力します。UnionAir は Domain reload をまたぐ固定長のライフサイクル履歴を通常は出力せずに保持し、起動または清掃に失敗した場合はドメインあたり1回だけ自動的にまとめて出力します。通常時にも process、reload generation、listener の清掃、thread、native socket の詳細を逐次確認するには **Diagnostic Lifecycle Logging** を有効にしてください。
+
+deferred handler は response の生存期間を自身で管理します。停止時に残っている deferred 接続は listener を閉じることで中断されるため、deferred handler は reload またはサーバ停止後の response 書き込み失敗を処理する必要があります。

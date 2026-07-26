@@ -20,6 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Prevented domain reloads from orphaning an `HttpListener` by retaining listener ownership until bounded thread and queued-response cleanup completes.
+- Added up to five bounded retries for transient address-in-use failures during automatic startup, without publishing intermediate failures to the Console or logs API.
+- Added up to three delayed recovery attempts for unexpected listener thread exits, with cleanup completed before the bounded lifecycle trace is dumped and concise errors kept separate from the once-per-domain trace.
 - Prevented failed profiling restoration from leaving undeletable active sessions or owned Profiler settings behind.
 - Moved profiling artifact downloads off the Unity Editor update loop and cached finalized session statistics instead of reparsing NDJSON on every status request.
 - Made active NDJSON downloads share-safe and length-bounded, handled background-transfer queue failures, and limited sessions to 64 metrics to bound memory use.

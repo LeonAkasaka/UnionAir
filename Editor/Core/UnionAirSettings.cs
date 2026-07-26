@@ -11,6 +11,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private const string AutoStartKey    = "UnionAir.AutoStart";
         private const string CustomHandlersEnabledKey = "UnionAir.CustomHandlersEnabled";
         private const string AllowPlayModeSceneChangesKey = "UnionAir.AllowPlayModeSceneChanges";
+        private const string DiagnosticLifecycleLoggingKey = "UnionAir.DiagnosticLifecycleLogging";
         private const string EnabledCategoriesKey = "UnionAir.EnabledCategories";
         private const string DisabledCategoriesKey = "UnionAir.DisabledCategories";
 
@@ -52,6 +53,16 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             get => EditorPrefs.GetBool(AllowPlayModeSceneChangesKey, false);
             set => EditorPrefs.SetBool(AllowPlayModeSceneChangesKey, value);
+        }
+
+        /// <summary>
+        /// Gets or sets whether detailed server lifecycle events are written to the Unity Console.
+        /// Events are retained silently for failure diagnostics even when this setting is disabled.
+        /// </summary>
+        public static bool DiagnosticLifecycleLogging
+        {
+            get => EditorPrefs.GetBool(DiagnosticLifecycleLoggingKey, false);
+            set => EditorPrefs.SetBool(DiagnosticLifecycleLoggingKey, value);
         }
 
         /// <summary>

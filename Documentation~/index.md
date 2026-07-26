@@ -106,6 +106,7 @@ curl "http://localhost:8765/api/assets?path=Assets/UI"
 | **Status** | Displays the server running state and port number |
 | **Port** | The server listening port (can only be changed while stopped) |
 | **Auto Start on Load** | Whether to start the server automatically when the Editor starts |
+| **Diagnostic Lifecycle Logging** | Streams detailed listener lifecycle events to the Console; disabled by default |
 | **Start / Stop / Restart** | Manual control of the server |
 | **Request Log** | Log of received requests (latest 100 entries) |
 
@@ -121,5 +122,9 @@ curl "http://localhost:8765/api/assets?path=Assets/UI"
 ## Lifecycle
 
 - **When the Editor starts**: The server starts automatically via `[InitializeOnLoad]`
-- **During Domain reload**: Releases the port and stops the thread, then restarts automatically after the reload
+- **During Domain reload**: Closes the listener, waits briefly for its background thread, closes queued responses, aborts listener-owned in-flight or deferred connections, and then restarts automatically after the reload
 - **In Play Mode**: The server continues running. If it was stopped after Exit Play Mode, it restarts automatically
+
+If an automatic start encounters a transient address-in-use error immediately after a reload, UnionAir makes one initial attempt followed by up to five retries over approximately four seconds. Intermediate address-in-use failures are retained only in the lifecycle trace and do not pollute the Console or `/api/editor/logs`. Other startup failures always produce a concise Console error. If the listener thread exits unexpectedly, UnionAir completes listener cleanup before dumping the diagnostic trace and schedules up to three delayed recovery attempts per domain. Further unexpected exits stop automatic recovery and produce a concise error instead of entering an unbounded restart loop. UnionAir silently retains a bounded lifecycle trace across domain reloads and automatically dumps it once per domain when startup or cleanup fails. Enable **Diagnostic Lifecycle Logging** to stream the same process, reload generation, listener cleanup, thread, and native socket details during normal operation.
+
+A deferred handler owns its response lifetime. Closing the listener aborts any deferred connection that remains active during shutdown, so deferred handlers must tolerate response writes failing after a reload or server stop.
