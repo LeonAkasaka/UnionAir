@@ -51,14 +51,16 @@ https://github.com/LeonAkasaka/UnionAir.git
 
 | グループ | 範囲 | セキュリティ |
 |-------|-------|----------|
-| **Read** | シーン階層、ロード済みシーン、GameObject、アセット、カメラ、ログ、検索 | 常時有効 |
+| **Read** | シーン階層、ロード済みシーン、GameObject、アセット、カメラ、ログ、検索、コンパイル結果 | 常時有効 |
 | **Scene Write** | シーンの作成/オープン/アンロード、GameObject・コンポーネントの作成/更新/削除 | 既定で無効 |
-| **Asset Write** | プレハブ、マテリアル、アセットファイル、AssetDatabase リフレッシュ | 既定で無効 |
+| **Asset Write** | プレハブ、マテリアル、アセットファイル、AssetDatabase リフレッシュ、コンパイル要求 | 既定で無効 |
 | **Play Mode** | Play モードの開始/終了/一時停止/ステップ、Input System アクション、Canvas UI 操作 | 既定で無効 |
 | **Editor Actions** | 選択、オブジェクトの ping、アセットのオープン、Unity Editor メニュー項目の実行 | 既定で無効 |
 | **Test Runner** | EditMode / PlayMode テストの発見、実行、監視、キャンセル、結果ダウンロード | 既定で無効。Unity Test Framework 導入時のみ利用可能 |
 | **Profiling** | ProfilerRecorder metric、NDJSON sample、Profiler raw capture、memory snapshot | 既定で無効 |
 
+> コンパイル結果は構造化されており、診断ごとに `severity`、`code`、プロジェクト相対の `file`、`line`、`column` を持ち、コンパイル成功時の domain reload をまたいで保持されます。IDE から開始されたコンパイルも記録されます。**[コンパイルと修正のループ](Documentation~/api/compile.ja.md#コンパイルと修正のループ)** を参照してください。
+> Unity Console のログは domain reload をまたいで保持され、増分取得用の `since` カーソルに対応しています。
 > Edit モードでの書き込み操作は Unity Editor 上で Undo(Ctrl+Z)できます。
 > シーン上の GameObject と Component は読み取りレスポンスに `globalObjectId` を含み、書き込みリクエストでは型付きオブジェクト参照で指定できます。
 > 書き込み API は `GET /api/help` で Play モードの安全性を宣言します。永続的なシーン/アセット変更は Play モード中はブロックされ、一部のシーンオブジェクト変更は Editor 設定と `allowWhilePlaying=true` の両方が必要です。

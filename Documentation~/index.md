@@ -32,6 +32,8 @@ The Test Runner API is optional. It appears only when the project has the Unity 
 
 The **Profiling** category is also disabled by default. It provides AI-oriented metric summaries, frame-level NDJSON, Unity Profiler raw captures, and Memory Profiler snapshots. See the [Profiling API](api/profiling.md).
 
+Reading compilation results needs no setup — `GET /api/compile` is in the always-enabled **Read** category and records compilations started from an IDE as well as through the API. Requesting one with `POST /api/compile` requires the **Asset Write** category. If you are automating the write-compile-fix cycle, read [The Compile-and-Fix Loop](api/compile.md#the-compile-and-fix-loop) first: it covers how to terminate correctly when a successful compilation does *not* reload the domain, which is the usual cause of a client hanging.
+
 ### 2. Check the server
 
 When you open the Unity Editor, the REST server starts automatically (default port: **8765**).

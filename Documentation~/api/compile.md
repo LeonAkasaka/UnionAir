@@ -215,6 +215,51 @@ curl http://localhost:8765/api/compile/c-20260728-040030-67c0fd
 
 ---
 
+## The Compile-and-Fix Loop
+
+The loop an automated client runs is: write a `.cs` file, request a compilation, read the diagnostics, fix, repeat.
+
+```
+1. Write the file.
+2. POST /api/compile                 -> 202 { id, lifecycleGenerationAtRequest }
+3. Poll GET /api/compile/{id} until state is "completed" or "aborted".
+4. result == "failed"    -> fix using messages[].file / line / column, go to 2
+   result == "succeeded" -> done
+   result == "upToDate"  -> done
+   state  == "aborted"   -> report error; do not retry blindly
+```
+
+A cycle typically settles in a few seconds.
+
+### Terminating Correctly
+
+This is where an automated client is most likely to hang. **`succeeded` is not a promise that a domain reload will happen** — Play mode, locked assembly reloading, and cycles with nothing to load all suppress it, and nothing in the Unity API lets UnionAir predict which. A client that waits unconditionally for `lifecycleGeneration` to advance after `succeeded` will wait forever whenever no reload occurs.
+
+Terminate like this instead:
+
+1. `failed` or `upToDate` — **done. Never wait for a reload**; neither can be followed by one.
+2. `succeeded` and the server still answers and `settled` is `true` — **done. Do not wait for a reload.**
+3. Only if the connection **drops** — reconnect and wait for `lifecycleGeneration` to exceed `lifecycleGenerationAtRequest`, confirming a reload completed rather than the Editor crashing.
+4. **Give every wait an explicit timeout.** No step above should poll without a bound.
+
+> `settled` is a snapshot, not a guarantee. Compilation clears `isCompiling` slightly before the native domain reload begins, so a client can legitimately observe `settled: true` immediately before losing the connection. That is why step 3 exists and why timeouts are required.
+
+### Tolerate Dropped Connections Everywhere
+
+Treat a refused connection as a normal condition on **every** request, not only after requesting a compilation. Someone saving a file in an IDE can trigger a compilation and a domain reload at any moment, and the server stops for the duration of every reload.
+
+During compilation's synchronous tail Unity blocks its main thread. `EditorApplication.update` stalls with it, and UnionAir dispatches queued HTTP requests from that same loop, so requests are answered late. Multi-second latency is expected and is not a failure signal.
+
+### One Failure Blocks Everything
+
+Unity reloads the assembly domain only when the whole build succeeds. A single failing script in `Assets` therefore prevents *all* newly compiled code from loading, including packages that compiled successfully. When a change to package code appears not to have taken effect, check `GET /api/compile` for an unrelated failure before looking anywhere else.
+
+### Losing a Race
+
+If a compilation started elsewhere while the request was in flight, `POST /api/compile` returns `409` with an `activeCompile` object. That is the correct answer, not an error to retry: switch to polling `GET /api/compile` and treat the active cycle as the one to wait on.
+
+---
+
 ## Related Documentation
 
 - [Editor API](editor.md) — `lifecycleGeneration`, `settled`, and Console logs

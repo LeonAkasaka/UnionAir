@@ -49,14 +49,16 @@ Add the dependency to `Packages/manifest.json`:
 
 | Group | Scope | Security |
 |-------|-------|----------|
-| **Read** | Scene hierarchy, loaded scenes, GameObjects, assets, cameras, logs, search | Always enabled |
+| **Read** | Scene hierarchy, loaded scenes, GameObjects, assets, cameras, logs, search, compilation results | Always enabled |
 | **Scene Write** | Create/open/unload scenes, create/update/delete GameObjects and components | Disabled by default |
-| **Asset Write** | Prefabs, materials, asset files, AssetDatabase refresh | Disabled by default |
+| **Asset Write** | Prefabs, materials, asset files, AssetDatabase refresh, compilation requests | Disabled by default |
 | **Play Mode** | Enter/exit/pause/step play mode, Input System actions, and Canvas UI interaction | Disabled by default |
 | **Editor Actions** | Selection, object ping, asset open, and Unity Editor menu item execution | Disabled by default |
 | **Test Runner** | Discover, execute, monitor, cancel, and download results for EditMode and PlayMode tests | Disabled by default; available when Unity Test Framework is installed |
 | **Profiling** | ProfilerRecorder metrics, NDJSON samples, Profiler raw captures, and memory snapshots | Disabled by default |
 
+> Compilation results are structured, with `severity`, `code`, project-relative `file`, `line`, and `column` per diagnostic, and survive the domain reload that a successful compilation triggers. Compilations started from an IDE are recorded too. See **[The Compile-and-Fix Loop](Documentation~/api/compile.md#the-compile-and-fix-loop)**.
+> Unity Console logs are retained across domain reloads and support an incremental `since` cursor.
 > Edit mode write operations are Undo-able in the Unity Editor (Ctrl+Z).
 > Scene GameObjects and Components include `globalObjectId` values in read responses and can be targeted with typed object references in write requests.
 > Write APIs declare Play Mode safety in `GET /api/help`; persistent scene/asset changes are blocked during Play Mode, while selected scene-object changes require both the Editor setting and `allowWhilePlaying=true`.

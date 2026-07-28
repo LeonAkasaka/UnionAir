@@ -35,6 +35,8 @@ Test Runner API は任意機能です。プロジェクトに Unity Test Framewo
 
 **Profiling** カテゴリも既定で無効です。AI向けのmetric要約、frame単位NDJSON、Unity Profiler raw capture、Memory Profiler snapshotを提供します。詳細は[Profiling API](api/profiling.ja.md)を参照してください。
 
+コンパイル結果の読み取りに設定は不要です。`GET /api/compile` は常時有効な **Read** カテゴリに属し、API 経由だけでなく IDE から開始されたコンパイルも記録します。`POST /api/compile` によるコンパイル要求には **Asset Write** カテゴリが必要です。書き込み・コンパイル・修正のサイクルを自動化する場合は、まず [コンパイルと修正のループ](api/compile.ja.md#コンパイルと修正のループ) を読んでください。コンパイルが成功しても domain reload が起きない場合に正しく終了する方法を扱っており、これがクライアントのハングの主な原因です。
+
 ### 2. サーバの確認
 
 Unity Editor を開くと、REST サーバが自動的に起動します(デフォルトポート: **8765**)。
