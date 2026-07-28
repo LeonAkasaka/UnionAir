@@ -74,6 +74,12 @@ Play mode control, Input System simulation, screen queries, and UI interaction:
 
 `POST /api/editor/play` · `POST /api/editor/stop` · `POST /api/editor/pause` · `POST /api/editor/step` · `GET /api/playmode/input/actions` · `POST /api/playmode/input/perform` · `POST /api/playmode/input/set` · `POST /api/playmode/input/pointer` · `POST /api/playmode/screen/hittest` · `GET /api/playmode/ui/elements` · `POST /api/playmode/ui/click` · `POST /api/playmode/ui/text` · `POST /api/playmode/ui/scroll` · `POST /api/playmode/ui/value`
 
+### [Compile](api/compile.md)
+
+Structured script compilation results, including cycles started outside UnionAir:
+
+`GET /api/compile` · `GET /api/compile/{id}`
+
 ### [Test Runner](api/testing.md)
 
 Unity Test Framework discovery, asynchronous execution, monitoring, cancellation, and NUnit XML download:

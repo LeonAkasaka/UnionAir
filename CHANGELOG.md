@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added a Compile API in the always-enabled Read category. `GET /api/compile` returns the in-flight cycle as `current` and the most recently completed Editor cycle as `latest`, and `GET /api/compile/{id}` returns one of the 20 most recently retained records. Diagnostics are structured with `severity`, `code`, project-relative `file`, `line`, and `column` instead of requiring callers to parse Console text.
+- Script compilations started outside UnionAir, such as an IDE save followed by Unity's focus auto-refresh, are adopted and recorded with `source: "external"`.
+- Compile records distinguish `succeeded` from `upToDate`, so a caller can tell "compiled with no errors" from "nothing needed compiling" and know that no domain reload will follow the latter. Cancelled and interrupted cycles resolve to `aborted` rather than remaining active.
+
 - Unity Console logs are now retained across assembly domain reloads. Every entry is mirrored to an append-only NDJSON file under `Library/UnionAir/Logs`, and the in-memory ring buffer is rehydrated from it after each reload.
 - `GET /api/editor/logs` now returns a monotonic `sequence` per entry plus `sessionId`, `oldestSequence`, `latestSequence`, `truncated`, and `hasMore`, and accepts an exclusive `since` cursor so callers can fetch only new entries. The cursor is applied before the `type` and `search` filters, so `truncated` reports lost entries rather than filtered ones.
 - `GET /api/editor/status` now reports `sessionId`, `lifecycleGeneration`, `settled`, and `hasCompileErrors`. `lifecycleGeneration` increments on every domain reload, letting a client whose connection dropped confirm that a reload completed rather than that the Editor crashed.

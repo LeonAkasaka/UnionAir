@@ -77,6 +77,12 @@ Play モード制御、Input System シミュレーション、画面クエリ�
 
 `POST /api/editor/play` · `POST /api/editor/stop` · `POST /api/editor/pause` · `POST /api/editor/step` · `GET /api/playmode/input/actions` · `POST /api/playmode/input/perform` · `POST /api/playmode/input/set` · `POST /api/playmode/input/pointer` · `POST /api/playmode/screen/hittest` · `GET /api/playmode/ui/elements` · `POST /api/playmode/ui/click` · `POST /api/playmode/ui/text` · `POST /api/playmode/ui/scroll` · `POST /api/playmode/ui/value`
 
+### [Compile](api/compile.ja.md)
+
+UnionAir 以外から開始されたサイクルも含む、構造化されたスクリプトコンパイル結果:
+
+`GET /api/compile` · `GET /api/compile/{id}`
+
 ### [Test Runner](api/testing.ja.md)
 
 Unity Test Framework のテスト発見、非同期実行、監視、キャンセル、NUnit XML ダウンロード:

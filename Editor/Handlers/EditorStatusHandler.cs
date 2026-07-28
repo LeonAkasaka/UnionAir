@@ -25,7 +25,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append(",\"testRunId\":").Append(RestResponse.FormatNullableString(UnionAirTestRunGate.PublicRunId));
             sb.Append(",\"sessionId\":").Append(RestResponse.FormatNullableString(UnionAirSession.SessionId));
             sb.Append($",\"lifecycleGeneration\":{UnionAirSession.Generation.ToString(CultureInfo.InvariantCulture)}");
-            sb.Append($",\"settled\":{RestResponse.FormatBool(!isCompiling && !isUpdating)}");
+            sb.Append($",\"settled\":{RestResponse.FormatBool(!isCompiling && !isUpdating && !UnionAirCompileGate.IsActive)}");
             sb.Append($",\"hasCompileErrors\":{RestResponse.FormatBool(EditorUtility.scriptCompilationFailed)}");
             sb.Append("}");
             RestResponse.Send(response, sb.ToString());
