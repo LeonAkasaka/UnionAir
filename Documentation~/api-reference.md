@@ -42,7 +42,7 @@ Endpoints are grouped into categories that can be enabled or disabled in the Uni
 
 Editor state, logs, selection, cameras, capture, refresh, and menu items:
 
-`GET /api/editor/status` · `GET /api/editor/logs` · `GET|POST /api/editor/selection` · `POST /api/editor/ping` · `GET /api/cameras` · `GET /api/cameras/capture` · `GET /api/cameras/capture/image` · `POST /api/editor/refresh` · `GET /api/editor/menu-items` · `POST /api/editor/menu-item` · `GET /api/editor/capture` · `GET /api/editor/capture/image`
+`GET /api/editor/status` · `GET /api/editor/logs` · `GET /api/editor/logs.ndjson` · `GET|POST /api/editor/selection` · `POST /api/editor/ping` · `GET /api/cameras` · `GET /api/cameras/capture` · `GET /api/cameras/capture/image` · `POST /api/editor/refresh` · `GET /api/editor/menu-items` · `POST /api/editor/menu-item` · `GET /api/editor/capture` · `GET /api/editor/capture/image`
 
 ### [Scenes](api/scenes.md)
 

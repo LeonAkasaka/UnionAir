@@ -10,7 +10,6 @@ namespace LeonAkasaka.UnionAir.Editor
     [InitializeOnLoad]
     public static class UnionAirInit
     {
-        private const string LifecycleGenerationKey = "UnionAir.LifecycleGeneration";
         private static readonly double[] AutoStartRetryDelaysSeconds =
         {
             0.1,
@@ -39,8 +38,8 @@ namespace LeonAkasaka.UnionAir.Editor
         static UnionAirInit()
         {
             UnionAirLifecycleDiagnostics.Initialize();
-            LifecycleGeneration = SessionState.GetInt(LifecycleGenerationKey, 0) + 1;
-            SessionState.SetInt(LifecycleGenerationKey, LifecycleGeneration);
+            UnionAirSession.Initialize();
+            LifecycleGeneration = UnionAirSession.Generation;
             Server.SetLifecycleGeneration(LifecycleGeneration);
             Server.UnexpectedlyStopped += OnServerUnexpectedlyStopped;
 

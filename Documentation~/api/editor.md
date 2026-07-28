@@ -41,7 +41,7 @@ This endpoint remains available while tests run. Other than health, help, logs, 
 
 ## GET /api/editor/logs
 
-Returns Unity Console logs. Includes logs recorded since the editor started (or since the last domain reload). Up to 1000 entries are kept in a ring buffer.
+Returns Unity Console logs. Up to 1000 entries are kept in an in-memory ring buffer, and every entry is also appended to an NDJSON file so history is **retained across domain reloads** for the lifetime of the Editor process.
 
 ### Query Parameters
 
@@ -50,33 +50,58 @@ Returns Unity Console logs. Includes logs recorded since the editor started (or 
 | `type` | `all` | Case-insensitive `log` / `warning` / `error` / `exception` / `assert` / `all` |
 | `search` | ―  | Case-insensitive partial-match filter on messages |
 | `limit` | `100` | Maximum number of results to return (max: 1000) |
+| `since` | ―  | Exclusive sequence cursor; returns only entries with `sequence` greater than this value |
 
 ### Response
 
 ```json
 {
+  "sessionId": "f40cbf3fc3224a97b5b7ac7aa3b1ea38",
   "count": 2,
+  "oldestSequence": 0,
+  "latestSequence": 42,
+  "truncated": false,
+  "hasMore": false,
   "logs": [
     {
+      "sequence": 42,
       "type": "error",
       "message": "NullReferenceException: Object reference not set...",
       "stackTrace": "MyScript.Update () (at Assets/MyScript.cs:42)",
-      "timestamp": "2026-05-16T04:12:00"
+      "timestamp": "2026-05-16T04:12:00.1234567Z"
     },
     {
+      "sequence": 41,
       "type": "warning",
       "message": "Shader 'Custom/Foo' has no shadows pass",
       "stackTrace": "",
-      "timestamp": "2026-05-16T04:11:58"
+      "timestamp": "2026-05-16T04:11:58.7654321Z"
     }
   ]
 }
 ```
 
-> Logs are returned in newest-first order (`timestamp` descending).
-> Because `StopCapturing()` is called before a domain reload, logs are not retained across reloads.
+| Field | Type | Description |
+|-----------|-----|------|
+| `sessionId` | string | Identifier regenerated once per Editor process |
+| `oldestSequence` | number | Oldest sequence still held in memory, or `-1` when empty |
+| `latestSequence` | number | Newest sequence still held in memory, or `-1` when empty |
+| `truncated` | bool | Whether entries after `since` had already been evicted from the in-memory buffer |
+| `hasMore` | bool | Whether more matching entries existed beyond `limit` |
+| `sequence` | number | Monotonic entry number within the current Editor session |
 
-Unknown `type` values return `400 Bad Request` instead of silently disabling the filter.
+> Logs are returned in newest-first order (`sequence` descending), including when `since` is supplied.
+> `timestamp` is UTC ISO 8601.
+
+### Polling With a Cursor
+
+Pass the previous response's `latestSequence` as `since` to fetch only new entries. `since` is **exclusive** and is applied **before** the `type` and `search` filters, so `truncated` reports entries that were lost rather than entries that were filtered out.
+
+`sequence` restarts at 0 in each new Editor process. Compare `sessionId` against the previous response and discard the cursor whenever it changes.
+
+When `truncated` is `true`, the missing entries are still in the NDJSON file — fetch [`GET /api/editor/logs.ndjson`](#get-apieditorlogsndjson) instead.
+
+Unknown `type` values return `400 Bad Request` instead of silently disabling the filter. A `since` value that is not a non-negative integer also returns `400`.
 
 ### Examples
 
@@ -86,6 +111,25 @@ curl "http://localhost:8765/api/editor/logs?type=error&limit=20"
 
 # Logs containing "NullReference"
 curl "http://localhost:8765/api/editor/logs?search=NullReference"
+
+# Only entries newer than sequence 42
+curl "http://localhost:8765/api/editor/logs?since=42"
+```
+
+---
+
+## GET /api/editor/logs.ndjson
+
+Downloads the raw NDJSON log file for the current Editor session, including entries already evicted from the in-memory ring buffer. One JSON object per line, in oldest-first order, with the same fields as the `logs` array above.
+
+- Content type: `application/x-ndjson`
+- Content disposition: `attachment; filename="console.ndjson"`
+- Returns `404` when the log file is not available
+
+The file is rotated when it reaches 8 MiB and when a new Editor process starts. **Only the active file is served** — the rotated predecessor (`console.1.ndjson`) is kept on disk under `Library/UnionAir/Logs` but is not exposed through the API.
+
+```bash
+curl -O "http://localhost:8765/api/editor/logs.ndjson"
 ```
 
 ---

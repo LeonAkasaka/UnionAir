@@ -44,7 +44,7 @@ Unity Editor の実行状態を返します。
 
 ## GET /api/editor/logs
 
-Unity Console のログを返します。エディタ起動以降(または直近の domain reload 以降)に記録されたログを含みます。リングバッファに最大1000件保持されます。
+Unity Console のログを返します。インメモリのリングバッファに最大1000件保持され、すべてのエントリは NDJSON ファイルにも追記されるため、Editor プロセスが動作している間は **domain reload をまたいで保持されます**。
 
 ### クエリパラメータ
 
@@ -53,33 +53,58 @@ Unity Console のログを返します。エディタ起動以降(または直�
 | `type` | `all` | 大文字小文字を区別しない `log` / `warning` / `error` / `exception` / `assert` / `all` |
 | `search` | ―  | メッセージに対する大文字小文字を区別しない部分一致フィルタ |
 | `limit` | `100` | 返す結果の最大数(最大: 1000) |
+| `since` | ―  | 排他的なシーケンスカーソル。この値より大きい `sequence` のエントリのみを返します |
 
 ### レスポンス
 
 ```json
 {
+  "sessionId": "f40cbf3fc3224a97b5b7ac7aa3b1ea38",
   "count": 2,
+  "oldestSequence": 0,
+  "latestSequence": 42,
+  "truncated": false,
+  "hasMore": false,
   "logs": [
     {
+      "sequence": 42,
       "type": "error",
       "message": "NullReferenceException: Object reference not set...",
       "stackTrace": "MyScript.Update () (at Assets/MyScript.cs:42)",
-      "timestamp": "2026-05-16T04:12:00"
+      "timestamp": "2026-05-16T04:12:00.1234567Z"
     },
     {
+      "sequence": 41,
       "type": "warning",
       "message": "Shader 'Custom/Foo' has no shadows pass",
       "stackTrace": "",
-      "timestamp": "2026-05-16T04:11:58"
+      "timestamp": "2026-05-16T04:11:58.7654321Z"
     }
   ]
 }
 ```
 
-> ログは新しい順(`timestamp` 降順)で返されます。
-> domain reload の前に `StopCapturing()` が呼ばれるため、ログはリロードをまたいで保持されません。
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `sessionId` | string | Editor プロセスごとに再生成される識別子 |
+| `oldestSequence` | number | メモリ上に残る最古の sequence。空の場合は `-1` |
+| `latestSequence` | number | メモリ上に残る最新の sequence。空の場合は `-1` |
+| `truncated` | bool | `since` 以降のエントリが既にインメモリバッファから追い出されていたか |
+| `hasMore` | bool | `limit` を超えて一致するエントリが残っていたか |
+| `sequence` | number | 現在の Editor セッション内で単調増加するエントリ番号 |
 
-不明な `type` 値はフィルターを暗黙に無効化せず、`400 Bad Request` を返します。
+> ログは新しい順(`sequence` 降順)で返されます。`since` を指定した場合も同じです。
+> `timestamp` は UTC の ISO 8601 です。
+
+### カーソルによるポーリング
+
+前回のレスポンスの `latestSequence` を `since` に渡すと、新しいエントリだけを取得できます。`since` は **排他的** で、`type` と `search` のフィルタよりも **先に** 適用されます。そのため `truncated` は、フィルタで除外されたエントリではなく、失われたエントリを示します。
+
+`sequence` は Editor プロセスごとに 0 から振り直されます。前回のレスポンスと `sessionId` を比較し、変化していればカーソルを破棄してください。
+
+`truncated` が `true` の場合、失われたエントリは NDJSON ファイルには残っています。[`GET /api/editor/logs.ndjson`](#get-apieditorlogsndjson) を使用してください。
+
+不明な `type` 値はフィルターを暗黙に無効化せず、`400 Bad Request` を返します。`since` が非負整数でない場合も `400` を返します。
 
 ### 例
 
@@ -89,6 +114,25 @@ curl "http://localhost:8765/api/editor/logs?type=error&limit=20"
 
 # "NullReference" を含むログ
 curl "http://localhost:8765/api/editor/logs?search=NullReference"
+
+# sequence 42 より新しいエントリのみ
+curl "http://localhost:8765/api/editor/logs?since=42"
+```
+
+---
+
+## GET /api/editor/logs.ndjson
+
+現在の Editor セッションの生の NDJSON ログファイルをダウンロードします。インメモリのリングバッファから既に追い出されたエントリも含みます。1行につき1つの JSON オブジェクトで、古い順に並び、フィールドは上記の `logs` 配列と同じです。
+
+- Content type: `application/x-ndjson`
+- Content disposition: `attachment; filename="console.ndjson"`
+- ログファイルが利用できない場合は `404` を返します
+
+ファイルは 8 MiB に達したとき、および新しい Editor プロセスの開始時にローテーションされます。**配信されるのはアクティブなファイルのみ** です。ローテーション済みの前世代(`console.1.ndjson`)は `Library/UnionAir/Logs` 配下に残りますが、API では公開されません。
+
+```bash
+curl -O "http://localhost:8765/api/editor/logs.ndjson"
 ```
 
 ---

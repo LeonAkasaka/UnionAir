@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Unity Console logs are now retained across assembly domain reloads. Every entry is mirrored to an append-only NDJSON file under `Library/UnionAir/Logs`, and the in-memory ring buffer is rehydrated from it after each reload.
+- `GET /api/editor/logs` now returns a monotonic `sequence` per entry plus `sessionId`, `oldestSequence`, `latestSequence`, `truncated`, and `hasMore`, and accepts an exclusive `since` cursor so callers can fetch only new entries. The cursor is applied before the `type` and `search` filters, so `truncated` reports lost entries rather than filtered ones.
+- Added `GET /api/editor/logs.ndjson`, which downloads the raw log file for the current Editor session including entries already evicted from the in-memory buffer. The file is rotated at 8 MiB and when a new Editor process starts; only the active file is served.
+
 - Added a disabled-by-default Profiling API for AI-oriented `ProfilerRecorder` discovery and sessions, versioned JSON statistics, frame-level NDJSON, optional Unity Profiler raw captures, and downloadable Memory Profiler snapshots.
 - Profiling sessions can be attached atomically to UnionAir EditMode and PlayMode Test Runner runs and report discontinuous segments across assembly reloads.
 - Profiling and memory artifacts are stored under `Library/UnionAir`, include project-relative paths, sizes, and SHA-256 hashes, and use bounded count and shared-size retention.
@@ -17,6 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `GET /api/editor/status` now reports active Unity Test Framework runs and whether they were started by UnionAir or an external tool.
 - Endpoint metadata now declares whether each route is allowed during a test run. Active UnionAir and external runs block all endpoints except health, help, editor status/logs, run status/result/cancel, and CORS preflight.
 - `POST /api/playmode/input/set` now supports one-shot Mouse scroll deltas through `<Mouse>/scroll`, `<Mouse>/scroll/x`, and `<Mouse>/scroll/y` bindings while preserving the virtual Mouse position and held buttons.
+
+### Changed
+
+- **Breaking:** `timestamp` in `GET /api/editor/logs` entries is now UTC ISO 8601 with a `Z` suffix (`2026-05-16T04:12:00.1234567Z`) instead of an offset-free local time, matching the Test Runner and Profiling APIs. Clients that parsed the previous format as local time must be updated.
 
 ### Fixed
 

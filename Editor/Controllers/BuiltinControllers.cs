@@ -37,10 +37,18 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "logs",
             Category = UnionAirEndpointCategories.Read,
             TestRunPolicy = UnionAirTestRunPolicy.Allowed,
-            Summary = "Returns captured Unity Console logs. The type filter is case-insensitive; unknown types return 400.",
-            OptionalQuery = new string[] { "type", "search", "limit" })]
+            Summary = "Returns captured Unity Console logs, newest first, retained across domain reloads. The type filter is case-insensitive; unknown types return 400. Use the exclusive 'since' cursor with the previous 'latestSequence' to fetch only new entries, and discard the cursor whenever 'sessionId' changes.",
+            OptionalQuery = new string[] { "type", "search", "limit", "since" },
+            ResponseExample = "{\"sessionId\":\"3f2a9c81\",\"count\":1,\"oldestSequence\":0,\"latestSequence\":42,\"truncated\":false,\"hasMore\":false,\"logs\":[{\"sequence\":42,\"type\":\"error\",\"message\":\"NullReferenceException\",\"stackTrace\":\"\",\"timestamp\":\"2026-07-28T02:11:00.1234567Z\"}]}")]
         private void Logs(UnionAirRequestContext ctx)
             => new EditorLogsHandler().Handle(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("GET", "logs.ndjson",
+            Category = UnionAirEndpointCategories.Read,
+            TestRunPolicy = UnionAirTestRunPolicy.Allowed,
+            Summary = "Downloads the raw NDJSON Console log file for the current Editor session, including entries already evicted from the in-memory buffer. Serves the active file only; the rotated predecessor is not included.")]
+        private void LogsFile(UnionAirRequestContext ctx)
+            => new EditorLogsHandler().HandleDownload(ctx);
 
         [UnionAirEndpoint("GET", "selection",
             Category = UnionAirEndpointCategories.EditorActions,

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using System.Globalization;
 using System.Net;
 using System.Text;
 
@@ -24,11 +24,31 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            List<LogStore.LogEntry> entries = LogStore.GetLogs(type, search, limit);
+            // A negative cursor disables the filter, which is what an absent `since` means.
+            long since = -1;
+            var sinceRaw = query["since"];
+            if (!string.IsNullOrEmpty(sinceRaw))
+            {
+                if (!long.TryParse(sinceRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out since) ||
+                    since < 0)
+                {
+                    RestResponse.SendError(
+                        response, "Query parameter 'since' must be a non-negative integer.", 400);
+                    return;
+                }
+            }
+
+            var result = LogStore.Query(type, search, limit, since);
+            var entries = result.Entries;
 
             var sb = new StringBuilder();
             sb.Append("{");
+            sb.Append("\"sessionId\":").Append(RestResponse.FormatNullableString(result.SessionId)).Append(",");
             sb.Append($"\"count\":{entries.Count},");
+            sb.Append($"\"oldestSequence\":{result.OldestSequence.ToString(CultureInfo.InvariantCulture)},");
+            sb.Append($"\"latestSequence\":{result.LatestSequence.ToString(CultureInfo.InvariantCulture)},");
+            sb.Append($"\"truncated\":{RestResponse.FormatBool(result.Truncated)},");
+            sb.Append($"\"hasMore\":{RestResponse.FormatBool(result.HasMore)},");
             sb.Append("\"logs\":[");
 
             for (int i = 0; i < entries.Count; i++)
@@ -36,15 +56,32 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (i > 0) sb.Append(",");
                 var e = entries[i];
                 sb.Append("{");
-                sb.Append($"\"type\":\"{RestResponse.EscapeJson(e.Type.ToString())}\",");
+                sb.Append($"\"sequence\":{e.Sequence.ToString(CultureInfo.InvariantCulture)},");
+                sb.Append($"\"type\":\"{RestResponse.EscapeJson(e.Type)}\",");
                 sb.Append($"\"message\":\"{RestResponse.EscapeJson(e.Message)}\",");
                 sb.Append($"\"stackTrace\":\"{RestResponse.EscapeJson(e.StackTrace)}\",");
-                sb.Append($"\"timestamp\":\"{RestResponse.EscapeJson(e.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss"))}\"");
+                sb.Append($"\"timestamp\":\"{e.Timestamp.ToString("o", CultureInfo.InvariantCulture)}\"");
                 sb.Append("}");
             }
 
             sb.Append("]}");
             RestResponse.Send(response, sb.ToString());
+        }
+
+        /// <summary>
+        /// Streams the raw NDJSON log file, which retains entries already evicted from memory.
+        /// </summary>
+        /// <param name="context">Request context whose response lifetime the transfer takes over.</param>
+        public void HandleDownload(UnionAirRequestContext context)
+        {
+            var path = LogStore.LogFilePath;
+            if (string.IsNullOrEmpty(path))
+            {
+                RestResponse.SendNotFound(context.Response, "Artifact is not available.");
+                return;
+            }
+
+            RestResponse.SendArtifactFile(context, path, "application/x-ndjson", "console.ndjson");
         }
     }
 }
