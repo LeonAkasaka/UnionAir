@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using NUnit.Framework;
 
 namespace LeonAkasaka.UnionAir.Editor.Tests
@@ -155,6 +157,73 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             StringAssert.Contains("\"sequence\":7", line);
             StringAssert.Contains("\\nline two", line);
             StringAssert.Contains("2026-07-28T01:02:03", line);
+        }
+
+        [Test]
+        public void DownloadPaths_IncludeSameSessionPredecessorOldestFirst()
+        {
+            CollectionAssert.AreEqual(
+                new string[] { "console.1.ndjson", "console.ndjson" },
+                LogStore.BuildDownloadFilePaths(
+                    "console.ndjson",
+                    "console.1.ndjson",
+                    true,
+                    true,
+                    true));
+            CollectionAssert.AreEqual(
+                new string[] { "console.ndjson" },
+                LogStore.BuildDownloadFilePaths(
+                    "console.ndjson",
+                    "console.1.ndjson",
+                    false,
+                    true,
+                    true));
+        }
+
+        [Test]
+        public void DownloadPaths_TolerateOneMissingFile()
+        {
+            CollectionAssert.AreEqual(
+                new string[] { "console.1.ndjson" },
+                LogStore.BuildDownloadFilePaths(
+                    "console.ndjson",
+                    "console.1.ndjson",
+                    true,
+                    false,
+                    true));
+            Assert.AreEqual(
+                0,
+                LogStore.BuildDownloadFilePaths(
+                    "console.ndjson",
+                    "console.1.ndjson",
+                    true,
+                    false,
+                    false).Count);
+        }
+
+        [Test]
+        public void RotationThreshold_IncludesExactBoundary()
+        {
+            Assert.IsFalse(LogStore.ShouldRotate(LogStore.RotateThresholdBytes - 1));
+            Assert.IsTrue(LogStore.ShouldRotate(LogStore.RotateThresholdBytes));
+        }
+
+        [Test]
+        public void CopyStreams_ConcatenatesBoundedSnapshots()
+        {
+            var oldBytes = Encoding.UTF8.GetBytes("old\nignored");
+            var newBytes = Encoding.UTF8.GetBytes("new\n");
+            using (var oldStream = new MemoryStream(oldBytes))
+            using (var newStream = new MemoryStream(newBytes))
+            using (var output = new MemoryStream())
+            {
+                RestResponse.CopyStreams(
+                    new Stream[] { oldStream, newStream },
+                    new long[] { 4, newBytes.Length },
+                    output);
+
+                Assert.AreEqual("old\nnew\n", Encoding.UTF8.GetString(output.ToArray()));
+            }
         }
     }
 }

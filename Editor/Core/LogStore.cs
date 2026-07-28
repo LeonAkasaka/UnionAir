@@ -41,6 +41,8 @@ namespace LeonAkasaka.UnionAir.Editor
         private static StreamWriter _writer;
         private static string _writeError;
         private static bool _writeErrorReported;
+        private static bool _previousBelongsToCurrentSession;
+        private static bool _previousSessionStateDirty;
 
         internal struct LogEntry
         {
@@ -122,10 +124,14 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (UnionAirSession.IsNewEditorSession)
                 {
                     Rotate();
+                    _previousBelongsToCurrentSession = false;
+                    UnionAirSession.SavePreviousLogSameSession(false);
                     _nextSequence = 0;
                 }
                 else
                 {
+                    _previousBelongsToCurrentSession =
+                        UnionAirSession.LoadPreviousLogSameSession();
                     _nextSequence = UnionAirSession.LoadNextLogSequence();
                     Rehydrate();
                 }
@@ -170,6 +176,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 CloseWriterLocked();
                 try { UnionAirSession.SaveNextLogSequence(_nextSequence); }
                 catch { /* SessionState is unavailable while the Editor is tearing down. */ }
+                try
+                {
+                    UnionAirSession.SavePreviousLogSameSession(
+                        _previousBelongsToCurrentSession);
+                    _previousSessionStateDirty = false;
+                }
+                catch { /* SessionState is unavailable while the Editor is tearing down. */ }
             }
 
             ReportWriteErrorOnce();
@@ -207,11 +220,18 @@ namespace LeonAkasaka.UnionAir.Editor
                 // Approximate: enough to drive rotation without measuring the encoded length.
                 _writtenBytes += line.Length + 1;
 
-                if (_writtenBytes >= RotateThresholdBytes)
+                if (ShouldRotate(_writtenBytes))
                 {
                     CloseWriterLocked();
-                    Rotate();
-                    _writtenBytes = 0;
+                    var rotated = Rotate();
+                    if (rotated)
+                    {
+                        _previousBelongsToCurrentSession = true;
+                        _previousSessionStateDirty = true;
+                    }
+                    _writtenBytes = rotated
+                        ? 0
+                        : File.Exists(_logPath) ? new FileInfo(_logPath).Length : 0;
                     OpenWriterLocked();
                 }
             }
@@ -275,19 +295,77 @@ namespace LeonAkasaka.UnionAir.Editor
             _writer = null;
         }
 
-        private static void Rotate()
+        private static bool Rotate()
         {
             try
             {
-                if (!File.Exists(_logPath)) return;
-                if (File.Exists(_previousLogPath)) File.Delete(_previousLogPath);
-                File.Move(_logPath, _previousLogPath);
+                if (!File.Exists(_logPath)) return false;
+                if (File.Exists(_previousLogPath))
+                    File.Replace(_logPath, _previousLogPath, null);
+                else
+                    File.Move(_logPath, _previousLogPath);
+                return true;
             }
             catch (Exception ex)
             {
                 _writeError = ex.Message;
+                return false;
             }
         }
+
+        /// <summary>
+        /// Returns the retained files for the current Editor session, oldest first.
+        /// </summary>
+        internal static List<string> GetDownloadFilePaths()
+        {
+            List<string> result;
+            bool persistState;
+            lock (_lock)
+            {
+                result = BuildDownloadFilePaths(
+                    _logPath,
+                    _previousLogPath,
+                    _previousBelongsToCurrentSession,
+                    !string.IsNullOrEmpty(_logPath) && File.Exists(_logPath),
+                    !string.IsNullOrEmpty(_previousLogPath) && File.Exists(_previousLogPath));
+                persistState = _previousSessionStateDirty;
+                _previousSessionStateDirty = false;
+            }
+
+            if (persistState)
+            {
+                try
+                {
+                    UnionAirSession.SavePreviousLogSameSession(
+                        _previousBelongsToCurrentSession);
+                }
+                catch
+                {
+                    lock (_lock) _previousSessionStateDirty = true;
+                }
+            }
+
+            return result;
+        }
+
+        internal static List<string> BuildDownloadFilePaths(
+            string activePath,
+            string previousPath,
+            bool previousBelongsToCurrentSession,
+            bool activeExists,
+            bool previousExists)
+        {
+            var result = new List<string>(2);
+            if (previousBelongsToCurrentSession && previousExists &&
+                !string.IsNullOrEmpty(previousPath))
+                result.Add(previousPath);
+            if (activeExists && !string.IsNullOrEmpty(activePath))
+                result.Add(activePath);
+            return result;
+        }
+
+        internal static bool ShouldRotate(long writtenBytes)
+            => writtenBytes >= RotateThresholdBytes;
 
         private static void Rehydrate()
         {

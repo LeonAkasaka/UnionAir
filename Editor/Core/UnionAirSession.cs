@@ -19,6 +19,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private const string GenerationKey = "UnionAir.LifecycleGeneration";
         private const string SessionIdKey = "UnionAir.SessionId";
         private const string NextLogSequenceKey = "UnionAir.Log.NextSequence";
+        private const string PreviousLogSameSessionKey = "UnionAir.Log.PreviousSameSession";
 
         /// <summary>
         /// Monotonic assembly-domain counter for the current Editor process, starting at 1.
@@ -81,6 +82,15 @@ namespace LeonAkasaka.UnionAir.Editor
         internal static void SaveNextLogSequence(long value)
         {
             SessionState.SetString(NextLogSequenceKey, value.ToString(CultureInfo.InvariantCulture));
+        }
+
+        internal static bool LoadPreviousLogSameSession()
+            => SessionState.GetBool(PreviousLogSameSessionKey, false);
+
+        internal static void SavePreviousLogSameSession(bool value)
+        {
+            if (value) SessionState.SetBool(PreviousLogSameSessionKey, true);
+            else SessionState.EraseBool(PreviousLogSameSessionKey);
         }
     }
 }

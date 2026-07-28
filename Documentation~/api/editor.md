@@ -117,7 +117,7 @@ Pass the previous response's `latestSequence` as `since` to fetch only new entri
 
 `sequence` restarts at 0 in each new Editor process. Compare `sessionId` against the previous response and discard the cursor whenever it changes.
 
-When `truncated` is `true`, the missing entries are still in the NDJSON file — fetch [`GET /api/editor/logs.ndjson`](#get-apieditorlogsndjson) instead.
+When `truncated` is `true`, fetch [`GET /api/editor/logs.ndjson`](#get-apieditorlogsndjson) to recover entries that are still inside the retained two-file NDJSON window.
 
 Unknown `type` values return `400 Bad Request` instead of silently disabling the filter. A `since` value that is not a non-negative integer also returns `400`.
 
@@ -138,13 +138,13 @@ curl "http://localhost:8765/api/editor/logs?since=42"
 
 ## GET /api/editor/logs.ndjson
 
-Downloads the raw NDJSON log file for the current Editor session, including entries already evicted from the in-memory ring buffer. One JSON object per line, in oldest-first order, with the same fields as the `logs` array above.
+Downloads the retained NDJSON logs for the current Editor session, including entries already evicted from the in-memory ring buffer. One JSON object per line, in oldest-first order, with the same fields as the `logs` array above.
 
 - Content type: `application/x-ndjson`
 - Content disposition: `attachment; filename="console.ndjson"`
 - Returns `404` when the log file is not available
 
-The file is rotated when it reaches 8 MiB and when a new Editor process starts. **Only the active file is served** — the rotated predecessor (`console.1.ndjson`) is kept on disk under `Library/UnionAir/Logs` but is not exposed through the API.
+The active file is rotated when it reaches approximately 8 MiB. The response concatenates the same-session rotated predecessor (`console.1.ndjson`) followed by the active file (`console.ndjson`), so their JSON lines remain oldest-first across the rotation boundary. At most these two files are retained; entries older than the predecessor cannot be recovered. A predecessor left by an earlier Editor process is never included.
 
 ```bash
 curl -O "http://localhost:8765/api/editor/logs.ndjson"

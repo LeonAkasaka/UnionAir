@@ -46,7 +46,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "logs.ndjson",
             Category = UnionAirEndpointCategories.Read,
             TestRunPolicy = UnionAirTestRunPolicy.Allowed,
-            Summary = "Downloads the raw NDJSON Console log file for the current Editor session, including entries already evicted from the in-memory buffer. Serves the active file only; the rotated predecessor is not included.")]
+            Summary = "Downloads retained NDJSON Console logs for the current Editor session, including entries already evicted from the in-memory buffer. Concatenates the same-session rotated predecessor and active file in oldest-first order; at most these two files are retained.")]
         private void LogsFile(UnionAirRequestContext ctx)
             => new EditorLogsHandler().HandleDownload(ctx);
 

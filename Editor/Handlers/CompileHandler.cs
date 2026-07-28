@@ -59,7 +59,7 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 RestResponse.SendError(
                     response,
-                    "Body field 'requestId' must contain only letters, digits, hyphens, and underscores, and be at most 64 characters.",
+                    "Body field 'requestId' must contain only letters, digits, hyphens, and underscores, be at most 64 characters, and not be a reserved Windows device name.",
                     400);
                 return;
             }
@@ -130,7 +130,7 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 RestResponse.SendError(
                     context.Response,
-                    "Compile id must contain only letters, digits, hyphens, and underscores.",
+                    "Compile id must contain only letters, digits, hyphens, and underscores and must not be a reserved Windows device name.",
                     400);
                 return;
             }

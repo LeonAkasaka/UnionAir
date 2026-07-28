@@ -12,13 +12,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added `POST /api/compile` in the Asset Write category, which requests a compilation and returns `202` with the id to poll. The record is persisted and the response sent before any compilation work starts, because refreshing and compiling block the Editor and can end in a domain reload that drops the connection. An optional caller-supplied `requestId` makes a lost response recoverable, and `409` responses carry `activeCompile` or `existingCompile` so a caller knows to poll rather than retry.
 - `GET /api/editor/status` now reports `compileState`, `compileId`, and `compileSource` for an in-flight compilation, mirroring the existing test-run fields.
 - Script compilations started outside UnionAir, such as an IDE save followed by Unity's focus auto-refresh, are adopted and recorded with `source: "external"`.
-- Compile records distinguish `succeeded` from `upToDate`, so a caller can tell "compiled with no errors" from "nothing needed compiling" and know that no domain reload will follow the latter. Cancelled and interrupted cycles resolve to `aborted` rather than remaining active.
+- Compile records distinguish `succeeded` from `upToDate`, so a caller can tell "compiled with no errors" from "Unity reported zero compiled assemblies." Neither result promises whether a domain reload follows; removal-only cycles can report `upToDate` and still reload. Cancelled and interrupted cycles resolve to `aborted` rather than remaining active.
 
 - Unity Console logs are now retained across assembly domain reloads. Every entry is mirrored to an append-only NDJSON file under `Library/UnionAir/Logs`, and the in-memory ring buffer is rehydrated from it after each reload.
 - `GET /api/editor/logs` now returns a monotonic `sequence` per entry plus `sessionId`, `oldestSequence`, `latestSequence`, `truncated`, and `hasMore`, and accepts an exclusive `since` cursor so callers can fetch only new entries. The cursor is applied before the `type` and `search` filters, so `truncated` reports lost entries rather than filtered ones.
 - `GET /api/editor/status` now reports `sessionId`, `lifecycleGeneration`, `settled`, and `hasCompileErrors`. `lifecycleGeneration` increments on every domain reload, letting a client whose connection dropped confirm that a reload completed rather than that the Editor crashed.
 
-- Added `GET /api/editor/logs.ndjson`, which downloads the raw log file for the current Editor session including entries already evicted from the in-memory buffer. The file is rotated at 8 MiB and when a new Editor process starts; only the active file is served.
+- Added `GET /api/editor/logs.ndjson`, which downloads the retained raw logs for the current Editor session including entries already evicted from the in-memory buffer. Across a size rotation it concatenates the same-session predecessor and active file in oldest-first order; at most these two files are retained.
 
 - Added a disabled-by-default Profiling API for AI-oriented `ProfilerRecorder` discovery and sessions, versioned JSON statistics, frame-level NDJSON, optional Unity Profiler raw captures, and downloadable Memory Profiler snapshots.
 - Profiling sessions can be attached atomically to UnionAir EditMode and PlayMode Test Runner runs and report discontinuous segments across assembly reloads.
@@ -30,7 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Endpoint metadata now declares whether each route is allowed during a test run. Active UnionAir and external runs block all endpoints except health, help, editor status/logs, run status/result/cancel, and CORS preflight.
 - `POST /api/playmode/input/set` now supports one-shot Mouse scroll deltas through `<Mouse>/scroll`, `<Mouse>/scroll/x`, and `<Mouse>/scroll/y` bindings while preserving the virtual Mouse position and held buttons.
 
-- Added EditMode tests under `Tests/Editor` covering compiler-message parsing, path normalization, and log cursor arithmetic. The test assembly is not compiled in a consumer project unless the project adds `com.leonakasaka.unionair` to `testables` in its manifest.
+- Added EditMode tests under `Tests/Editor` covering compiler-message parsing, path normalization, compile result and target decisions, retained-record safety, log cursor arithmetic, rotation selection, and bounded multi-file streaming. The test assembly is not compiled in a consumer project unless the project adds `com.leonakasaka.unionair` to `testables` in its manifest.
 
 ### Changed
 
@@ -38,6 +38,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Prevented mixed player or custom compilation cycles from being classified as Editor cycles and replacing `latest`, and re-evaluated retained records with the conservative target rules at startup.
+- Prevented caller-supplied compile ids such as Windows device names from being accepted when their per-id record cannot be persisted safely.
+- Made Console NDJSON downloads include the same-session rotated predecessor instead of making entries inaccessible as soon as the active file crossed the rotation threshold.
 - Prevented domain reloads from orphaning an `HttpListener` by retaining listener ownership until bounded thread and queued-response cleanup completes.
 - Added up to five bounded retries for transient address-in-use failures during automatic startup, without publishing intermediate failures to the Console or logs API.
 - Added up to three delayed recovery attempts for unexpected listener thread exits, with cleanup completed before the bounded lifecycle trace is dumped and concise errors kept separate from the once-per-domain trace.

@@ -122,6 +122,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         {
             Assert.IsTrue(CompileMessageParser.IsValidId("c-20260728-040030-67c0fd"));
             Assert.IsTrue(CompileMessageParser.IsValidId("my_run_1"));
+            Assert.IsTrue(CompileMessageParser.IsValidId("my-run-1"));
 
             Assert.IsFalse(CompileMessageParser.IsValidId(".."));
             Assert.IsFalse(CompileMessageParser.IsValidId("a/b"));
@@ -130,6 +131,20 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.IsFalse(CompileMessageParser.IsValidId(""));
             Assert.IsFalse(CompileMessageParser.IsValidId(null));
             Assert.IsFalse(CompileMessageParser.IsValidId(new string('a', 65)));
+        }
+
+        [TestCase("CON")]
+        [TestCase("con")]
+        [TestCase("PRN")]
+        [TestCase("AUX")]
+        [TestCase("NUL")]
+        [TestCase("COM1")]
+        [TestCase("com9")]
+        [TestCase("LPT1")]
+        [TestCase("lpt9")]
+        public void IsValidId_RejectsWindowsDeviceNames(string id)
+        {
+            Assert.IsFalse(CompileMessageParser.IsValidId(id));
         }
 
         [Test]

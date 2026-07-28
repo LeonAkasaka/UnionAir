@@ -74,14 +74,18 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <param name="context">Request context whose response lifetime the transfer takes over.</param>
         public void HandleDownload(UnionAirRequestContext context)
         {
-            var path = LogStore.LogFilePath;
-            if (string.IsNullOrEmpty(path))
+            var paths = LogStore.GetDownloadFilePaths();
+            if (paths.Count == 0)
             {
                 RestResponse.SendNotFound(context.Response, "Artifact is not available.");
                 return;
             }
 
-            RestResponse.SendArtifactFile(context, path, "application/x-ndjson", "console.ndjson");
+            RestResponse.SendArtifactFiles(
+                context,
+                paths,
+                "application/x-ndjson",
+                "console.ndjson");
         }
     }
 }

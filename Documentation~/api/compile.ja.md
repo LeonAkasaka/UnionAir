@@ -33,7 +33,7 @@ UnionAir はスクリプトのコンパイルサイクルを、メッセージ�
 |-------|----------|---------|-------------|
 | `refresh` | いいえ | `true` | コンパイル前に未反映のアセット変更をインポートする |
 | `clean` | いいえ | `false` | ビルドキャッシュを破棄し全アセンブリを再ビルドする |
-| `requestId` | いいえ | ― | 呼び出し側が指定する id。英数字・ハイフン・アンダースコアで最大 64 文字 |
+| `requestId` | いいえ | ― | 呼び出し側が指定する id。英数字・ハイフン・アンダースコアで最大 64 文字。`CON`、`NUL`、`COM1`、`LPT1` など Windows の予約デバイス名は拒否される |
 
 ファイルが既にインポート済みでない限り `refresh` は有効のままにしてください。新規に書き込んだ `.cs` ファイルは Unity がインポートするまでどのアセンブリにも属さないため、リフレッシュなしのコンパイルでは認識されません。スクリプトに変更があればリフレッシュ自体がサイクルを開始するため、UnionAir が明示的にコンパイルを要求するのは開始されなかった場合だけです。これが `upToDate` を観測可能にしています。
 
@@ -71,7 +71,7 @@ UnionAir はスクリプトのコンパイルサイクルを、メッセージ�
 
 保持期間内で `requestId` が既に使われている場合は `existingCompile` オブジェクトを伴う `409` を返します。ボディには既存のレコード全体が含まれます。
 
-Editor が Play モードに入る途中または Play モード中、あるいはアセット更新中の場合も `409` を返します。`requestId` に使用できない文字が含まれる場合は `400` を返します。
+Editor が Play モードに入る途中または Play モード中、あるいはアセット更新中の場合も `409` を返します。`requestId` に使用できない文字が含まれる場合、または Windows の予約デバイス名の場合は `400` を返します。
 
 ```bash
 curl -X POST http://localhost:8765/api/compile \
@@ -142,7 +142,7 @@ curl -X POST http://localhost:8765/api/compile \
 | `source` | string | API 経由の要求は `unionAir`、それ以外は `external` |
 | `state` | string | `queued` / `running` / `completed` / `aborted` |
 | `result` | string \| null | 下記の result 表を参照。実行中は `null` |
-| `target` | string | アセンブリの出力先から判定した `editor` / `player` / `other` |
+| `target` | string | すべてのコンパイル出力が Editor アセンブリなら `editor`、すべてがプレイヤーアセンブリなら `player`、それ以外は `other` |
 | `sessionId` | string | このレコードが属する Editor プロセス |
 | `durationSeconds` | number | `startedAt` から `finishedAt` までの時間 |
 | `lifecycleGenerationAtRequest` | number | サイクルを記録した時点の `lifecycleGeneration` |
@@ -175,7 +175,7 @@ curl -X POST http://localhost:8765/api/compile \
 | `queued` | `null` | コンパイルが要求されたがまだ開始していない |
 | `running` | `null` | コンパイル実行中 |
 | `completed` | `succeeded` | 1つ以上のアセンブリがエラーなくコンパイルされた |
-| `completed` | `upToDate` | コンパイルが必要なものが何もなかった |
+| `completed` | `upToDate` | Unity がコンパイル済みアセンブリを0件と報告した。削除だけのサイクルでも発生することがある |
 | `completed` | `failed` | 1件以上のエラーが報告された |
 | `aborted` | `aborted` | サイクルは開始したが結果を報告しなかった |
 | `aborted` | `notStarted` | コンパイルは要求されたがサイクルが開始しなかった |
@@ -188,7 +188,7 @@ Unity が assembly domain をリロードするのは、ビルド **全体** が
 
 - `failed` のサイクルではリロードは **起きません**。サーバーは動き続け、同じ接続のまま結果を読めます。エラー修正時の高速パスです。
 - `succeeded` のサイクルでは通常リロードが起きますが、常にではありません。Play モード、assembly reload のロック、ロード対象がないサイクルでは抑制されます。`succeeded` をリロードの保証として扱わないでください。
-- `upToDate` のサイクルではリロードは決して起きません。
+- `upToDate` のサイクルでも、最後のユーザースクリプトを削除してアセンブリがなくなる場合などはリロードされることがあります。`succeeded` と同様、リロードの有無は予測しません。
 
 1つのアセンブリの失敗がサイクル全体のリロードを抑制するため、`Assets` 配下の失敗するスクリプトは、新しくコンパイルされたパッケージのコードのロードも妨げます。
 
@@ -236,13 +236,13 @@ curl http://localhost:8765/api/compile/c-20260728-040030-67c0fd
 
 ### 正しく終了する
 
-自動化クライアントが最もハングしやすいのがここです。**`succeeded` は domain reload が起きることの保証ではありません**。Play モード、assembly reload のロック、ロード対象がないサイクルではリロードは抑制されますが、そのどれになるかを Unity の API から UnionAir が事前に判断する手段はありません。`succeeded` のあとに無条件で `lifecycleGeneration` の増加を待つクライアントは、リロードが起きない場合に永久に待ち続けます。
+自動化クライアントが最もハングしやすいのがここです。`succeeded` と `upToDate` のどちらも domain reload の有無を予測しません。Play モードや assembly reload のロックはリロードを抑制する一方、削除だけのサイクルはコンパイル済みアセンブリが0件でもリロードすることがあります。Unity の API から UnionAir が事前に判断する手段はありません。`lifecycleGeneration` の増加を無条件で待つと、リロードが起きない場合に永久に待ち続けます。
 
 代わりに次のように終了してください。
 
-1. `failed` または `upToDate` — **完了。リロードを待ってはいけません**。どちらもリロードを伴いません。
-2. `succeeded` で、サーバーが応答し `settled` が `true` — **完了。リロードを待たないでください。**
-3. 接続が **切れた場合のみ** — 再接続し、`lifecycleGeneration` が `lifecycleGenerationAtRequest` を超えるまで待ちます。これによりクラッシュではなくリロードが完了したことを確認できます。
+1. `failed` — **完了。リロードを待ってはいけません**。whole build の失敗ではリロードされません。
+2. `succeeded` または `upToDate` で、サーバーが応答し `settled: true` — コンパイル結果は完了です。事前にリロードを待たず次へ進みます。
+3. どちらかの成功結果のあとに接続が **切れた場合** — 再接続し、`lifecycleGeneration` が `lifecycleGenerationAtRequest` を超えるまで待ちます。これによりクラッシュではなくリロードが完了したことを確認できます。
 4. **すべての待機に明示的なタイムアウトを設けてください。** 上記のどのステップも無制限にポーリングしてはいけません。
 
 > `settled` はスナップショットであり保証ではありません。コンパイルはネイティブ側の domain reload が始まるわずか前に `isCompiling` をクリアするため、接続を失う直前に `settled: true` を観測することが正当に起こり得ます。ステップ3が存在し、タイムアウトが必須である理由がこれです。

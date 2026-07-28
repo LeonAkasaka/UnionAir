@@ -61,6 +61,7 @@ namespace LeonAkasaka.UnionAir.Editor
             _projectRoot = Directory.GetCurrentDirectory();
             _current = Load(CurrentPath);
             _latest = Load(LatestPath);
+            ReconcileLatest();
 
             // A record that still claims to be active with no gate open belongs to a cycle whose
             // process died. Finalization at reload handles the ordinary paths; this is the crash net.
@@ -84,7 +85,8 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!CompileMessageParser.IsValidId(id)) return null;
             if (_current != null && _current.id == id) return _current;
             if (_latest != null && _latest.id == id) return _latest;
-            return Load(RecordPath(id));
+            string path;
+            return TryGetRecordPath(id, out path) ? Load(path) : null;
         }
 
         internal static void Update()
@@ -251,11 +253,11 @@ namespace LeonAkasaka.UnionAir.Editor
             if (_activeContext != null && !ReferenceEquals(context, _activeContext)) return;
 
             _current.state = "completed";
-            _current.result = _current.errorCount > 0
-                ? "failed"
-                : _current.assemblies.Count > 0 ? "succeeded" : "upToDate";
+            _current.result = CompileDecision.ResolveCompletedResult(
+                _current.errorCount,
+                _current.assemblies.Count);
 
-            _current.target = ResolveTarget(_current);
+            _current.target = CompileDecision.ResolveTarget(_current.assemblies, _current.source);
             SortMessages(_current);
             Commit(_current);
             _activeContext = null;
@@ -287,7 +289,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private static void Abort(CompileRecord record, string reason)
         {
             record.state = "aborted";
-            record.result = string.IsNullOrEmpty(record.startedAt) ? "notStarted" : "aborted";
+            record.result = CompileDecision.ResolveAbortedResult(record.startedAt);
             if (string.IsNullOrEmpty(record.error)) record.error = reason;
             if (string.IsNullOrEmpty(record.finishedAt)) record.finishedAt = UtcNow();
         }
@@ -357,8 +359,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (refresh) AssetDatabase.Refresh();
 
                 // Refresh starts a cycle by itself when scripts changed; requesting another would
-                // queue a redundant one. RequestScriptCompilation still forces a cycle when
-                // nothing changed, which is what makes an upToDate result observable.
+                // queue a redundant one. RequestScriptCompilation still forces a cycle when Unity
+                // has no compiled assembly to report, which makes an upToDate result observable.
                 if (!EditorApplication.isCompiling)
                 {
                     CompilationPipeline.RequestScriptCompilation(
@@ -389,22 +391,6 @@ namespace LeonAkasaka.UnionAir.Editor
         internal static string NewId()
             => "c-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) +
                "-" + Guid.NewGuid().ToString("N").Substring(0, 6);
-
-        private static string ResolveTarget(CompileRecord record)
-        {
-            var sawPlayer = false;
-            foreach (var assembly in record.assemblies)
-            {
-                var target = CompileMessageParser.ClassifyTarget(assembly.outputDirectory);
-                if (target == "editor") return "editor";
-                if (target == "player") sawPlayer = true;
-            }
-
-            if (sawPlayer) return "player";
-            // A cycle with nothing to compile reports no assemblies; in the Editor that is an
-            // up-to-date Editor cycle.
-            return record.assemblies.Count == 0 ? "editor" : "other";
-        }
 
         private static void SortMessages(CompileRecord record)
         {
@@ -509,8 +495,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static void SaveRecord(CompileRecord record)
         {
-            if (!CompileMessageParser.IsValidId(record.id)) return;
-            TryWrite(RecordPath(record.id), record, "compile record");
+            string path;
+            if (!TryGetRecordPath(record.id, out path)) return;
+            TryWrite(path, record, "compile record");
         }
 
         private static void TryWrite(string path, CompileRecord record, string what)
@@ -528,29 +515,55 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
-        private static string RecordPath(string id) => Path.Combine(RecordsDirectory, id + ".json");
+        internal static bool TryGetRecordPath(string id, out string path)
+        {
+            path = null;
+            if (!CompileMessageParser.IsValidId(id)) return false;
+
+            try
+            {
+                var root = Path.GetFullPath(RecordsDirectory)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                    Path.DirectorySeparatorChar;
+                var candidate = Path.GetFullPath(Path.Combine(RecordsDirectory, id + ".json"));
+                if (!candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return false;
+                path = candidate;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         private static void TrimRecords(string protectedId)
         {
             try
             {
-                if (!Directory.Exists(RecordsDirectory)) return;
-
-                var files = new List<FileInfo>(new DirectoryInfo(RecordsDirectory).GetFiles("*.json"));
-                if (files.Count <= RetainedRecords) return;
-
-                files.Sort((a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
-                for (var i = RetainedRecords; i < files.Count; i++)
-                {
-                    if (Path.GetFileNameWithoutExtension(files[i].Name) == protectedId) continue;
-                    try { files[i].Delete(); }
-                    catch { /* Another process may already have removed it. */ }
-                }
+                TrimRecordFiles(RecordsDirectory, RetainedRecords, protectedId);
             }
             catch (Exception ex)
             {
                 Debug.LogWarning("[UnionAir] Could not trim retained compile records: " + ex.Message);
             }
+        }
+
+        internal static void TrimRecordFiles(string directory, int keep, string protectedId)
+        {
+            if (!Directory.Exists(directory)) return;
+
+            var files = new List<FileInfo>(new DirectoryInfo(directory).GetFiles("*.json"));
+            if (files.Count <= keep) return;
+
+            files.Sort((a, b) =>
+            {
+                var aProtected = Path.GetFileNameWithoutExtension(a.Name) == protectedId;
+                var bProtected = Path.GetFileNameWithoutExtension(b.Name) == protectedId;
+                if (aProtected != bProtected) return aProtected ? -1 : 1;
+                return b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc);
+            });
+            for (var i = keep; i < files.Count; i++)
+                files[i].Delete();
         }
 
         private static CompileRecord Load(string path)
@@ -563,6 +576,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 record.assemblies = record.assemblies ?? new List<CompileAssemblyRecord>();
                 record.messages = record.messages ?? new List<CompileMessageRecord>();
+                CompileDecision.NormalizeCompletedTarget(record);
                 return record;
             }
             catch (Exception ex)
@@ -573,6 +587,51 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         internal static int RetainedRecordCount => RetainedRecords;
+
+        private static void ReconcileLatest()
+        {
+            if (_latest != null && _latest.state == "completed" && _latest.target == "editor")
+                return;
+
+            var records = LoadRetainedNewestFirst();
+            _latest = CompileDecision.SelectLatestEditor(records);
+            if (_latest != null)
+            {
+                TryWrite(LatestPath, _latest, "latest compile record");
+                return;
+            }
+
+            try
+            {
+                if (File.Exists(LatestPath)) File.Delete(LatestPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[UnionAir] Could not remove a stale latest compile record: " + ex.Message);
+            }
+        }
+
+        private static List<CompileRecord> LoadRetainedNewestFirst()
+        {
+            var records = new List<CompileRecord>();
+            try
+            {
+                if (!Directory.Exists(RecordsDirectory)) return records;
+                var files = new List<FileInfo>(new DirectoryInfo(RecordsDirectory).GetFiles("*.json"));
+                files.Sort((a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
+                foreach (var file in files)
+                {
+                    var record = Load(file.FullName);
+                    if (record != null) records.Add(record);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[UnionAir] Could not rebuild the latest compile record: " + ex.Message);
+            }
+
+            return records;
+        }
 
         private static string UtcNow() => DateTime.UtcNow.ToString("o");
     }

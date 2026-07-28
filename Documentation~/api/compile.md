@@ -30,7 +30,7 @@ Requests a script compilation and returns `202` with the id to poll.
 |-------|----------|---------|-------------|
 | `refresh` | No | `true` | Import pending asset changes before compiling |
 | `clean` | No | `false` | Clear the build cache and rebuild every assembly |
-| `requestId` | No | ― | Caller-supplied id; letters, digits, hyphens, and underscores, at most 64 characters |
+| `requestId` | No | ― | Caller-supplied id; letters, digits, hyphens, and underscores, at most 64 characters; Windows device names such as `CON`, `NUL`, `COM1`, and `LPT1` are rejected |
 
 Leave `refresh` enabled unless the files were already imported: a newly written `.cs` file belongs to no assembly until Unity imports it, so compiling without a refresh would not see it. Refreshing starts a cycle by itself when scripts changed, and UnionAir requests one explicitly only when it does not — which is what makes an `upToDate` result observable.
 
@@ -68,7 +68,7 @@ This is the expected answer to losing a race with an IDE-triggered compilation, 
 
 `409` with an `existingCompile` object when `requestId` was already used within the retained window; the body contains the full existing record.
 
-`409` when the Editor is entering or in Play mode, or while assets are updating. `400` when `requestId` contains unsupported characters.
+`409` when the Editor is entering or in Play mode, or while assets are updating. `400` when `requestId` contains unsupported characters or is a reserved Windows device name.
 
 ```bash
 curl -X POST http://localhost:8765/api/compile \
@@ -139,7 +139,7 @@ Both are returned in one response because a polling client needs them in the sam
 | `source` | string | `unionAir` when requested through the API, `external` otherwise |
 | `state` | string | `queued`, `running`, `completed`, or `aborted` |
 | `result` | string \| null | See the result table below; `null` while the cycle is active |
-| `target` | string | `editor`, `player`, or `other`, from the assembly output directory |
+| `target` | string | `editor` only when every compiled output is an Editor assembly, `player` when every output is a player assembly, otherwise `other` |
 | `sessionId` | string | Editor process the record belongs to |
 | `durationSeconds` | number | Time between `startedAt` and `finishedAt` |
 | `lifecycleGenerationAtRequest` | number | `lifecycleGeneration` when the cycle was recorded |
@@ -172,7 +172,7 @@ Both are returned in one response because a polling client needs them in the sam
 | `queued` | `null` | Compilation was requested but has not started |
 | `running` | `null` | Compilation is in progress |
 | `completed` | `succeeded` | At least one assembly compiled with no errors |
-| `completed` | `upToDate` | Nothing needed compiling |
+| `completed` | `upToDate` | Unity reported zero compiled assemblies; this also occurs for some removal-only cycles |
 | `completed` | `failed` | At least one error was reported |
 | `aborted` | `aborted` | The cycle started but never reported a result |
 | `aborted` | `notStarted` | Compilation was requested but no cycle ever started |
@@ -185,7 +185,7 @@ Unity reloads the assembly domain only when the **whole** build succeeds, and th
 
 - A `failed` cycle does **not** reload. The server stays up and the result is readable on the same connection. This is the fast path when fixing errors.
 - A `succeeded` cycle usually reloads, but not always — Play mode, locked assembly reloading, and cycles with nothing to load all suppress it. Do not treat `succeeded` as a promise that a reload will happen.
-- An `upToDate` cycle never reloads.
+- An `upToDate` cycle can still reload when the cycle removes an assembly, such as deleting the last user script. Like `succeeded`, it does not predict reload behavior.
 
 Because one failing assembly suppresses the reload for the entire cycle, a failing script in `Assets` also prevents newly compiled package code from loading.
 
@@ -233,13 +233,13 @@ A cycle typically settles in a few seconds.
 
 ### Terminating Correctly
 
-This is where an automated client is most likely to hang. **`succeeded` is not a promise that a domain reload will happen** — Play mode, locked assembly reloading, and cycles with nothing to load all suppress it, and nothing in the Unity API lets UnionAir predict which. A client that waits unconditionally for `lifecycleGeneration` to advance after `succeeded` will wait forever whenever no reload occurs.
+This is where an automated client is most likely to hang. Neither `succeeded` nor `upToDate` predicts whether a domain reload will happen. Play mode and locked assembly reloading can suppress it, while a removal-only cycle can report zero compiled assemblies and still reload. Nothing in the Unity API lets UnionAir predict which. A client that waits unconditionally for `lifecycleGeneration` to advance will wait forever whenever no reload occurs.
 
 Terminate like this instead:
 
-1. `failed` or `upToDate` — **done. Never wait for a reload**; neither can be followed by one.
-2. `succeeded` and the server still answers and `settled` is `true` — **done. Do not wait for a reload.**
-3. Only if the connection **drops** — reconnect and wait for `lifecycleGeneration` to exceed `lifecycleGenerationAtRequest`, confirming a reload completed rather than the Editor crashing.
+1. `failed` — **done. Never wait for a reload**; a failed whole build does not reload.
+2. `succeeded` or `upToDate`, and the server still answers with `settled: true` — the compile result is done; proceed without waiting pre-emptively.
+3. If the connection **drops** after either successful result — reconnect and wait for `lifecycleGeneration` to exceed `lifecycleGenerationAtRequest`, confirming a reload completed rather than the Editor crashing.
 4. **Give every wait an explicit timeout.** No step above should poll without a bound.
 
 > `settled` is a snapshot, not a guarantee. Compilation clears `isCompiling` slightly before the native domain reload begins, so a client can legitimately observe `settled: true` immediately before losing the connection. That is why step 3 exists and why timeouts are required.

@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -56,38 +57,65 @@ namespace LeonAkasaka.UnionAir.Editor
             string path,
             string mimeType,
             string downloadName)
+            => SendArtifactFiles(context, new string[] { path }, mimeType, downloadName);
+
+        /// <summary>
+        /// Streams completed UnionAir artifacts as one concatenated response.
+        /// </summary>
+        /// <remarks>
+        /// Every input is opened and its length captured before the transfer is queued. This makes
+        /// the response a stable snapshot even if an append-only file grows or is rotated while it
+        /// is being downloaded.
+        /// </remarks>
+        internal static void SendArtifactFiles(
+            UnionAirRequestContext context,
+            IReadOnlyList<string> paths,
+            string mimeType,
+            string downloadName)
         {
             var response = context.Response;
-            var fullPath = Path.GetFullPath(path);
             var artifactRoot = Path.GetFullPath(Path.Combine("Library", "UnionAir"))
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            if (!fullPath.StartsWith(artifactRoot, System.StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
+            if (paths == null || paths.Count == 0)
             {
                 SendNotFound(response, "Artifact is not available.");
                 return;
             }
 
-            FileStream stream;
+            var streams = new List<Stream>(paths.Count);
+            var lengths = new List<long>(paths.Count);
+            long contentLength = 0;
             try
             {
-                stream = new FileStream(
-                    fullPath,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.ReadWrite | FileShare.Delete);
-            }
-            catch (IOException)
-            {
-                SendNotFound(response, "Artifact is not available.");
-                return;
-            }
-            catch (System.UnauthorizedAccessException)
-            {
-                SendNotFound(response, "Artifact is not available.");
-                return;
-            }
+                for (var i = 0; i < paths.Count; i++)
+                {
+                    var fullPath = Path.GetFullPath(paths[i]);
+                    if (!fullPath.StartsWith(artifactRoot, System.StringComparison.OrdinalIgnoreCase) ||
+                        !File.Exists(fullPath))
+                        throw new FileNotFoundException();
 
-            var contentLength = stream.Length;
+                    var stream = new FileStream(
+                        fullPath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.ReadWrite | FileShare.Delete);
+                    var length = stream.Length;
+                    streams.Add(stream);
+                    lengths.Add(length);
+                    checked { contentLength += length; }
+                }
+            }
+            catch (System.Exception ex) when (
+                ex is IOException ||
+                ex is System.UnauthorizedAccessException ||
+                ex is System.OverflowException ||
+                ex is System.ArgumentException ||
+                ex is System.NotSupportedException)
+            {
+                DisposeStreams(streams);
+                SendNotFound(response, "Artifact is not available.");
+                return;
+            }
             string queueError = null;
 
             try
@@ -102,22 +130,12 @@ namespace LeonAkasaka.UnionAir.Editor
                         response.AddHeader("Content-Disposition",
                             $"attachment; filename=\"{EscapeHeaderFileName(downloadName)}\"");
                         response.ContentLength64 = contentLength;
-                        using (stream)
-                        {
-                            var buffer = new byte[64 * 1024];
-                            var remaining = contentLength;
-                            while (remaining > 0)
-                            {
-                                var read = stream.Read(buffer, 0, (int)System.Math.Min(buffer.Length, remaining));
-                                if (read <= 0) break;
-                                response.OutputStream.Write(buffer, 0, read);
-                                remaining -= read;
-                            }
-                        }
+                        CopyStreams(streams, lengths, response.OutputStream);
                     }
                     catch (System.Exception) { }
                     finally
                     {
+                        DisposeStreams(streams);
                         try { response.Close(); } catch { }
                     }
                 }))
@@ -130,9 +148,43 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             catch (System.Exception ex) { queueError = ex.Message; }
 
-            stream.Dispose();
+            DisposeStreams(streams);
             UnityEngine.Debug.LogWarning("[UnionAir] Could not queue artifact transfer: " + queueError);
             SendError(response, "Artifact transfer could not be queued. Try the request again.", 503);
+        }
+
+        internal static void CopyStreams(
+            IReadOnlyList<Stream> streams,
+            IReadOnlyList<long> lengths,
+            Stream destination)
+        {
+            if (streams == null || lengths == null || streams.Count != lengths.Count)
+                throw new System.ArgumentException("Streams and lengths must have the same count.");
+
+            var buffer = new byte[64 * 1024];
+            for (var i = 0; i < streams.Count; i++)
+            {
+                var remaining = lengths[i];
+                while (remaining > 0)
+                {
+                    var read = streams[i].Read(
+                        buffer,
+                        0,
+                        (int)System.Math.Min(buffer.Length, remaining));
+                    if (read <= 0) break;
+                    destination.Write(buffer, 0, read);
+                    remaining -= read;
+                }
+            }
+        }
+
+        private static void DisposeStreams(IReadOnlyList<Stream> streams)
+        {
+            if (streams == null) return;
+            for (var i = 0; i < streams.Count; i++)
+            {
+                try { streams[i]?.Dispose(); } catch { }
+            }
         }
 
         private static string EscapeHeaderFileName(string value)

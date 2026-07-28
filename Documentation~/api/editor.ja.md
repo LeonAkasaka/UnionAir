@@ -120,7 +120,7 @@ Unity Console のログを返します。インメモリのリングバッファ
 
 `sequence` は Editor プロセスごとに 0 から振り直されます。前回のレスポンスと `sessionId` を比較し、変化していればカーソルを破棄してください。
 
-`truncated` が `true` の場合、失われたエントリは NDJSON ファイルには残っています。[`GET /api/editor/logs.ndjson`](#get-apieditorlogsndjson) を使用してください。
+`truncated` が `true` の場合、保持中の2ファイルの NDJSON 範囲に残っているエントリは [`GET /api/editor/logs.ndjson`](#get-apieditorlogsndjson) で回収できます。
 
 不明な `type` 値はフィルターを暗黙に無効化せず、`400 Bad Request` を返します。`since` が非負整数でない場合も `400` を返します。
 
@@ -141,13 +141,13 @@ curl "http://localhost:8765/api/editor/logs?since=42"
 
 ## GET /api/editor/logs.ndjson
 
-現在の Editor セッションの生の NDJSON ログファイルをダウンロードします。インメモリのリングバッファから既に追い出されたエントリも含みます。1行につき1つの JSON オブジェクトで、古い順に並び、フィールドは上記の `logs` 配列と同じです。
+現在の Editor セッションで保持中の NDJSON ログをダウンロードします。インメモリのリングバッファから既に追い出されたエントリも含みます。1行につき1つの JSON オブジェクトで、古い順に並び、フィールドは上記の `logs` 配列と同じです。
 
 - Content type: `application/x-ndjson`
 - Content disposition: `attachment; filename="console.ndjson"`
 - ログファイルが利用できない場合は `404` を返します
 
-ファイルは 8 MiB に達したとき、および新しい Editor プロセスの開始時にローテーションされます。**配信されるのはアクティブなファイルのみ** です。ローテーション済みの前世代(`console.1.ndjson`)は `Library/UnionAir/Logs` 配下に残りますが、API では公開されません。
+アクティブなファイルは約 8 MiB に達するとローテーションされます。レスポンスは同じセッションの前世代(`console.1.ndjson`)にアクティブファイル(`console.ndjson`)を続けて連結するため、ローテーション境界をまたいでも JSON 行は古い順です。保持されるのは最大でこの2ファイルで、それ以前のエントリは回収できません。以前の Editor プロセスが残した前世代ファイルはレスポンスに含まれません。
 
 ```bash
 curl -O "http://localhost:8765/api/editor/logs.ndjson"

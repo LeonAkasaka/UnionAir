@@ -126,7 +126,19 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (!ok) return false;
             }
 
-            return true;
+            return !IsWindowsDeviceName(id);
+        }
+
+        private static bool IsWindowsDeviceName(string id)
+        {
+            var upper = id.ToUpperInvariant();
+            if (upper == "CON" || upper == "PRN" || upper == "AUX" || upper == "NUL")
+                return true;
+            if (upper.Length != 4) return false;
+
+            var prefix = upper.Substring(0, 3);
+            var suffix = upper[3];
+            return (prefix == "COM" || prefix == "LPT") && suffix >= '1' && suffix <= '9';
         }
     }
 }
