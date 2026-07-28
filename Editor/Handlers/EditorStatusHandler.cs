@@ -27,6 +27,15 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($",\"lifecycleGeneration\":{UnionAirSession.Generation.ToString(CultureInfo.InvariantCulture)}");
             sb.Append($",\"settled\":{RestResponse.FormatBool(!isCompiling && !isUpdating && !UnionAirCompileGate.IsActive)}");
             sb.Append($",\"hasCompileErrors\":{RestResponse.FormatBool(EditorUtility.scriptCompilationFailed)}");
+
+            var compile = CompileService.Current;
+            var compileActive = compile != null && compile.IsActive;
+            sb.Append(",\"compileState\":")
+              .Append(RestResponse.FormatNullableString(compileActive ? compile.state : null));
+            sb.Append(",\"compileId\":")
+              .Append(RestResponse.FormatNullableString(compileActive ? compile.id : null));
+            sb.Append(",\"compileSource\":")
+              .Append(RestResponse.FormatNullableString(compileActive ? compile.source : null));
             sb.Append("}");
             RestResponse.Send(response, sb.ToString());
         }

@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Added a Compile API in the always-enabled Read category. `GET /api/compile` returns the in-flight cycle as `current` and the most recently completed Editor cycle as `latest`, and `GET /api/compile/{id}` returns one of the 20 most recently retained records. Diagnostics are structured with `severity`, `code`, project-relative `file`, `line`, and `column` instead of requiring callers to parse Console text.
+- Added `POST /api/compile` in the Asset Write category, which requests a compilation and returns `202` with the id to poll. The record is persisted and the response sent before any compilation work starts, because refreshing and compiling block the Editor and can end in a domain reload that drops the connection. An optional caller-supplied `requestId` makes a lost response recoverable, and `409` responses carry `activeCompile` or `existingCompile` so a caller knows to poll rather than retry.
+- `GET /api/editor/status` now reports `compileState`, `compileId`, and `compileSource` for an in-flight compilation, mirroring the existing test-run fields.
 - Script compilations started outside UnionAir, such as an IDE save followed by Unity's focus auto-refresh, are adopted and recorded with `source: "external"`.
 - Compile records distinguish `succeeded` from `upToDate`, so a caller can tell "compiled with no errors" from "nothing needed compiling" and know that no domain reload will follow the latter. Cancelled and interrupted cycles resolve to `aborted` rather than remaining active.
 

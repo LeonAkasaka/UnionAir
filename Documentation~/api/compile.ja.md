@@ -12,6 +12,75 @@ UnionAir はスクリプトのコンパイルサイクルを、メッセージ�
 
 ---
 
+## POST /api/compile
+
+スクリプトのコンパイルを要求し、ポーリング対象の id とともに `202` を返します。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> エンドポイントのリスクは `assetUpdate` です。
+
+### リクエスト
+
+```json
+{
+  "refresh": true,
+  "clean": false,
+  "requestId": "my-run-1"
+}
+```
+
+| フィールド | 必須 | 既定値 | 説明 |
+|-------|----------|---------|-------------|
+| `refresh` | いいえ | `true` | コンパイル前に未反映のアセット変更をインポートする |
+| `clean` | いいえ | `false` | ビルドキャッシュを破棄し全アセンブリを再ビルドする |
+| `requestId` | いいえ | ― | 呼び出し側が指定する id。英数字・ハイフン・アンダースコアで最大 64 文字 |
+
+ファイルが既にインポート済みでない限り `refresh` は有効のままにしてください。新規に書き込んだ `.cs` ファイルは Unity がインポートするまでどのアセンブリにも属さないため、リフレッシュなしのコンパイルでは認識されません。スクリプトに変更があればリフレッシュ自体がサイクルを開始するため、UnionAir が明示的にコンパイルを要求するのは開始されなかった場合だけです。これが `upToDate` を観測可能にしています。
+
+`clean` は `RequestScriptCompilationOptions.CleanBuildCache` に対応し、すべてを再ビルドするため数分かかることがあります。
+
+`requestId` を指定するとリクエストが回復可能になります。レスポンスを失った場合は、2回目のリクエストを送るのではなく `GET /api/compile/{requestId}` をポーリングしてください。
+
+### レスポンス — 202
+
+```json
+{
+  "id": "c-20260728-040030-67c0fd",
+  "state": "queued",
+  "source": "unionAir",
+  "sessionId": "f40cbf3fc3224a97b5b7ac7aa3b1ea38",
+  "lifecycleGenerationAtRequest": 6,
+  "statusUrl": "/api/compile/c-20260728-040030-67c0fd"
+}
+```
+
+レコードは永続化され、このレスポンスはコンパイル作業が始まる **前** に送信されます。リフレッシュとコンパイルは Unity のメインスレッドをブロックし、domain reload で終わることがあります。そうなると、ポーリングに必要な id を呼び出し側が受け取る前に接続が切れてしまうためです。
+
+### ステータスコード
+
+コンパイルが既に実行中の場合は `activeCompile` オブジェクトを伴う `409`:
+
+```json
+{
+  "error": "A script compilation is already active.",
+  "activeCompile": { "id": "c-20260728-041549-2194f1", "source": "unionAir", "state": "queued" }
+}
+```
+
+これは IDE 由来のコンパイルとの競合に負けたときの想定される応答であり、失敗ではありません。リクエストを再試行するのではなく `GET /api/compile` のポーリングに切り替えてください。
+
+保持期間内で `requestId` が既に使われている場合は `existingCompile` オブジェクトを伴う `409` を返します。ボディには既存のレコード全体が含まれます。
+
+Editor が Play モードに入る途中または Play モード中、あるいはアセット更新中の場合も `409` を返します。`requestId` に使用できない文字が含まれる場合は `400` を返します。
+
+```bash
+curl -X POST http://localhost:8765/api/compile \
+  -H "Content-Type: application/json" \
+  -d '{"refresh":true}'
+```
+
+---
+
 ## GET /api/compile
 
 実行中のコンパイルを `current`、直近に完了した **Editor** のコンパイルを `latest` として返します。どちらも `null` になり得ます。

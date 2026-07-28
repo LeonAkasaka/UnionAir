@@ -81,7 +81,7 @@ Play モード制御、Input System シミュレーション、画面クエリ�
 
 UnionAir 以外から開始されたサイクルも含む、構造化されたスクリプトコンパイル結果:
 
-`GET /api/compile` · `GET /api/compile/{id}`
+`POST /api/compile` · `GET /api/compile` · `GET /api/compile/{id}`
 
 ### [Test Runner](api/testing.ja.md)
 

@@ -9,6 +9,75 @@ The read endpoints below are in the **Read** category and are therefore availabl
 
 ---
 
+## POST /api/compile
+
+Requests a script compilation and returns `202` with the id to poll.
+
+> Can be called only when the Asset Write category is enabled.
+> The endpoint risk is `assetUpdate`.
+
+### Request
+
+```json
+{
+  "refresh": true,
+  "clean": false,
+  "requestId": "my-run-1"
+}
+```
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `refresh` | No | `true` | Import pending asset changes before compiling |
+| `clean` | No | `false` | Clear the build cache and rebuild every assembly |
+| `requestId` | No | ― | Caller-supplied id; letters, digits, hyphens, and underscores, at most 64 characters |
+
+Leave `refresh` enabled unless the files were already imported: a newly written `.cs` file belongs to no assembly until Unity imports it, so compiling without a refresh would not see it. Refreshing starts a cycle by itself when scripts changed, and UnionAir requests one explicitly only when it does not — which is what makes an `upToDate` result observable.
+
+`clean` maps to `RequestScriptCompilationOptions.CleanBuildCache` and rebuilds everything, which can take minutes.
+
+Supplying `requestId` makes the request recoverable. If the response is lost, poll `GET /api/compile/{requestId}` instead of issuing a second request.
+
+### Response — 202
+
+```json
+{
+  "id": "c-20260728-040030-67c0fd",
+  "state": "queued",
+  "source": "unionAir",
+  "sessionId": "f40cbf3fc3224a97b5b7ac7aa3b1ea38",
+  "lifecycleGenerationAtRequest": 6,
+  "statusUrl": "/api/compile/c-20260728-040030-67c0fd"
+}
+```
+
+The record is persisted and this response is sent **before** any compilation work begins. Refreshing and compiling block the Unity main thread and can end in a domain reload, which would otherwise drop the connection before the caller learned the id it needs to poll.
+
+### Status Codes
+
+`409` with an `activeCompile` object when a compilation is already running:
+
+```json
+{
+  "error": "A script compilation is already active.",
+  "activeCompile": { "id": "c-20260728-041549-2194f1", "source": "unionAir", "state": "queued" }
+}
+```
+
+This is the expected answer to losing a race with an IDE-triggered compilation, not a failure. Switch to polling `GET /api/compile` rather than retrying the request.
+
+`409` with an `existingCompile` object when `requestId` was already used within the retained window; the body contains the full existing record.
+
+`409` when the Editor is entering or in Play mode, or while assets are updating. `400` when `requestId` contains unsupported characters.
+
+```bash
+curl -X POST http://localhost:8765/api/compile \
+  -H "Content-Type: application/json" \
+  -d '{"refresh":true}'
+```
+
+---
+
 ## GET /api/compile
 
 Returns the in-flight compilation as `current` and the most recently completed **Editor** compilation as `latest`. Either may be `null`.

@@ -25,7 +25,17 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </remarks>
     internal static class CompileService
     {
-        private const double StaleGraceSeconds = 2.0;
+        private const double RunningGraceSeconds = 2.0;
+
+        /// <summary>
+        /// Grace applied to a queued record before it is treated as never started.
+        /// </summary>
+        /// <remarks>
+        /// Longer than <see cref="RunningGraceSeconds"/> because Unity does not always begin a
+        /// requested cycle on the next tick, and a queued record that is reaped early would report
+        /// a failure for a compilation that then runs normally.
+        /// </remarks>
+        private const double QueuedGraceSeconds = 30.0;
         private const double CurrentFlushIntervalSeconds = 0.5;
         private const int MaxMessages = 200;
         private const int RetainedRecords = 20;
@@ -40,6 +50,8 @@ namespace LeonAkasaka.UnionAir.Editor
         private static object _activeContext;
         private static string _projectRoot = "";
         private static double _inactiveSince = -1;
+        private static bool _startDispatched;
+        private static double _startRequestedAt;
         private static double _nextCurrentFlushAt;
         private static bool _currentDirty;
         private static bool _flushErrorLogged;
@@ -93,13 +105,31 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            // A queued record is only stale once the compilation request has actually been issued.
+            // The deadline keeps that exemption bounded: a deferred start that never runs must
+            // still resolve rather than leave the caller polling forever.
+            if (_current.state == "queued" && !_startDispatched)
+            {
+                if (EditorApplication.timeSinceStartup - _startRequestedAt < QueuedGraceSeconds)
+                {
+                    _inactiveSince = -1;
+                    return;
+                }
+
+                Abort(_current, "The compilation request was never dispatched by the Unity Editor.");
+                Commit(_current);
+                _inactiveSince = -1;
+                return;
+            }
+
             if (_inactiveSince < 0)
             {
                 _inactiveSince = EditorApplication.timeSinceStartup;
                 return;
             }
 
-            if (EditorApplication.timeSinceStartup - _inactiveSince < StaleGraceSeconds)
+            var grace = _current.state == "queued" ? QueuedGraceSeconds : RunningGraceSeconds;
+            if (EditorApplication.timeSinceStartup - _inactiveSince < grace)
                 return;
 
             // Cancelling a compilation skips Unity's result processing entirely, so
@@ -240,10 +270,11 @@ namespace LeonAkasaka.UnionAir.Editor
             SaveCurrentNow();
             SaveRecord(record);
 
-            // Only Editor cycles become `latest`: a player build or an AssemblyBuilder cycle
-            // classified wrongly then simply fails to replace the agent's view, and stays
-            // reachable by id.
-            if (record.target == "editor")
+            // Only completed Editor cycles become `latest`. Restricting by state keeps an aborted
+            // cycle from discarding the last real result, and restricting by target means a
+            // player or AssemblyBuilder cycle that was classified wrongly merely fails to replace
+            // the caller's view instead of corrupting it. Both stay reachable by id.
+            if (record.target == "editor" && record.state == "completed")
             {
                 _latest = record;
                 TryWrite(LatestPath, record, "latest compile record");
@@ -279,6 +310,81 @@ namespace LeonAkasaka.UnionAir.Editor
             _current = record;
             SaveCurrentNow();
         }
+
+        /// <summary>
+        /// Registers a queued record and defers the work that can tear down the domain.
+        /// </summary>
+        /// <param name="record">Record created for this request.</param>
+        /// <param name="refresh">Whether to import pending asset changes first.</param>
+        /// <param name="clean">Whether to clear the build cache and rebuild everything.</param>
+        /// <remarks>
+        /// The record is persisted and the response is sent before any compilation work begins.
+        /// Refreshing and compiling block the Unity main thread and can end in a domain reload,
+        /// which would drop the connection before the caller learned the id it needs to poll.
+        /// </remarks>
+        internal static void ScheduleStart(CompileRecord record, bool refresh, bool clean)
+        {
+            _startDispatched = false;
+            _startRequestedAt = EditorApplication.timeSinceStartup;
+            SetCurrent(record);
+            UnionAirCompileGate.Begin(UnionAirCompileGate.UnionAirSource, record.id);
+
+            var id = record.id;
+            EditorApplication.CallbackFunction pending = null;
+            pending = () =>
+            {
+                EditorApplication.update -= pending;
+                RunStart(id, refresh, clean);
+            };
+
+            // EditorApplication.update, not delayCall: delayCall does not run while the Editor is
+            // in the background, which left the request queued indefinitely. update is the same
+            // pump that already serves HTTP requests, so it ticks regardless of focus.
+            EditorApplication.update += pending;
+        }
+
+        private static void RunStart(string id, bool refresh, bool clean)
+        {
+            if (_current == null || _current.id != id || _current.state != "queued")
+            {
+                _startDispatched = true;
+                return;
+            }
+
+            try
+            {
+                // A newly written .cs file belongs to no assembly until it is imported.
+                if (refresh) AssetDatabase.Refresh();
+
+                // Refresh starts a cycle by itself when scripts changed; requesting another would
+                // queue a redundant one. RequestScriptCompilation still forces a cycle when
+                // nothing changed, which is what makes an upToDate result observable.
+                if (!EditorApplication.isCompiling)
+                {
+                    CompilationPipeline.RequestScriptCompilation(
+                        clean
+                            ? RequestScriptCompilationOptions.CleanBuildCache
+                            : RequestScriptCompilationOptions.None);
+                }
+
+                // Only now can a queued record be judged against the watchdog.
+                _startDispatched = true;
+            }
+            catch (Exception ex)
+            {
+                _startDispatched = true;
+                if (_current != null && _current.id == id && _current.IsActive)
+                {
+                    Abort(_current, "Compilation could not be requested: " + ex.Message);
+                    Commit(_current);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether a compilation cycle is already in progress.
+        /// </summary>
+        internal static bool IsBusy => UnionAirCompileGate.IsActive || EditorApplication.isCompiling;
 
         internal static string NewId()
             => "c-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) +

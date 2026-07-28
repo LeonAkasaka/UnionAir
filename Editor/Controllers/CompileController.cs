@@ -11,6 +11,17 @@ namespace LeonAkasaka.UnionAir.Editor
         private void Collection(UnionAirRequestContext ctx)
             => new CompileHandler().HandleCollection(ctx.Request, ctx.Response);
 
+        [UnionAirEndpoint("POST", "",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            TestRunPolicy = UnionAirTestRunPolicy.Blocked,
+            Summary = "Requests a script compilation and returns 202 with the id to poll through GET /api/compile/{id}. The response is sent before any compilation work begins, because refreshing and compiling block the Editor and can end in a domain reload that drops the connection. Returns 409 when a compilation is already active, when the Editor is entering or in Play mode, or while assets are updating.",
+            OptionalBody = new string[] { "refresh", "clean", "requestId" },
+            RequestExample = "{\"refresh\":true,\"clean\":false}",
+            ResponseExample = "{\"id\":\"c-20260728-040030-67c0fd\",\"state\":\"queued\",\"source\":\"unionAir\",\"sessionId\":\"f40cbf3f\",\"lifecycleGenerationAtRequest\":6,\"statusUrl\":\"/api/compile/c-20260728-040030-67c0fd\"}")]
+        private void Start(UnionAirRequestContext ctx)
+            => new CompileHandler().HandleStart(ctx.Request, ctx.Response);
+
         [UnionAirEndpoint("GET", "{id}",
             Category = UnionAirEndpointCategories.Read,
             TestRunPolicy = UnionAirTestRunPolicy.Allowed,
