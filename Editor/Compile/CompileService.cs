@@ -554,6 +554,22 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         internal static void TrimRecordFiles(string directory, int keep, string protectedId)
+            => TrimRecordFiles(directory, keep, protectedId, null);
+
+        /// <summary>
+        /// Deletes retained records past the limit, keeping the protected id.
+        /// </summary>
+        /// <param name="directory">Directory holding the per-id record files.</param>
+        /// <param name="keep">Number of records to retain.</param>
+        /// <param name="protectedId">Record that must survive regardless of age.</param>
+        /// <param name="delete">Deletion to apply; defaults to deleting the file.</param>
+        /// <remarks>
+        /// The deletion is injectable so the resilience of this loop can be exercised without
+        /// depending on the host platform: an open file cannot be deleted on Windows, but on
+        /// Unix <c>unlink</c> succeeds and the inode simply outlives the directory entry.
+        /// </remarks>
+        internal static void TrimRecordFiles(
+            string directory, int keep, string protectedId, Action<FileInfo> delete)
         {
             if (!Directory.Exists(directory)) return;
 
@@ -567,11 +583,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (aProtected != bProtected) return aProtected ? -1 : 1;
                 return b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc);
             });
+
+            var remove = delete ?? (file => file.Delete());
             for (var i = keep; i < files.Count; i++)
             {
                 // Per file: one undeletable record must not stop the rest from being trimmed,
                 // or retention degrades silently until the directory is cleaned by hand.
-                try { files[i].Delete(); }
+                try { remove(files[i]); }
                 catch (IOException) { /* Another process holds or already removed it. */ }
                 catch (UnauthorizedAccessException) { /* Read-only or locked by a scanner. */ }
             }
@@ -604,38 +622,67 @@ namespace LeonAkasaka.UnionAir.Editor
             if (_latest != null && _latest.state == "completed" && _latest.target == "editor")
                 return;
 
-            // Rescanning is worthwhile only while a rebuild could still find something. Once the
-            // retained records are known to hold no eligible cycle, every later domain reload
-            // would otherwise reparse all of them to reach the same conclusion.
-            if (SessionState.GetBool(LatestRebuildExhaustedKey, false))
-                return;
+            // Whatever was loaded is not an eligible latest, so drop it before deciding whether
+            // to rescan. Keeping it would let a stale non-Editor record be served as `latest`
+            // whenever the rescan is skipped or a previous cleanup failed.
+            _latest = null;
 
-            var records = LoadRetainedNewestFirst();
-            _latest = CompileDecision.SelectLatestEditor(records);
-            if (_latest != null)
+            if (!SessionState.GetBool(LatestRebuildExhaustedKey, false))
             {
-                TryWrite(LatestPath, _latest, "latest compile record");
-                return;
+                bool scanCompleted;
+                var records = LoadRetainedNewestFirst(out scanCompleted);
+                _latest = CompileDecision.SelectLatestEditor(records);
+                if (_latest != null)
+                {
+                    TryWrite(LatestPath, _latest, "latest compile record");
+                    return;
+                }
+
+                // Only a scan that ran to completion proves there is nothing to find. Marking a
+                // scan that threw as exhausted would disable rebuilding for the whole Editor
+                // session over one transient I/O error.
+                if (scanCompleted)
+                    SessionState.SetBool(LatestRebuildExhaustedKey, true);
             }
 
-            SessionState.SetBool(LatestRebuildExhaustedKey, true);
+            DeleteStaleLatestFile();
+        }
 
+        private static void DeleteStaleLatestFile()
+        {
             try
             {
                 if (File.Exists(LatestPath)) File.Delete(LatestPath);
             }
             catch (Exception ex)
             {
+                // Retried on the next reload: the early return above is guarded by the in-memory
+                // record, not by the presence of this file.
                 Debug.LogWarning("[UnionAir] Could not remove a stale latest compile record: " + ex.Message);
             }
         }
 
-        private static List<CompileRecord> LoadRetainedNewestFirst()
+        /// <summary>
+        /// Loads the retained records, newest first.
+        /// </summary>
+        /// <param name="completed">Whether the directory could be enumerated without error.</param>
+        /// <remarks>
+        /// A record that fails to parse is skipped and does not make the scan incomplete; only a
+        /// failure to enumerate the directory does, because that is the case where the caller
+        /// cannot conclude anything about what the directory holds.
+        /// </remarks>
+        private static List<CompileRecord> LoadRetainedNewestFirst(out bool completed)
         {
             var records = new List<CompileRecord>();
+            completed = false;
             try
             {
-                if (!Directory.Exists(RecordsDirectory)) return records;
+                if (!Directory.Exists(RecordsDirectory))
+                {
+                    completed = true;
+                    return records;
+                }
+
                 var files = new List<FileInfo>(new DirectoryInfo(RecordsDirectory).GetFiles("*.json"));
                 files.Sort((a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
                 foreach (var file in files)
@@ -643,6 +690,8 @@ namespace LeonAkasaka.UnionAir.Editor
                     var record = Load(file.FullName);
                     if (record != null) records.Add(record);
                 }
+
+                completed = true;
             }
             catch (Exception ex)
             {

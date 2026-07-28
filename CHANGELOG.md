@@ -43,7 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Made Console NDJSON downloads include the same-session rotated predecessor instead of making entries inaccessible as soon as the active file crossed the rotation threshold.
 - Kept compile record retention going past a record that cannot be deleted, instead of abandoning the remaining trim and letting the retained set grow without bound.
 - Backed off log rotation by size after a failed attempt. A rotation blocked by a concurrent NDJSON download previously left the file over the threshold, so every following Console message closed, retried, and reopened the log writer.
-- Stopped rebuilding `latest` from retained records on every domain reload once a scan has already found no eligible completed Editor cycle.
+- Stopped rebuilding `latest` from retained records on every domain reload once a scan has already found no eligible completed Editor cycle. Skipping the rescan no longer keeps a stale non-Editor record as `latest`, the removal of that record is retried on every reload until it succeeds, and a scan interrupted by an I/O error is retried instead of being treated as proof that nothing eligible exists.
 - Moved persistence of log rotation state onto the Editor update loop so that `GET /api/editor/logs.ndjson` no longer writes session state as a side effect of a read.
 - Stopped a multi-file artifact transfer when a stream ends before its announced length, rather than appending the next file onto a partial record.
 - Prevented domain reloads from orphaning an `HttpListener` by retaining listener ownership until bounded thread and queued-response cleanup completes.
