@@ -204,8 +204,21 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         [Test]
         public void RotationThreshold_IncludesExactBoundary()
         {
-            Assert.IsFalse(LogStore.ShouldRotate(LogStore.RotateThresholdBytes - 1));
-            Assert.IsTrue(LogStore.ShouldRotate(LogStore.RotateThresholdBytes));
+            Assert.IsFalse(LogStore.ShouldRotate(LogStore.RotateThresholdBytes - 1, 0));
+            Assert.IsTrue(LogStore.ShouldRotate(LogStore.RotateThresholdBytes, 0));
+        }
+
+        [Test]
+        public void RotationBacksOffAfterAFailedAttempt()
+        {
+            // A rotation that failed leaves the file over the threshold. Retrying on the very next
+            // line would close and reopen the writer for every Console message.
+            var size = LogStore.RotateThresholdBytes;
+            var nextAttempt = size + LogStore.RotateRetryIntervalBytes;
+
+            Assert.IsFalse(LogStore.ShouldRotate(size, nextAttempt));
+            Assert.IsFalse(LogStore.ShouldRotate(nextAttempt - 1, nextAttempt));
+            Assert.IsTrue(LogStore.ShouldRotate(nextAttempt, nextAttempt));
         }
 
         [Test]
@@ -223,6 +236,26 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
                     output);
 
                 Assert.AreEqual("old\nnew\n", Encoding.UTF8.GetString(output.ToArray()));
+            }
+        }
+
+        [Test]
+        public void CopyStreams_StopsInsteadOfSplicingWhenAStreamEndsEarly()
+        {
+            // Announcing more bytes than a file holds must not append the next file onto a
+            // partial record: a truncated transfer is recoverable, a corrupt one is not.
+            var truncated = Encoding.UTF8.GetBytes("old\n");
+            var following = Encoding.UTF8.GetBytes("new\n");
+            using (var oldStream = new MemoryStream(truncated))
+            using (var newStream = new MemoryStream(following))
+            using (var output = new MemoryStream())
+            {
+                RestResponse.CopyStreams(
+                    new Stream[] { oldStream, newStream },
+                    new long[] { truncated.Length + 8, following.Length },
+                    output);
+
+                Assert.AreEqual("old\n", Encoding.UTF8.GetString(output.ToArray()));
             }
         }
     }

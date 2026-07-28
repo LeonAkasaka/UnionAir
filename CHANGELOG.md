@@ -41,6 +41,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Prevented mixed player or custom compilation cycles from being classified as Editor cycles and replacing `latest`, and re-evaluated retained records with the conservative target rules at startup.
 - Prevented caller-supplied compile ids such as Windows device names from being accepted when their per-id record cannot be persisted safely.
 - Made Console NDJSON downloads include the same-session rotated predecessor instead of making entries inaccessible as soon as the active file crossed the rotation threshold.
+- Kept compile record retention going past a record that cannot be deleted, instead of abandoning the remaining trim and letting the retained set grow without bound.
+- Backed off log rotation by size after a failed attempt. A rotation blocked by a concurrent NDJSON download previously left the file over the threshold, so every following Console message closed, retried, and reopened the log writer.
+- Stopped rebuilding `latest` from retained records on every domain reload once a scan has already found no eligible completed Editor cycle.
+- Moved persistence of log rotation state onto the Editor update loop so that `GET /api/editor/logs.ndjson` no longer writes session state as a side effect of a read.
+- Stopped a multi-file artifact transfer when a stream ends before its announced length, rather than appending the next file onto a partial record.
 - Prevented domain reloads from orphaning an `HttpListener` by retaining listener ownership until bounded thread and queued-response cleanup completes.
 - Added up to five bounded retries for transient address-in-use failures during automatic startup, without publishing intermediate failures to the Console or logs API.
 - Added up to three delayed recovery attempts for unexpected listener thread exits, with cleanup completed before the bounded lifecycle trace is dumped and concise errors kept separate from the once-per-domain trace.

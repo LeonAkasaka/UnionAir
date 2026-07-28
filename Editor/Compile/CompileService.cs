@@ -45,6 +45,9 @@ namespace LeonAkasaka.UnionAir.Editor
         private static readonly string LatestPath = Path.Combine(StorageDirectory, "latest.json");
         private static readonly string RecordsDirectory = Path.Combine(StorageDirectory, "records");
 
+        /// <summary>Marks that the retained records were scanned and held no eligible cycle.</summary>
+        private const string LatestRebuildExhaustedKey = "UnionAir.Compile.LatestRebuildExhausted";
+
         private static CompileRecord _current;
         private static CompileRecord _latest;
         private static object _activeContext;
@@ -280,6 +283,8 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 _latest = record;
                 TryWrite(LatestPath, record, "latest compile record");
+                // An eligible record now exists, so a future rebuild is worth attempting again.
+                SessionState.EraseBool(LatestRebuildExhaustedKey);
             }
 
             UnionAirCompileGate.End(record.source, record.id);
@@ -563,7 +568,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 return b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc);
             });
             for (var i = keep; i < files.Count; i++)
-                files[i].Delete();
+            {
+                // Per file: one undeletable record must not stop the rest from being trimmed,
+                // or retention degrades silently until the directory is cleaned by hand.
+                try { files[i].Delete(); }
+                catch (IOException) { /* Another process holds or already removed it. */ }
+                catch (UnauthorizedAccessException) { /* Read-only or locked by a scanner. */ }
+            }
         }
 
         private static CompileRecord Load(string path)
@@ -593,6 +604,12 @@ namespace LeonAkasaka.UnionAir.Editor
             if (_latest != null && _latest.state == "completed" && _latest.target == "editor")
                 return;
 
+            // Rescanning is worthwhile only while a rebuild could still find something. Once the
+            // retained records are known to hold no eligible cycle, every later domain reload
+            // would otherwise reparse all of them to reach the same conclusion.
+            if (SessionState.GetBool(LatestRebuildExhaustedKey, false))
+                return;
+
             var records = LoadRetainedNewestFirst();
             _latest = CompileDecision.SelectLatestEditor(records);
             if (_latest != null)
@@ -600,6 +617,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 TryWrite(LatestPath, _latest, "latest compile record");
                 return;
             }
+
+            SessionState.SetBool(LatestRebuildExhaustedKey, true);
 
             try
             {

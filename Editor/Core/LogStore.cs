@@ -25,6 +25,14 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>Size at which the active NDJSON file is rotated.</summary>
         internal const long RotateThresholdBytes = 8L * 1024L * 1024L;
 
+        /// <summary>Growth required before a failed rotation is attempted again.</summary>
+        /// <remarks>
+        /// Rotation fails while the predecessor is held open, which is exactly what a concurrent
+        /// <c>GET /api/editor/logs.ndjson</c> does. Without this the file stays over the threshold
+        /// and every subsequent log line would close the writer, retry, and reopen it.
+        /// </remarks>
+        internal const long RotateRetryIntervalBytes = 1L * 1024L * 1024L;
+
         /// <summary>Trailing byte count read back when rehydrating after a domain reload.</summary>
         private const int RehydrateTailBytes = 4 * 1024 * 1024;
 
@@ -43,6 +51,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private static bool _writeErrorReported;
         private static bool _previousBelongsToCurrentSession;
         private static bool _previousSessionStateDirty;
+        private static long _nextRotateAttemptBytes;
 
         internal struct LogEntry
         {
@@ -220,7 +229,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 // Approximate: enough to drive rotation without measuring the encoded length.
                 _writtenBytes += line.Length + 1;
 
-                if (ShouldRotate(_writtenBytes))
+                if (ShouldRotate(_writtenBytes, _nextRotateAttemptBytes))
                 {
                     CloseWriterLocked();
                     var rotated = Rotate();
@@ -228,10 +237,17 @@ namespace LeonAkasaka.UnionAir.Editor
                     {
                         _previousBelongsToCurrentSession = true;
                         _previousSessionStateDirty = true;
+                        _writtenBytes = 0;
+                        _nextRotateAttemptBytes = 0;
                     }
-                    _writtenBytes = rotated
-                        ? 0
-                        : File.Exists(_logPath) ? new FileInfo(_logPath).Length : 0;
+                    else
+                    {
+                        _writtenBytes = File.Exists(_logPath) ? new FileInfo(_logPath).Length : 0;
+                        // The file is still over the threshold, so back off by size instead of
+                        // retrying on the very next line. Byte-based because this runs on whichever
+                        // thread raised the log message and Unity time APIs are main-thread only.
+                        _nextRotateAttemptBytes = _writtenBytes + RotateRetryIntervalBytes;
+                    }
                     OpenWriterLocked();
                 }
             }
@@ -318,34 +334,47 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </summary>
         internal static List<string> GetDownloadFilePaths()
         {
-            List<string> result;
-            bool persistState;
             lock (_lock)
             {
-                result = BuildDownloadFilePaths(
+                return BuildDownloadFilePaths(
                     _logPath,
                     _previousLogPath,
                     _previousBelongsToCurrentSession,
                     !string.IsNullOrEmpty(_logPath) && File.Exists(_logPath),
                     !string.IsNullOrEmpty(_previousLogPath) && File.Exists(_previousLogPath));
+            }
+        }
+
+        /// <summary>
+        /// Persists rotation state recorded by the background log callback.
+        /// </summary>
+        /// <remarks>
+        /// Rotation happens on whichever thread raised the log message, which may not touch
+        /// <see cref="SessionState"/>, so the callback only marks the flag dirty. This runs from
+        /// the Editor update loop rather than from a request handler, so a read endpoint never
+        /// has to write persisted state as a side effect.
+        /// </remarks>
+        internal static void Update()
+        {
+            bool persistState;
+            bool sameSession;
+            lock (_lock)
+            {
                 persistState = _previousSessionStateDirty;
+                sameSession = _previousBelongsToCurrentSession;
                 _previousSessionStateDirty = false;
             }
 
-            if (persistState)
-            {
-                try
-                {
-                    UnionAirSession.SavePreviousLogSameSession(
-                        _previousBelongsToCurrentSession);
-                }
-                catch
-                {
-                    lock (_lock) _previousSessionStateDirty = true;
-                }
-            }
+            if (!persistState) return;
 
-            return result;
+            try
+            {
+                UnionAirSession.SavePreviousLogSameSession(sameSession);
+            }
+            catch
+            {
+                lock (_lock) _previousSessionStateDirty = true;
+            }
         }
 
         internal static List<string> BuildDownloadFilePaths(
@@ -364,8 +393,13 @@ namespace LeonAkasaka.UnionAir.Editor
             return result;
         }
 
-        internal static bool ShouldRotate(long writtenBytes)
-            => writtenBytes >= RotateThresholdBytes;
+        /// <summary>
+        /// Whether the active file should be rotated now.
+        /// </summary>
+        /// <param name="writtenBytes">Approximate size of the active file.</param>
+        /// <param name="nextAttemptBytes">Size a previously failed rotation must wait for; 0 when none failed.</param>
+        internal static bool ShouldRotate(long writtenBytes, long nextAttemptBytes)
+            => writtenBytes >= RotateThresholdBytes && writtenBytes >= nextAttemptBytes;
 
         private static void Rehydrate()
         {

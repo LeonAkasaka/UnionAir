@@ -133,5 +133,47 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
                 if (Directory.Exists(directory)) Directory.Delete(directory, true);
             }
         }
+
+        [Test]
+        public void Retention_ContinuesPastAnUndeletableRecord()
+        {
+            // One locked file must not stop the rest of the trim, or retention degrades silently
+            // and the directory grows without bound.
+            var directory = Path.Combine(
+                Path.GetTempPath(),
+                "UnionAir-CompileDecisionTests-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+
+            var lockedPath = Path.Combine(directory, "record-0.json");
+            FileStream lockHandle = null;
+
+            try
+            {
+                for (var i = 0; i < 23; i++)
+                {
+                    var path = Path.Combine(directory, "record-" + i + ".json");
+                    File.WriteAllText(path, "{}");
+                    File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(i));
+                }
+
+                // record-0 is the oldest, so it sorts into the delete range; holding it open makes
+                // its deletion fail while the other two stale records must still go.
+                lockHandle = new FileStream(
+                    lockedPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+                CompileService.TrimRecordFiles(directory, 20, "");
+
+                Assert.IsTrue(File.Exists(lockedPath), "The locked record cannot be deleted.");
+                Assert.AreEqual(
+                    21,
+                    Directory.GetFiles(directory, "*.json").Length,
+                    "Every deletable record past the limit should still have been trimmed.");
+            }
+            finally
+            {
+                if (lockHandle != null) lockHandle.Dispose();
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
     }
 }

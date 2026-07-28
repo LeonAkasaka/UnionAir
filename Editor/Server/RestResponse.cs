@@ -171,7 +171,12 @@ namespace LeonAkasaka.UnionAir.Editor
                         buffer,
                         0,
                         (int)System.Math.Min(buffer.Length, remaining));
-                    if (read <= 0) break;
+
+                    // A stream that ends early would splice the next file onto a partial record
+                    // and under-deliver against the announced Content-Length. Stop instead: a
+                    // truncated transfer is recoverable, a silently corrupt one is not.
+                    if (read <= 0) return;
+
                     destination.Write(buffer, 0, read);
                     remaining -= read;
                 }

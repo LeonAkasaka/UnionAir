@@ -48,6 +48,8 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorApplication.quitting += OnEditorQuitting;
 
             LogStore.StartCapturing();
+            EditorApplication.update -= LogStore.Update;
+            EditorApplication.update += LogStore.Update;
             LogLifecycle(
                 $"initialize autoStart={UnionAirSettings.AutoStart} port={UnionAirSettings.Port}");
 
