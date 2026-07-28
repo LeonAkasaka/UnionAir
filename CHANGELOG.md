@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Unity Console logs are now retained across assembly domain reloads. Every entry is mirrored to an append-only NDJSON file under `Library/UnionAir/Logs`, and the in-memory ring buffer is rehydrated from it after each reload.
 - `GET /api/editor/logs` now returns a monotonic `sequence` per entry plus `sessionId`, `oldestSequence`, `latestSequence`, `truncated`, and `hasMore`, and accepts an exclusive `since` cursor so callers can fetch only new entries. The cursor is applied before the `type` and `search` filters, so `truncated` reports lost entries rather than filtered ones.
+- `GET /api/editor/status` now reports `sessionId`, `lifecycleGeneration`, `settled`, and `hasCompileErrors`. `lifecycleGeneration` increments on every domain reload, letting a client whose connection dropped confirm that a reload completed rather than that the Editor crashed.
+
 - Added `GET /api/editor/logs.ndjson`, which downloads the raw log file for the current Editor session including entries already evicted from the in-memory buffer. The file is rotated at 8 MiB and when a new Editor process starts; only the active file is served.
 
 - Added a disabled-by-default Profiling API for AI-oriented `ProfilerRecorder` discovery and sessions, versioned JSON statistics, frame-level NDJSON, optional Unity Profiler raw captures, and downloadable Memory Profiler snapshots.

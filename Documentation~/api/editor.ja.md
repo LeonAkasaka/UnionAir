@@ -23,7 +23,11 @@ Unity Editor の実行状態を返します。
   "unityVersion": "6000.3.5f2",
   "isTestRunning": false,
   "testRunSource": null,
-  "testRunId": null
+  "testRunId": null,
+  "sessionId": "f40cbf3fc3224a97b5b7ac7aa3b1ea38",
+  "lifecycleGeneration": 3,
+  "settled": true,
+  "hasCompileErrors": false
 }
 ```
 
@@ -37,8 +41,22 @@ Unity Editor の実行状態を返します。
 | `isTestRunning` | bool | Unity Test Framework の run が実行中か |
 | `testRunSource` | string \| null | API 開始 run は `unionAir`、別ツールから開始した run は `external`、アイドル時は `null` |
 | `testRunId` | string \| null | UnionAir run ID。外部 run とアイドル時は `null` |
+| `sessionId` | string | Editor プロセスごとに再生成される識別子 |
+| `lifecycleGeneration` | number | 現在の Editor プロセスにおける assembly domain のカウンタ。1 から開始 |
+| `settled` | bool | コンパイル中でもアセット更新中でもないかどうか |
+| `hasCompileErrors` | bool | `EditorUtility.scriptCompilationFailed` に基づくヒント |
 
 このエンドポイントはテスト実行中も利用できます。health、help、logs、Test Runner の status/result/cancel 操作以外のエンドポイントは、active run が終了するまで `409` を返します。
+
+### domain reload の検出
+
+assembly domain のリロード中はサーバーが停止するため、その間のリクエストは接続に失敗します。`lifecycleGeneration` はこれをクラッシュと区別するためのものです。domain がロードされるたびに増加するため、接続が切れる前に観測した値より大きければ、リロードが完了したと確認できます。これまでのリロード回数は `lifecycleGeneration - 1` です。
+
+`sessionId` は Editor プロセスが再起動したときにのみ変化し、そのとき `lifecycleGeneration` も 1 にリセットされます。
+
+> `settled` はスナップショットであり、リロードが差し迫っていないことを保証するものではありません。コンパイルが完了して `isCompiling` が false になった直後に、domain reload が始まることがあります。クライアントはどのリクエストでも接続断を許容してリトライすべきであり、`settled` を完了シグナルとして扱ってはいけません。
+>
+> `hasCompileErrors` は Console のログから導出されます。Unity は Console の設定によっては再コンパイル時にログを消去します。確定的な結果ではなくヒントとして扱ってください。
 
 ---
 

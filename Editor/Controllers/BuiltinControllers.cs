@@ -29,8 +29,8 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "status",
             Category = UnionAirEndpointCategories.Read,
             TestRunPolicy = UnionAirTestRunPolicy.Allowed,
-            Summary = "Returns the Unity Editor execution status. After POST /api/editor/refresh, retry through any domain reload and wait until both isUpdating and isCompiling are false before making dependent calls.",
-            ResponseExample = "{\"isPlaying\":false,\"isPaused\":false,\"isCompiling\":false,\"isUpdating\":false,\"unityVersion\":\"6000.0.23f1\",\"isTestRunning\":false,\"testRunSource\":null,\"testRunId\":null}")]
+            Summary = "Returns the Unity Editor execution status. After POST /api/editor/refresh, retry through any domain reload and wait until settled is true before making dependent calls. lifecycleGeneration increments on every domain reload, so a client whose connection dropped can confirm a reload happened rather than a crash; sessionId changes only when the Editor process restarts.",
+            ResponseExample = "{\"isPlaying\":false,\"isPaused\":false,\"isCompiling\":false,\"isUpdating\":false,\"unityVersion\":\"6000.0.23f1\",\"isTestRunning\":false,\"testRunSource\":null,\"testRunId\":null,\"sessionId\":\"f40cbf3fc3224a97b5b7ac7aa3b1ea38\",\"lifecycleGeneration\":3,\"settled\":true,\"hasCompileErrors\":false}")]
         private void Status(UnionAirRequestContext ctx)
             => new EditorStatusHandler().Handle(ctx.Request, ctx.Response);
 

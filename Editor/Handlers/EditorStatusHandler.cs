@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using UnityEditor;
@@ -9,16 +10,23 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
+            var isCompiling = EditorApplication.isCompiling;
+            var isUpdating = EditorApplication.isUpdating;
+
             var sb = new StringBuilder();
             sb.Append("{");
             sb.Append($"\"isPlaying\":{RestResponse.FormatBool(EditorApplication.isPlaying)},");
             sb.Append($"\"isPaused\":{RestResponse.FormatBool(EditorApplication.isPaused)},");
-            sb.Append($"\"isCompiling\":{RestResponse.FormatBool(EditorApplication.isCompiling)},");
-            sb.Append($"\"isUpdating\":{RestResponse.FormatBool(EditorApplication.isUpdating)},");
+            sb.Append($"\"isCompiling\":{RestResponse.FormatBool(isCompiling)},");
+            sb.Append($"\"isUpdating\":{RestResponse.FormatBool(isUpdating)},");
             sb.Append($"\"unityVersion\":\"{RestResponse.EscapeJson(Application.unityVersion)}\",");
             sb.Append($"\"isTestRunning\":{RestResponse.FormatBool(UnionAirTestRunGate.IsActive)},");
             sb.Append("\"testRunSource\":").Append(RestResponse.FormatNullableString(UnionAirTestRunGate.PublicSource));
             sb.Append(",\"testRunId\":").Append(RestResponse.FormatNullableString(UnionAirTestRunGate.PublicRunId));
+            sb.Append(",\"sessionId\":").Append(RestResponse.FormatNullableString(UnionAirSession.SessionId));
+            sb.Append($",\"lifecycleGeneration\":{UnionAirSession.Generation.ToString(CultureInfo.InvariantCulture)}");
+            sb.Append($",\"settled\":{RestResponse.FormatBool(!isCompiling && !isUpdating)}");
+            sb.Append($",\"hasCompileErrors\":{RestResponse.FormatBool(EditorUtility.scriptCompilationFailed)}");
             sb.Append("}");
             RestResponse.Send(response, sb.ToString());
         }
