@@ -26,9 +26,23 @@ All development conventions live in [AGENTS.md](AGENTS.md) and apply to human an
 - When an English document changes, update its `.ja.md` translation in the same commit.
 - No external NuGet dependencies — the HTTP server is intentionally `HttpListener`-based.
 
+## Tests
+
+EditMode tests for the Unity-independent helpers live in `Tests/Editor`. They are **not** compiled in a consumer project: Unity only builds a package's test assemblies when the consuming project opts in. To run them, add the package to `testables` in your test project's `Packages/manifest.json`:
+
+```json
+{
+  "testables": ["com.leonakasaka.unionair"]
+}
+```
+
+Then run them from **Window > General > Test Runner** (EditMode), or through UnionAir itself with `POST /api/test-runs`.
+
+Coverage is deliberately limited to logic that can be exercised without driving the Editor — compiler-message parsing, path normalization, and log cursor arithmetic. Everything that depends on real compilation, domain reloads, or the HTTP server still has to be verified by hand.
+
 ## Known Constraints
 
-- There is currently **no automated test suite or CI**. Verify changes manually against a Unity 6000.0+ project (see the [Getting Started guide](Documentation~/index.md)).
+- There is **no CI**, and behavior involving compilation, domain reloads, Play mode, or the HTTP server has no automated coverage. Verify those manually against a Unity 6000.0+ project (see the [Getting Started guide](Documentation~/index.md)).
 - Request-body JSON parsing uses a lightweight custom reader (`Editor/Utils/RequestBodyReader.cs`) with known edge cases for deeply nested bodies.
 - JSON response serialization is hand-written per endpoint; a shared serializer is a welcome future refactor.
 

@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.InputSystem")]
 [assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.TestRunner")]
+[assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.Tests")]
 
 namespace LeonAkasaka.UnionAir.Editor
 {

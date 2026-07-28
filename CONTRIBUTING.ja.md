@@ -28,9 +28,23 @@ UnionAir は現在、設計初期段階にあり、アーキテクチャや API 
 - 英語ドキュメントを変更した場合は、対応する `.ja.md` 訳を同一コミットで更新してください。
 - 外部 NuGet 依存は追加しないでください — HTTP サーバは意図的に `HttpListener` ベースです。
 
+## テスト
+
+Unity に依存しないヘルパーの EditMode テストは `Tests/Editor` にあります。これらは利用側プロジェクトでは **コンパイルされません**。Unity がパッケージのテストアセンブリをビルドするのは、利用側が明示的にオプトインした場合だけだからです。実行するには、テスト用プロジェクトの `Packages/manifest.json` の `testables` にパッケージを追加してください。
+
+```json
+{
+  "testables": ["com.leonakasaka.unionair"]
+}
+```
+
+その後、**Window > General > Test Runner**(EditMode)から実行するか、UnionAir 自身の `POST /api/test-runs` で実行します。
+
+カバー範囲は、Editor を動かさずに検証できるロジック — コンパイラメッセージの解析、パス正規化、ログカーソルの算術 — に意図的に限定しています。実際のコンパイル、domain reload、HTTP サーバに依存する挙動は引き続き手動での検証が必要です。
+
 ## 既知の制約
 
-- 現時点で**自動テストスイート・CI はありません**。変更は Unity 6000.0+ プロジェクトで手動検証してください([はじめに](Documentation~/index.ja.md) を参照)。
+- **CI はありません**。またコンパイル、domain reload、Play モード、HTTP サーバが関わる挙動には自動テストがありません。これらは Unity 6000.0+ プロジェクトで手動検証してください([はじめに](Documentation~/index.ja.md) を参照)。
 - リクエストボディの JSON パースは軽量な独自リーダー(`Editor/Utils/RequestBodyReader.cs`)で、深いネストにエッジケースがあります。
 - レスポンスの JSON シリアライズはエンドポイントごとの手書き実装です。共有シリアライザへのリファクタリングは歓迎します。
 
