@@ -110,7 +110,7 @@ To use with an LLM MCP client, run a separate Node.js MCP bridge that calls thes
 
 ## Known Limitations
 
-- No automated tests or CI yet.
+- Automated coverage is limited to the EditMode tests in `Tests/Editor`, which exercise only Editor-independent logic; compilation, domain reloads, Play mode, and the HTTP server are verified by hand, and there is no CI. See [Tests](CONTRIBUTING.md#tests) for how to run them.
 - Request-body JSON parsing is a lightweight custom reader; deeply nested or unusual JSON bodies may hit edge cases.
 - JSON response serialization is hand-written per endpoint; a shared serializer is a planned refactor.
 - The wildcard CORS policy (`Access-Control-Allow-Origin: *`) may be tightened in a future release.
