@@ -439,6 +439,7 @@ curl --get -o hd.jpg "http://localhost:8765/api/cameras/capture/image" \
 
 > Asset Write カテゴリが有効な場合のみ呼び出せます。
 > Play モード中は `409 Conflict` を返します。
+> 読み込み中のシーンファイルが外部で変更されている場合は、`AssetDatabase.Refresh()` を呼ばずに `409 Conflict` を返します。これにより、Unity の対話的な Reload ダイアログが API を停止させることを防ぎます。
 
 ### レスポンス
 
@@ -452,6 +453,43 @@ curl --get -o hd.jpg "http://localhost:8765/api/cameras/capture/image" \
 ```
 
 > 新しく書き込んだアセットを使用したり、新しいスクリプトコンポーネントをアタッチしたりする前に、`GET /api/editor/status` をポーリングし、`isUpdating: false` と `isCompiling: false` の両方を待ってください。スクリプト変更により domain reload 中にサーバーが再起動する場合があります。接続失敗はバックオフ付きで再試行し、サーバー復帰後にアイドル状態をもう一度確認してください。
+
+### 読み込み中シーンの競合 — 409
+
+```json
+{
+  "error": "Cannot refresh assets while loaded scenes have external file changes. Unload them before retrying to avoid Unity's interactive Reload dialog.",
+  "code": "loaded_scene_external_change_blocked",
+  "loadedScenes": [
+    {
+      "path": "Assets/Scenes/Level.unity",
+      "name": "Level",
+      "isDirty": true,
+      "isActive": true,
+      "reason": "modified"
+    }
+  ]
+}
+```
+
+| フィールド | 説明 |
+|-----------|------|
+| `code` | 安定した機械可読識別子: `loaded_scene_external_change_blocked` |
+| `loadedScenes` | Scene Manager の順序で並んだ競合中の読み込み済みシーン |
+| `isDirty` | メモリ上のシーンに未保存の Editor 変更があるか |
+| `isActive` | アクティブシーンか |
+| `reason` | `modified`、`missing`、`unreadable`、`untracked` のいずれか。`untracked` は信頼できるディスク基準値が記録されていない状態 |
+
+UnionAir はシーンを自動的に保存、破棄、unload、reload しません。再試行する前に、どちらの内容を残すかを明示的に決めてください。
+
+- Editor のメモリ上の内容を残す場合は、シーンを明示的に保存して外部のファイル変更を上書きした後、refresh します。
+- 外部ファイルの内容を残す場合は、先にシーンを unload します。dirty の場合は明示的に保存するか、`discardUnsaved: true` で unload してから refresh し、シーンを再度開きます。
+
+`untracked` のシーンは、実際の外部変更を見落とす可能性があるため、refresh時に新しい基準値として自動採用されません。メモリ上の内容を残す場合は明示的に保存し、ディスク上の内容を残す場合はunloadして開き直してください。
+
+Editorのコールド起動直後は、バックグラウンド対応の基準値bootstrapがシーン復元とアセット更新の完了を待っている間、一時的に`untracked`になることがあります。復旧操作を選ぶ前に、数回のEditor update後に再試行してください。継続する場合は、上記の明示的な保存またはunloadして開き直す手順を使用します。
+
+基準値はシーンを開くか保存したときに更新され、assembly domain reload をまたいで保持されます。このガードは UnionAir が開始する refresh に適用されます。Unity 自身のフォーカス時の自動 refresh と Editor からの手動 refresh は、引き続き Unity の通常動作に従います。
 
 ---
 

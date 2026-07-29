@@ -80,7 +80,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "refresh",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Refreshes the Unity AssetDatabase and triggers script recompilation. If scripts changed, retry GET /api/editor/status through the domain reload and wait until both isUpdating and isCompiling are false before making dependent calls.",
+            Summary = "Refreshes the Unity AssetDatabase and triggers script recompilation. Returns 409 before refreshing when a loaded scene changed externally, preventing Unity's interactive Reload dialog; explicitly save or unload the reported scenes first. If scripts changed, retry GET /api/editor/status through the domain reload and wait until both isUpdating and isCompiling are false before making dependent calls.",
             ResponseExample = "{\"refreshed\":true,\"isCompiling\":true,\"isUpdating\":false,\"isPlaying\":false}")]
         private void Refresh(UnionAirRequestContext ctx)
             => new EditorRefreshHandler().Handle(ctx.Request, ctx.Response);
@@ -493,7 +493,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("DELETE", "{guid}",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Deletes an asset and its meta file.",
+            Summary = "Deletes an asset and its meta file. Returns 409 when the asset is a loaded scene or a folder containing loaded scenes; unload every reported scene before retrying.",
             PathParams = new string[] { "guid" })]
         private void Delete(UnionAirRequestContext ctx)
             => new AssetDeleteHandler().Handle(ctx.Request, ctx.Response);
@@ -519,7 +519,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "reimport",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Reimports one project asset by GUID or project-relative assetPath. Existing files under Assets/ or Packages/ may be imported before they have a GUID.",
+            Summary = "Reimports one project asset by GUID or project-relative assetPath. Loaded scenes return 409 and must be unloaded before reimporting. Existing files under Assets/ or Packages/ may be imported before they have a GUID.",
             RequiredBody = new string[] { "guid or assetPath" },
             OptionalBody = new string[] { "recursive", "forceUpdate" })]
         private void Reimport(UnionAirRequestContext ctx)

@@ -82,6 +82,9 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            if (refresh && LoadedSceneDiskChangeGuard.SendConflictIfAny(response))
+                return;
+
             var id = string.IsNullOrEmpty(requestId) ? CompileService.NewId() : requestId;
             var record = CompileService.NewRecord(UnionAirCompileGate.UnionAirSource, id);
             CompileService.ScheduleStart(record, refresh, clean);

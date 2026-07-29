@@ -38,6 +38,8 @@ Leave `refresh` enabled unless the files were already imported: a newly written 
 
 Supplying `requestId` makes the request recoverable. If the response is lost, poll `GET /api/compile/{requestId}` instead of issuing a second request.
 
+When `refresh` is `true`, the same [loaded-scene external-change guard](editor.md#loaded-scene-conflict--409) as `POST /api/editor/refresh` runs before a compile record is created. Save or unload every reported scene explicitly before retrying. Set `refresh: false` only when the required file changes have already been imported.
+
 ### Response — 202
 
 ```json
@@ -67,6 +69,10 @@ The record is persisted and this response is sent **before** any compilation wor
 This is the expected answer to losing a race with an IDE-triggered compilation, not a failure. Switch to polling `GET /api/compile` rather than retrying the request.
 
 `409` with an `existingCompile` object when `requestId` was already used within the retained window; the body contains the full existing record.
+
+With `refresh: true`, `409` with `code: "loaded_scene_external_change_blocked"` when a loaded scene changed externally. The response has the same `loadedScenes` fields and recovery procedure documented for [`POST /api/editor/refresh`](editor.md#loaded-scene-conflict--409). No compile record is created by this preflight rejection.
+
+The guard runs again immediately before the scheduled refresh. If a scene changes during that small interval after the `202` response, the retained compile record resolves to `state: "aborted"` and `result: "notStarted"` with the conflicting scene paths in `error`; `AssetDatabase.Refresh()` is not called.
 
 `409` when the Editor is entering or in Play mode, or while assets are updating. `400` when `requestId` contains unsupported characters or is a reserved Windows device name.
 

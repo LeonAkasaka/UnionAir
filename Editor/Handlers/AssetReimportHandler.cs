@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.Net;
+using System.Text;
 using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -22,8 +24,21 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            var recursive = RequestBodyReader.GetBool(body, "recursive") == true;
+            var loadedScenes = LoadedSceneAssetSafety.FindLoadedSceneConflicts(
+                assetPath,
+                recursive);
+            if (loadedScenes.Count > 0)
+            {
+                RestResponse.Send(
+                    response,
+                    AssetReimportSafety.BuildConflictJson(assetPath, loadedScenes),
+                    409);
+                return;
+            }
+
             var options = ImportAssetOptions.Default;
-            if (RequestBodyReader.GetBool(body, "recursive") == true)
+            if (recursive)
                 options |= ImportAssetOptions.ImportRecursive;
             if (RequestBodyReader.GetBool(body, "forceUpdate") == true)
                 options |= ImportAssetOptions.ForceUpdate;
@@ -40,6 +55,27 @@ namespace LeonAkasaka.UnionAir.Editor
                 "\",\"assetPath\":\"" + RestResponse.EscapeJson(assetPath) +
                 "\",\"isCompiling\":" + (EditorApplication.isCompiling ? "true" : "false") +
                 ",\"isUpdating\":" + (EditorApplication.isUpdating ? "true" : "false") + "}");
+        }
+    }
+
+    internal static class AssetReimportSafety
+    {
+        private const string ErrorMessage =
+            "Cannot reimport loaded scenes. Unload them before retrying to avoid Unity's interactive Reload dialog.";
+
+        internal static string BuildConflictJson(
+            string assetPath,
+            IReadOnlyList<LoadedSceneAssetConflict> loadedScenes)
+        {
+            var sb = new StringBuilder();
+            sb.Append("{\"error\":\"");
+            sb.Append(RestResponse.EscapeJson(ErrorMessage));
+            sb.Append("\",\"code\":\"loaded_scene_reimport_blocked\",\"assetPath\":\"");
+            sb.Append(RestResponse.EscapeJson(assetPath));
+            sb.Append("\",\"loadedScenes\":");
+            LoadedSceneAssetSafety.AppendLoadedScenesJson(sb, loadedScenes);
+            sb.Append("}");
+            return sb.ToString();
         }
     }
 }

@@ -386,6 +386,7 @@ GUID で指定したアセットの詳細情報を返します。
 
 > Asset Write カテゴリが有効な場合のみ呼び出せます。
 > Play モード中は `409 Conflict` を返します。
+> 対象が読み込み中のシーン、または読み込み中のシーンを含むフォルダーの場合は、何も削除せずに `409 Conflict` を返します。
 
 ### パスパラメータ
 
@@ -406,6 +407,25 @@ GUID で指定したアセットの詳細情報を返します。
 | 400 | GUID が空 |
 | 404 | 一致するアセットが存在しない |
 | 403 | Asset Write カテゴリが無効 |
+| 409 | 対象が読み込み中のシーン、そのシーンを含むフォルダー、または Editor が Play モード中 |
+
+dirty状態にかかわらず、読み込み中のシーンは拒否されます。UnionAir はシーンを自動的に保存、破棄、unloadしません。報告されたすべてのシーンを明示的にunloadしてから、削除を再試行してください。
+
+```json
+{
+  "error": "Cannot delete loaded scenes. Unload them before retrying to avoid deleting the backing asset of an open scene.",
+  "code": "loaded_scene_delete_blocked",
+  "assetPath": "Assets/Scenes",
+  "loadedScenes": [
+    {
+      "path": "Assets/Scenes/Level.unity",
+      "name": "Level",
+      "isDirty": true,
+      "isActive": true
+    }
+  ]
+}
+```
 
 ---
 
@@ -498,6 +518,9 @@ GUID で指定したアセットの詳細情報を返します。
 
 > Asset Write カテゴリが有効な場合のみ呼び出せます。
 > Play モード中は `409 Conflict` を返します。
+> 読み込み中の `.unity` シーンは再インポートできません。再インポートすると、
+> 全 API 処理を停止させる対話的な Reload ダイアログを Unity が表示する可能性があります。
+> 再試行する前にシーンをアンロードしてください。
 
 ### リクエストボディ(JSON)
 
@@ -528,6 +551,42 @@ GUID で指定したアセットの詳細情報を返します。
 }
 ```
 
+対象が読み込み中のシーンである場合、または `recursive: true` で読み込み中の
+シーンを含むフォルダーを対象にした場合、`AssetDatabase.ImportAsset()` を
+呼び出す前に `409 Conflict` を返します。
+
+```json
+{
+  "error": "Cannot reimport loaded scenes. Unload them before retrying to avoid Unity's interactive Reload dialog.",
+  "code": "loaded_scene_reimport_blocked",
+  "assetPath": "Assets/Scenes",
+  "loadedScenes": [
+    {
+      "path": "Assets/Scenes/Level.unity",
+      "name": "Level",
+      "isDirty": true,
+      "isActive": true
+    }
+  ]
+}
+```
+
+| 競合フィールド | 型 | 説明 |
+|----------------|------|-------------|
+| `code` | string | 固定値 `loaded_scene_reimport_blocked` |
+| `assetPath` | string | リクエストから解決されたアセットまたはフォルダーのパス |
+| `loadedScenes` | array | 要求されたインポートと競合する読み込み中シーン。Scene Manager の順序で返す |
+| `loadedScenes[].path` | string | シーンアセットのパス |
+| `loadedScenes[].name` | string | シーン名 |
+| `loadedScenes[].isDirty` | bool | シーンに未保存の Editor 変更があるか |
+| `loadedScenes[].isActive` | bool | アクティブシーンか |
+
+clean なシーンでは、`POST /api/scenes/unload`、再インポート、
+`POST /api/scenes/open` の順に呼び出します。dirty なシーンでは、
+Editor 上の変更を保存するか、`discardUnsaved: true` でアンロードするかを
+先に明示的に選択してください。reimport エンドポイントがシーンを自動的に
+保存、アンロード、破棄することはありません。
+
 ### エラー
 
 | ステータス | 原因 |
@@ -535,7 +594,7 @@ GUID で指定したアセットの詳細情報を返します。
 | 400 | `guid` と `assetPath` の両方が欠落 |
 | 403 | Asset Write カテゴリが無効 |
 | 404 | 一致するアセットが存在しない |
-| 409 | Unity Editor が Play モード中 |
+| 409 | Unity Editor が Play モード中、または読み込み中のシーンが1つ以上対象に含まれる |
 
 ---
 

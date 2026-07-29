@@ -56,6 +56,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            LoadedSceneDiskChangeGuard.RecordLoadedScenesAfterAssetMove(oldPath, newPath);
+
             RestResponse.Send(response,
                 $"{{\"from\":\"{RestResponse.EscapeJson(oldPath)}\"," +
                 $"\"to\":\"{RestResponse.EscapeJson(newPath)}\"}}");

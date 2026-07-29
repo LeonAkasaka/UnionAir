@@ -383,6 +383,7 @@ Deletes the asset and its `.meta` file.
 
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
+> Returns `409 Conflict` without deleting anything when the target is a loaded scene or a folder containing loaded scenes.
 
 ### Path Parameters
 
@@ -403,6 +404,25 @@ Deletes the asset and its `.meta` file.
 | 400 | GUID is empty |
 | 404 | No matching asset exists |
 | 403 | Asset Write category is disabled |
+| 409 | The target is a loaded scene, contains a loaded scene, or the Editor is in Play mode |
+
+Loaded scenes are rejected regardless of their dirty state. UnionAir does not save, discard, or unload them automatically. Unload every reported scene explicitly before retrying the delete.
+
+```json
+{
+  "error": "Cannot delete loaded scenes. Unload them before retrying to avoid deleting the backing asset of an open scene.",
+  "code": "loaded_scene_delete_blocked",
+  "assetPath": "Assets/Scenes",
+  "loadedScenes": [
+    {
+      "path": "Assets/Scenes/Level.unity",
+      "name": "Level",
+      "isDirty": true,
+      "isActive": true
+    }
+  ]
+}
+```
 
 ---
 
@@ -495,6 +515,8 @@ Reimports one project asset using `AssetDatabase.ImportAsset()`.
 
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
+> A loaded `.unity` scene cannot be reimported. Unity can otherwise show an interactive
+> Reload dialog that blocks all API processing. Unload the scene before retrying.
 
 ### Request Body (JSON)
 
@@ -525,6 +547,41 @@ Reimports one project asset using `AssetDatabase.ImportAsset()`.
 }
 ```
 
+When the target is a loaded scene, or `recursive: true` targets a folder containing
+loaded scenes, the endpoint returns `409 Conflict` before calling
+`AssetDatabase.ImportAsset()`:
+
+```json
+{
+  "error": "Cannot reimport loaded scenes. Unload them before retrying to avoid Unity's interactive Reload dialog.",
+  "code": "loaded_scene_reimport_blocked",
+  "assetPath": "Assets/Scenes",
+  "loadedScenes": [
+    {
+      "path": "Assets/Scenes/Level.unity",
+      "name": "Level",
+      "isDirty": true,
+      "isActive": true
+    }
+  ]
+}
+```
+
+| Conflict field | Type | Description |
+|----------------|------|-------------|
+| `code` | string | Stable value `loaded_scene_reimport_blocked` |
+| `assetPath` | string | Resolved asset or folder path from the request |
+| `loadedScenes` | array | Loaded scenes that conflict with the requested import, in scene-manager order |
+| `loadedScenes[].path` | string | Scene asset path |
+| `loadedScenes[].name` | string | Scene name |
+| `loadedScenes[].isDirty` | bool | Whether the scene has unsaved Editor changes |
+| `loadedScenes[].isActive` | bool | Whether the scene is active |
+
+For a clean scene, call `POST /api/scenes/unload`, retry the reimport, and then call
+`POST /api/scenes/open`. For a dirty scene, first choose explicitly whether to save
+the Editor changes or unload with `discardUnsaved: true`. The reimport endpoint never
+saves, unloads, or discards a scene automatically.
+
 ### Errors
 
 | Status | Cause |
@@ -532,7 +589,7 @@ Reimports one project asset using `AssetDatabase.ImportAsset()`.
 | 400 | `guid` and `assetPath` are both missing |
 | 403 | Asset Write category is disabled |
 | 404 | No matching asset exists |
-| 409 | The Unity Editor is in Play mode |
+| 409 | The Unity Editor is in Play mode, or the request targets one or more loaded scenes |
 
 ---
 

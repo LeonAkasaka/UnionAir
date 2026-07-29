@@ -361,7 +361,19 @@ namespace LeonAkasaka.UnionAir.Editor
             try
             {
                 // A newly written .cs file belongs to no assembly until it is imported.
-                if (refresh) AssetDatabase.Refresh();
+                if (refresh)
+                {
+                    var sceneConflicts = LoadedSceneDiskChangeGuard.FindConflicts();
+                    if (sceneConflicts.Count > 0)
+                    {
+                        _startDispatched = true;
+                        Abort(_current, LoadedSceneDiskChangeGuard.BuildAbortReason(sceneConflicts));
+                        Commit(_current);
+                        return;
+                    }
+
+                    AssetDatabase.Refresh();
+                }
 
                 // Refresh starts a cycle by itself when scripts changed; requesting another would
                 // queue a redundant one. RequestScriptCompilation still forces a cycle when Unity

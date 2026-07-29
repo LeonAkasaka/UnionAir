@@ -436,6 +436,7 @@ Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and asset
 
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
+> Returns `409 Conflict` without calling `AssetDatabase.Refresh()` when a loaded scene file has changed externally. This prevents Unity's interactive Reload dialog from blocking the API.
 
 ### Response
 
@@ -449,6 +450,43 @@ Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and asset
 ```
 
 > Before using a newly written asset or attaching a new script component, poll `GET /api/editor/status` and wait until both `isUpdating: false` and `isCompiling: false`. Script changes can restart the server during a domain reload; retry connection failures with backoff and confirm the idle state again after the server returns.
+
+### Loaded Scene Conflict — 409
+
+```json
+{
+  "error": "Cannot refresh assets while loaded scenes have external file changes. Unload them before retrying to avoid Unity's interactive Reload dialog.",
+  "code": "loaded_scene_external_change_blocked",
+  "loadedScenes": [
+    {
+      "path": "Assets/Scenes/Level.unity",
+      "name": "Level",
+      "isDirty": true,
+      "isActive": true,
+      "reason": "modified"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `code` | Stable machine-readable identifier: `loaded_scene_external_change_blocked` |
+| `loadedScenes` | Conflicting loaded scenes in Scene Manager order |
+| `isDirty` | Whether the in-memory scene has unsaved Editor changes |
+| `isActive` | Whether the scene is the active scene |
+| `reason` | `modified`, `missing`, `unreadable`, or `untracked`; `untracked` means no trusted disk baseline was recorded |
+
+UnionAir does not save, discard, unload, or reload a scene automatically. Choose which version wins before retrying:
+
+- To keep the in-memory Editor version, save the scene explicitly, overwriting the external file change, then refresh.
+- To keep the external file version, unload the scene first. If it is dirty, explicitly save it or unload it with `discardUnsaved: true`; then refresh and reopen it.
+
+An `untracked` scene is never adopted as a new baseline during refresh because doing so could hide a real external change. Save it explicitly to keep the in-memory version, or unload and reopen it to keep the disk version.
+
+Immediately after a cold Editor start, `untracked` can be transient while the background-safe baseline bootstrap waits for scene restoration and asset updating to settle. Retry after several Editor updates before choosing either recovery action. If it persists, use the explicit save or unload-and-reopen procedure above.
+
+The baseline is updated when a scene is opened or saved and is retained across assembly domain reloads. This guard applies to UnionAir-triggered refreshes; Unity's own focus auto-refresh and manual Editor refresh remain subject to Unity's normal behavior.
 
 ---
 

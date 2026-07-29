@@ -21,6 +21,9 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
+            if (LoadedSceneDiskChangeGuard.SendConflictIfAny(response))
+                return;
+
             AssetDatabase.Refresh();
 
             // Return editor state so the caller can start polling asset updates and compilation immediately.
