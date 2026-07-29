@@ -10,24 +10,111 @@
 
 ## POST /api/editor/play
 
-Play モードに入ります(`EditorApplication.isPlaying = true`)。
+Play モードに入ります(`EditorApplication.isPlaying = true`)。任意の `inputs` リストを渡すと、Play モードの最初のフレームを起点にフレーム単位の入力を再生します。
 
 > Play Mode カテゴリが有効な場合のみ呼び出せます。
 > Domain reload が発生した場合、HTTP サーバは一時的に再起動します。`GET /api/editor/status` をポーリングし、`isPlaying: true` になるまで待ってください。
+> `inputs` にはオプションの `com.unity.inputsystem` パッケージが必要です。
 
-### レスポンス
+`inputs` は、特定のフレームでの入力が必要なテスト——コンボ、先行入力、同一フレームでの複数ボタン押下——に使います。即時系エンドポイント(`perform`、`set`、`pointer`)はリクエストが処理された瞬間に作用するため、クライアント側からプレイヤーフレームに合わせることはできません。
+
+### リクエストボディ(JSON、任意)
+
+```json
+{
+  "inputs": [
+    { "frame": 30, "type": "perform", "action": "Player/Jump", "mode": "press"   },
+    { "frame": 33, "type": "perform", "action": "Player/Jump", "mode": "release" },
+    { "frame": 40, "type": "set",     "action": "Player/Move", "value": [1.0, 0.0] },
+    { "frame": 50, "type": "pointer", "mode": "press", "normalizedPosition": { "x": 0.5, "y": 0.5 } }
+  ]
+}
+```
+
+| フィールド | 必須 | 説明 |
+|-----------|------|------|
+| `inputs` | ❌ | 再生するイベント。フレーム順でなくてよい。省略した場合の挙動は従来と完全に同じ |
+
+#### イベントのフィールド
+
+| フィールド | 必須 | 説明 |
+|-----------|------|------|
+| `frame` | ✅ | Play モード最初のフレームからの相対フレーム数(非負)。**ゲームが入力を観測するフレーム**を意味する(ゲームの `Update()` 内で `wasPressedThisFrame` が真になるフレーム) |
+| `type` | ✅ | `perform`(Button アクション)、`set`(Axis/Vector2/Stick アクション)、`pointer`(仮想マウス) |
+| `action` | ✅* | `perform` と `set`: `Map/Action`、または曖昧でない裸の名前 |
+| `mode` | ✅* | `perform`: `press` または `release`。`pointer`: `press`、`release`、`move` |
+| `value` | ✅* | `set`: Vector2/Stick アクションは `[x, y]`、Axis アクションは有限の数値 |
+| `position` / `normalizedPosition` / `origin` | ✅* | `pointer`: `POST /api/playmode/input/pointer` と同じ意味。`press` と `move` では必須、`release` では任意 |
+| `button` | ❌ | `pointer`: `left`(デフォルト)、`right`、`middle` |
+
+*記載された type においてのみ必須です。
+
+`tap` と `holdFrames` はリプレイでは拒否されます。タイムライン上では押下時間は `release` を後のフレームに置くことで表現できるため、受け入れると同じことに 2 通りの書き方ができてしまうからです。
+
+### タイミング
+
+同一フレームのイベントはリクエスト順に適用されたうえで、**仮想デバイスごとに 1 つの状態スナップショットへ統合**されます。これが同時押しをゲームに同時押しとして届ける仕組みです。フレーム 40 で押した 2 つのキーは、順番にではなく同じフレームでゲームに観測されます。
+
+`release` が予定されていない `press` は、リプレイ終了後も押下されたまま残ります。これは `POST /api/playmode/input/perform` の `press` と同じ挙動です。
+
+プレイヤーループがフレームを飛ばしたことで期限を過ぎたイベントは、次に観測されたフレームで適用され `late: true` として報告されます。黙って捨てられることはありません。
+
+フレーム 0 は生の最初のプレイヤーフレームで、ゲーム自身の `Start()` より前に走ります。`Start()` や `OnEnable()` でアクションマップを有効化するゲームはまだ入力を待ち受けていないため、最初のイベントは数フレーム後に置いてください。
+
+再現性のある実行のためには、先に `POST /api/scenes/open` で対象シーンを開いてください。タイトル画面から始めると、実行ごとに所要時間が変わるシーンロードにリプレイが依存してしまいます。
+
+### 検証
+
+リスト全体は Play モードに入る**前に**検証されます。1 件でも不正なイベントがあれば `400` を返し、何も起きません——リプレイは armed されず、エディタは Edit モードのままです。エラーメッセージは該当するエントリを示します。
+
+```json
+{ "error": "inputs[3]: 'action' is required for type 'perform'." }
+```
+
+これが重要なのは、Play モードへの遷移が domain reload を伴い、HTTP レスポンスはリプレイの実行前に送られてしまうためです。後から見つかった問題は呼び出し元に報告する手段がありません。
+
+リストの長さやフレーム範囲に上限はありません。暴走したリプレイは `POST /api/editor/stop` で終了できます。
+
+### レスポンス — 200(`inputs` なし)
 
 ```json
 { "playing": true, "note": "Domain reload may occur. Poll GET /api/editor/status until isPlaying is true." }
 ```
 
+### レスポンス — 202(`inputs` あり)
+
+```json
+{
+  "playing": true,
+  "replay": {
+    "id": "ir-20260729-091808-721bae",
+    "state": "queued",
+    "eventCount": 4,
+    "statusUrl": "/api/playmode/input/result?id=ir-20260729-091808-721bae"
+  },
+  "note": "Poll GET /api/playmode/input/result until state leaves queued and running."
+}
+```
+
+レスポンスは Play モードを要求する前に送られます。Play モードへの遷移は domain reload を開始し、呼び出し元がリプレイ ID を知る前に接続が切れてしまうためです。結果は `GET /api/playmode/input/result` をポーリングして取得します。
+
+### エラー
+
+| ステータス | 原因 |
+|-----------|------|
+| 400 | `inputs` のいずれかのエントリが不正(メッセージにインデックスを含む)、`inputs` が空、または `com.unity.inputsystem` パッケージがない |
+| 403 | Play Mode カテゴリが無効 |
+| 409 | すでに Play モード中、または別のリプレイが実行中に `inputs` を指定した |
+| 500 | リプレイを `Library/UnionAir` に書き込めなかった。永続化できないリプレイは domain reload を越えられないため、Play モードには入らない |
+
 ---
 
 ## POST /api/editor/stop
 
-Play モードを終了します(`EditorApplication.isPlaying = false`)。
+Play モードを終了します(`EditorApplication.isPlaying = false`)。入力リプレイが armed または実行中であれば、それも破棄します。
 
 > Play Mode カテゴリが有効な場合のみ呼び出せます。
+> 暴走したリプレイからの脱出手段です。開始前の armed なリプレイは保留中の Play モード要求ごと取り消されるため、`POST /api/editor/play` の直後に停止しても、その後で Play モードに入ってしまうことはありません。
 
 ### レスポンス
 
@@ -211,7 +298,7 @@ Release:
 | 400 | `action` の欠落、`mode` が不正、`value` が指定された、またはアクションが Button アクションでない |
 | 403 | Play Mode カテゴリが無効 |
 | 404 | アクションが見つからない |
-| 409 | Unity Editor が Play モードでない、ポインタ操作が進行中、または裸のアクション名が複数のマップに一致。曖昧な場合のレスポンスには `candidates` が含まれる |
+| 409 | Unity Editor が Play モードでない、ポインタ操作または入力リプレイが進行中、または裸のアクション名が複数のマップに一致。曖昧な場合のレスポンスには `candidates` が含まれる |
 | 422 | Button アクションは存在するが、シミュレート可能な Keyboard/Gamepad/Mouse/Pointer の Button バインディングがない |
 
 ---
@@ -317,7 +404,7 @@ Mouse scroll は Input System の delta control semantics に従います。各 
 | 400 | `action` の欠落、`value` が不正・欠落、またはアクションが Button アクション |
 | 403 | Play Mode カテゴリが無効 |
 | 404 | アクションが見つからない |
-| 409 | Unity Editor が Play モードでない、ポインタ操作が進行中、または裸のアクション名が複数のマップに一致。曖昧な場合のレスポンスには `candidates` が含まれる |
+| 409 | Unity Editor が Play モードでない、ポインタ操作または入力リプレイが進行中、または裸のアクション名が複数のマップに一致。曖昧な場合のレスポンスには `candidates` が含まれる |
 | 422 | アクションは存在するが、設定可能な直接的な Gamepad または Mouse scroll の Axis/Vector2 バインディングがない |
 
 ---
@@ -382,9 +469,85 @@ UnionAir の仮想マウスを通じて、画面座標でのマウスクリッ�
 |--------|-------|
 | 400 | `position`/`normalizedPosition` の両方指定または両方欠落、`origin`・`mode`・`button`・`holdFrames` が不正 |
 | 403 | Play Mode カテゴリが無効 |
-| 409 | Play モードでない、エディタが一時停止中、別のポインタ操作が進行中、またはシーケンス中に Play モードが終了 |
+| 409 | Play モードでない、エディタが一時停止中、別のポインタ操作または入力リプレイが進行中、またはシーケンス中に Play モードが終了 |
 | 422 | ピクセル `position` が画面外 |
 | 500 | プレイヤーフレームが5秒以内に進行しなかった |
+
+---
+
+## GET /api/playmode/input/result
+
+`POST /api/editor/play` でスケジュールした入力リプレイの結果を返します。実行中はそのリプレイを、そうでなければ直近に終了したものを返します。
+
+> 常時有効な **Read** カテゴリに属するため、Play Mode カテゴリの設定やテスト実行中に関係なくポーリングできます。
+> UnionAir が保持するのは実行中のリプレイと直近の完了結果のみです。
+
+このエンドポイントは完了シグナルも兼ねます。これがないとクライアントはリプレイがいつ終わったかを知れず、ゲームの状態をいつ検証すべきかも判断できません。
+
+### クエリパラメータ
+
+| パラメータ | デフォルト | 説明 |
+|-----------|-----------|------|
+| `id` | ― | 特定のリプレイを指定して取得します。複数のリプレイを連続実行し、直近の結果が入れ替わり得る場合に使用します |
+
+### レスポンス
+
+```json
+{
+  "state": "completed",
+  "events": [
+    { "index": 0, "frame": 30, "late": false, "unityFrame": 32, "status": "applied", "control": "/UnionAirVirtualKeyboard/space", "error": null },
+    { "index": 1, "frame": 33, "late": false, "unityFrame": 35, "status": "applied", "control": "/UnionAirVirtualKeyboard/space", "error": null }
+  ],
+  "lateCount": 0,
+  "failedCount": 0,
+  "abortReason": null,
+  "abortCode": null,
+  "id": "ir-20260729-091808-721bae",
+  "eventCount": 2,
+  "appliedCount": 2,
+  "baseFrame": 2,
+  "lastObservedFrame": 33,
+  "updateMode": "dynamic",
+  "sessionId": "ab453ee8",
+  "requestedAt": "2026-07-29T09:18:08.0000000Z",
+  "startedAt": "2026-07-29T09:18:11.0000000Z",
+  "finishedAt": "2026-07-29T09:18:11.2000000Z",
+  "durationSeconds": 0.2,
+  "lifecycleGenerationAtRequest": 12,
+  "lifecycleGenerationAtFinish": 13
+}
+```
+
+| フィールド | 説明 |
+|-----------|------|
+| `state` | `queued`(armed、Play モード待ち)、`running`、`completed`、`aborted` |
+| `events[].index` | リクエスト配列内のインデックス。呼び出し元がイベントを識別するための値 |
+| `events[].frame` | イベントが**実際に観測されたフレーム**(`baseFrame` からの相対)。未処理の間は `null`。要求したフレームと比較することでスケジュールが守られたことを検証できる |
+| `events[].unityFrame` | 適用時の絶対 `Time.frameCount`。`GET /api/editor/logs` との突き合わせに使う |
+| `events[].late` | 予定フレームより遅れて適用されたかどうか |
+| `events[].status` | `pending`、`applied`、`failed` |
+| `events[].control` | 解決されたコントロールパス(例: `/UnionAirVirtualKeyboard/space`) |
+| `events[].error` | そのイベントが失敗した理由。失敗していなければ `null` |
+| `lateCount` / `failedCount` | リプレイ全体での件数 |
+| `abortCode` | `cancelled`、`playModeNeverEntered`、`framesStalled`、`playModeExited`、`domainReload`、`driverUnavailable`、`driverRefused`。中断していなければ `null` |
+| `abortReason` | `abortCode` に対応する人間向けの説明 |
+| `baseFrame` | 最初に観測されたプレイヤーフレームの `Time.frameCount`。相対フレーム 0 の起点 |
+| `updateMode` | リプレイが動作した Input System の更新モード: `dynamic` または `fixed` |
+
+### 注記
+
+**個々のイベントの失敗はリプレイを中断しません。** 途中で止めると押下中の入力が取り残され、成功したはずの後続フレームも失われるため、失敗を記録して続行します。したがって全イベントが失敗していても `state: "completed"` になり得ます。`state` だけでなく `failedCount` を確認してください。
+
+リプレイが中断されるのは、実行中に Play モードが終了したとき、domain reload に割り込まれたとき(Play モード中のスクリプト再コンパイルはリプレイが保証しようとしているフレームタイミングを壊します)、プレイヤーフレームが 5 秒間進まなかったときです。最初の 1 フレームについてはより長い猶予が与えられます。Play モード開始直後はシーンの初期化やシェーダのウォームアップでフレームカウンタが数秒止まり得るためです。エディタを一時停止すると停止判定自体が止まるので、`POST /api/editor/pause` と `POST /api/editor/step` で 1 フレームずつ進めながら検証できます。
+
+Input System が `ProcessEventsInFixedUpdate` の場合、1 プレイヤーフレームで固定更新が 0 回にも複数回にもなるため「フレーム」の意味は緩くなります。イベントは各プレイヤーフレームの最初の入力更新で適用され、ずれは `late` として報告されます。
+
+### エラー
+
+| ステータス | 原因 |
+|-----------|------|
+| 404 | リプレイが記録されていない、または `id` が保持対象外 |
 
 ---
 

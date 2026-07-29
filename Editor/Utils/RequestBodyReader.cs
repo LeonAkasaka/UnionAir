@@ -269,8 +269,10 @@ namespace LeonAkasaka.UnionAir.Editor
             if (colonIdx < 0) return result;
 
             int start = colonIdx + 1;
-            while (start < json.Length && json[start] != '[') start++;
-            if (start >= json.Length) return result;
+            // Anchored to this key's own value: scanning forward for the next '[' anywhere in the
+            // document would latch onto an unrelated later array when the value is not one.
+            SkipWhitespace(json, ref start);
+            if (start >= json.Length || json[start] != '[') return result;
 
             start++; // skip '['
 
@@ -318,6 +320,155 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Extracts a top-level JSON array as its raw <c>[...]</c> token, brackets included.
+        /// Returns null when the key is absent or its value is not an array.
+        /// </summary>
+        /// <remarks>
+        /// Unlike <see cref="GetArray(string,string)"/> this preserves scalar elements, so it suits
+        /// numeric arrays such as <c>"value": [1.0, 0.0]</c>.
+        /// </remarks>
+        /// <param name="json">JSON object text to inspect.</param>
+        /// <param name="key">Top-level field name to read.</param>
+        /// <returns>The raw array token, or null when absent or not an array.</returns>
+        public static string GetRawArray(string json, string key)
+        {
+            int start;
+            if (!TryFindArrayStart(json, key, out start)) return null;
+
+            int end = start;
+            if (!TrySkipValue(json, ref end)) return null;
+            return json.Substring(start, end - start);
+        }
+
+        /// <summary>
+        /// Extracts a top-level JSON array and returns every element as raw JSON text, including
+        /// scalars, and reports malformed input rather than degrading to an empty list.
+        /// </summary>
+        /// <remarks>
+        /// This is the strict counterpart to <see cref="GetArray(string,string)"/>. It distinguishes
+        /// an absent key from a present-but-invalid one, and error messages identify the offending
+        /// element as <c>key[index]</c> so callers can report which entry a client must fix.
+        /// </remarks>
+        /// <param name="json">JSON object text to inspect.</param>
+        /// <param name="key">Top-level field name to read.</param>
+        /// <param name="elements">Raw JSON text of each element; empty when the key is absent.</param>
+        /// <param name="present">Whether the key exists at the top level.</param>
+        /// <param name="error">Failure description naming the offending element, or null on success.</param>
+        /// <returns>True when the field is absent or is a well-formed array; otherwise false.</returns>
+        public static bool TryGetArrayElements(
+            string json,
+            string key,
+            out List<string> elements,
+            out bool present,
+            out string error)
+        {
+            elements = new List<string>();
+            present = false;
+            error = null;
+            if (string.IsNullOrEmpty(json)) return true;
+
+            int keyIdx = FindTopLevelKey(json, key);
+            if (keyIdx < 0) return true;
+            present = true;
+
+            int colonIdx = json.IndexOf(':', keyIdx);
+            if (colonIdx < 0)
+            {
+                error = $"'{key}' is malformed.";
+                return false;
+            }
+
+            int position = colonIdx + 1;
+            SkipWhitespace(json, ref position);
+            if (position >= json.Length || json[position] != '[')
+            {
+                error = $"'{key}' must be a JSON array.";
+                return false;
+            }
+            position++; // skip '['
+
+            while (true)
+            {
+                SkipWhitespace(json, ref position);
+                if (position >= json.Length)
+                {
+                    error = $"'{key}' is not a well-formed JSON array.";
+                    return false;
+                }
+                if (json[position] == ']') return true;
+
+                int valueStart = position;
+                if (!TrySkipValue(json, ref position))
+                {
+                    error = $"{key}[{elements.Count}] is not a well-formed JSON value.";
+                    return false;
+                }
+                elements.Add(json.Substring(valueStart, position - valueStart));
+
+                SkipWhitespace(json, ref position);
+                if (position >= json.Length)
+                {
+                    error = $"'{key}' is not a well-formed JSON array.";
+                    return false;
+                }
+                if (json[position] == ']') return true;
+                if (json[position] != ',')
+                {
+                    error = $"'{key}' is not a well-formed JSON array.";
+                    return false;
+                }
+
+                position++; // skip ','
+                SkipWhitespace(json, ref position);
+                if (position < json.Length && json[position] == ']')
+                {
+                    error = $"'{key}' is not a well-formed JSON array.";
+                    return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Extracts a required top-level array of finite numbers, such as <c>"value": [1.0, 0.0]</c>.
+        /// </summary>
+        /// <param name="json">JSON object text to inspect.</param>
+        /// <param name="key">Top-level field name to read.</param>
+        /// <param name="values">The parsed numbers, or null on failure.</param>
+        /// <param name="error">Failure description naming the offending element, or null on success.</param>
+        /// <returns>True when the field is a well-formed array of finite numbers.</returns>
+        public static bool TryGetFloatArray(string json, string key, out float[] values, out string error)
+        {
+            values = null;
+
+            List<string> elements;
+            bool present;
+            if (!TryGetArrayElements(json, key, out elements, out present, out error)) return false;
+            if (!present)
+            {
+                error = $"Required field '{key}' is missing.";
+                return false;
+            }
+
+            var parsed = new float[elements.Count];
+            for (int i = 0; i < elements.Count; i++)
+            {
+                float value;
+                if (!float.TryParse(elements[i].Trim(),
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out value) ||
+                    float.IsNaN(value) || float.IsInfinity(value))
+                {
+                    error = $"{key}[{i}] must be a finite number.";
+                    return false;
+                }
+                parsed[i] = value;
+            }
+
+            values = parsed;
+            return true;
         }
 
         /// <summary>Returns whether a field is present at the top level of a JSON object.</summary>
@@ -404,6 +555,86 @@ namespace LeonAkasaka.UnionAir.Editor
             while (position < json.Length && char.IsWhiteSpace(json[position])) position++;
         }
 
+        /// <summary>
+        /// Locates the opening bracket of a top-level array value, anchored to the key's own value
+        /// rather than to the next bracket appearing anywhere in the document.
+        /// </summary>
+        private static bool TryFindArrayStart(string json, string key, out int start)
+        {
+            start = -1;
+            if (string.IsNullOrEmpty(json)) return false;
+
+            int keyIdx = FindTopLevelKey(json, key);
+            if (keyIdx < 0) return false;
+
+            int colonIdx = json.IndexOf(':', keyIdx);
+            if (colonIdx < 0) return false;
+
+            int position = colonIdx + 1;
+            SkipWhitespace(json, ref position);
+            if (position >= json.Length || json[position] != '[') return false;
+
+            start = position;
+            return true;
+        }
+
+        /// <summary>
+        /// Advances past one complete JSON value, leaving <paramref name="position"/> just after it.
+        /// Handles objects, arrays, strings, and scalars, and is string- and escape-aware so that
+        /// brackets inside string literals do not affect nesting depth.
+        /// </summary>
+        private static bool TrySkipValue(string json, ref int position)
+        {
+            if (position >= json.Length) return false;
+
+            var first = json[position];
+            if (first == '"')
+            {
+                string ignored;
+                return TryReadJsonString(json, ref position, out ignored);
+            }
+
+            if (first == '{' || first == '[')
+            {
+                var open = first;
+                var close = first == '{' ? '}' : ']';
+                int depth = 0;
+                while (position < json.Length)
+                {
+                    var c = json[position];
+                    if (c == '"')
+                    {
+                        string ignored;
+                        if (!TryReadJsonString(json, ref position, out ignored)) return false;
+                        continue;
+                    }
+                    if (c == open)
+                    {
+                        depth++;
+                    }
+                    else if (c == close)
+                    {
+                        depth--;
+                        position++;
+                        if (depth == 0) return true;
+                        continue;
+                    }
+                    position++;
+                }
+                return false;
+            }
+
+            // Scalar: number, true, false, or null.
+            int scalarStart = position;
+            while (position < json.Length)
+            {
+                var c = json[position];
+                if (c == ',' || c == ']' || c == '}' || char.IsWhiteSpace(c)) break;
+                position++;
+            }
+            return position > scalarStart;
+        }
+
         private static bool IsHex(string s, int start, int count)
         {
             for (int i = start; i < start + count && i < s.Length; i++)
@@ -430,7 +661,9 @@ namespace LeonAkasaka.UnionAir.Editor
             if (colonIdx < 0) return null;
 
             int start = colonIdx + 1;
-            while (start < json.Length && (json[start] == ' ' || json[start] == '\t')) start++;
+            // All whitespace, not just spaces and tabs: pretty-printed bodies put the value
+            // on the line after the colon, and stopping at the newline would read it as absent.
+            SkipWhitespace(json, ref start);
             if (start >= json.Length) return null;
 
             // Quoted string

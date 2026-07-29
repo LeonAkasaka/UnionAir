@@ -15,7 +15,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// This class lives in the optional InputSystem assembly and is only compiled
     /// when the com.unity.inputsystem package is present.
     /// </summary>
-    internal static class PlayModeInputHandler
+    internal static partial class PlayModeInputHandler
     {
         static Gamepad  _virtualGamepad;
         static Keyboard _virtualKeyboard;
@@ -28,6 +28,7 @@ namespace LeonAkasaka.UnionAir.Editor
         static float _setLeftTrigger;
         static float _setRightTrigger;
         static Vector2 _mousePosition;
+        static Vector2 _pendingScroll;
         static PointerSequence _activeSequence;
 
         const double PointerSequenceTimeoutSeconds = 5.0;
@@ -91,7 +92,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 RestResponse.SendError(response, "Not in Play mode.", 409);
                 return;
             }
-            if (!EnsureNoActiveSequence(response)) return;
+            if (!EnsureInputAvailable(response)) return;
 
             var body = RequestBodyReader.ReadString(request);
             var actionName = RequestBodyReader.GetString(body, "action");
@@ -127,11 +128,12 @@ namespace LeonAkasaka.UnionAir.Editor
             var mode = (RequestBodyReader.GetString(body, "mode") ?? "tap").ToLowerInvariant();
             if (mode == "tap")
             {
-                if (!TryPressFirstSupportedButton(action, out var pressed, out var target, out var error))
+                if (!TryResolveFirstSupportedButton(action, out var pressed, out var target, out var error))
                 {
                     RestResponse.SendError(response, error, 422);
                     return;
                 }
+                PressButton(target);
                 ReleaseButton(target);
 
                 RestResponse.Send(response,
@@ -139,11 +141,12 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             else if (mode == "press")
             {
-                if (!TryPressFirstSupportedButton(action, out var pressed, out var target, out var error))
+                if (!TryResolveFirstSupportedButton(action, out var pressed, out var target, out var error))
                 {
                     RestResponse.SendError(response, error, 422);
                     return;
                 }
+                PressButton(target);
                 AddHeldButton(action, pressed, target);
 
                 RestResponse.Send(response,
@@ -173,7 +176,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 RestResponse.SendError(response, "Not in Play mode.", 409);
                 return;
             }
-            if (!EnsureNoActiveSequence(response)) return;
+            if (!EnsureInputAvailable(response)) return;
 
             var body = RequestBodyReader.ReadString(request);
             var actionName = RequestBodyReader.GetString(body, "action");
@@ -204,18 +207,21 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (isVector2)
             {
-                var valueToken = GetArrayToken(body, "value");
-                if (string.IsNullOrEmpty(valueToken) || !TryParseVector2(valueToken, out var x, out var y))
+                if (!RequestBodyReader.TryGetFloatArray(body, "value", out var values, out _) ||
+                    values.Length != 2)
                 {
                     RestResponse.SendError(response, "Invalid value for Vector2. Expected [x, y].", 400);
                     return;
                 }
+                var x = values[0];
+                var y = values[1];
 
-                if (!TrySetVector2(action, x, y, out var result, out var error))
+                if (!TrySetVector2(action, x, y, out var result, out var touched, out var error))
                 {
                     RestResponse.SendError(response, error, 422);
                     return;
                 }
+                FlushDevices(touched, true);
 
                 var xi = x.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 var yi = y.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -230,11 +236,12 @@ namespace LeonAkasaka.UnionAir.Editor
                     return;
                 }
 
-                if (!TrySetAxis(action, value, out var result, out var error))
+                if (!TrySetAxis(action, value, out var result, out var touched, out var error))
                 {
                     RestResponse.SendError(response, error, 422);
                     return;
                 }
+                FlushDevices(touched, true);
 
                 var vi = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 RestResponse.Send(response,
@@ -266,11 +273,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 RestResponse.SendError(response, "The editor is paused; player frames are not advancing.", 409);
                 return;
             }
-            if (_activeSequence != null)
-            {
-                RestResponse.SendError(response, "Another pointer operation is in progress.", 409);
-                return;
-            }
+            if (!EnsureInputAvailable(response)) return;
 
             var body = RequestBodyReader.ReadString(ctx.Request);
 
@@ -309,9 +312,11 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
             }
 
+            // Presence, not validity: a malformed coordinate must be rejected by ScreenPointUtils
+            // rather than read as "no coordinate given" and released at the current position.
             var hasPositionField =
-                RequestBodyReader.GetObject(body, "position") != null ||
-                RequestBodyReader.GetObject(body, "normalizedPosition") != null;
+                RequestBodyReader.HasTopLevelField(body, "position") ||
+                RequestBodyReader.HasTopLevelField(body, "normalizedPosition");
             Vector2 position;
             int screenWidth = Screen.width;
             int screenHeight = Screen.height;
@@ -451,14 +456,26 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
-        // A pointer sequence relies on the player loop consuming its queued mouse events;
-        // perform/set call InputSystem.Update() directly, which would flush those events
-        // outside the player loop and make the game miss the click. Reject until it finishes.
-        static bool EnsureNoActiveSequence(HttpListenerResponse response)
+        // A pointer sequence and a replay both rely on the player loop consuming their queued
+        // events on specific frames; perform/set call InputSystem.Update() directly, which would
+        // flush those events outside the player loop and destroy the timing. Reject until done.
+        static bool EnsureInputAvailable(HttpListenerResponse response)
         {
-            if (_activeSequence == null) return true;
-            RestResponse.SendError(response, "A pointer operation is in progress.", 409);
-            return false;
+            if (_activeSequence != null)
+            {
+                RestResponse.SendError(response, "A pointer operation is in progress.", 409);
+                return false;
+            }
+
+            if (InputReplayService.IsActive)
+            {
+                RestResponse.SendError(response,
+                    "An input replay is in progress. Wait for GET /api/playmode/input/result to leave queued and running, or end it with POST /api/editor/stop.",
+                    409);
+                return false;
+            }
+
+            return true;
         }
 
         static void AdvancePhase(PointerSequence seq, int framesToWait)
@@ -665,7 +682,12 @@ namespace LeonAkasaka.UnionAir.Editor
             return _virtualMouse;
         }
 
-        static bool TryPressFirstSupportedButton(
+        /// <summary>
+        /// Finds the first binding of a Button action that a virtual device can drive, without
+        /// changing any device state. Resolution is separate from mutation so a replay can resolve
+        /// several actions and apply them together in one snapshot per device.
+        /// </summary>
+        static bool TryResolveFirstSupportedButton(
             InputAction action,
             out InputSimulationResult result,
             out ButtonTarget target,
@@ -679,7 +701,6 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 if (TryResolveButtonBinding(path, out target))
                 {
-                    PressButton(target);
                     result = new InputSimulationResult(path, target.ControlPath);
                     error = null;
                     return true;
@@ -746,8 +767,11 @@ namespace LeonAkasaka.UnionAir.Editor
             float x,
             float y,
             out InputSimulationResult result,
+            out VirtualDeviceMask touched,
             out string error)
         {
+            touched = VirtualDeviceMask.None;
+
             foreach (var binding in action.bindings)
             {
                 if (binding.isComposite || binding.isPartOfComposite) continue;
@@ -760,7 +784,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (ControlPathEquals(controlPath, "leftStick"))
                     {
                         _gamepadState.leftStick = new Vector2(x, y);
-                        QueueGamepadState();
+                        touched = VirtualDeviceMask.Gamepad;
                         result = new InputSimulationResult(path, "/UnionAirVirtualGamepad/leftStick");
                         error = null;
                         return true;
@@ -768,7 +792,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (ControlPathEquals(controlPath, "rightStick"))
                     {
                         _gamepadState.rightStick = new Vector2(x, y);
-                        QueueGamepadState();
+                        touched = VirtualDeviceMask.Gamepad;
                         result = new InputSimulationResult(path, "/UnionAirVirtualGamepad/rightStick");
                         error = null;
                         return true;
@@ -779,7 +803,8 @@ namespace LeonAkasaka.UnionAir.Editor
                     deviceName.ToLowerInvariant() == "mouse" &&
                     ControlPathEquals(controlPath, "scroll"))
                 {
-                    QueueMouseScroll(new Vector2(x, y));
+                    _pendingScroll = new Vector2(x, y);
+                    touched = VirtualDeviceMask.Mouse;
                     result = new InputSimulationResult(path, "/UnionAirVirtualMouse/scroll");
                     error = null;
                     return true;
@@ -795,8 +820,11 @@ namespace LeonAkasaka.UnionAir.Editor
             InputAction action,
             float value,
             out InputSimulationResult result,
+            out VirtualDeviceMask touched,
             out string error)
         {
+            touched = VirtualDeviceMask.None;
+
             foreach (var binding in action.bindings)
             {
                 if (binding.isComposite || binding.isPartOfComposite) continue;
@@ -809,7 +837,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (ControlPathEquals(controlPath, "leftTrigger"))
                     {
                         _setLeftTrigger = value;
-                        QueueGamepadState();
+                        touched = VirtualDeviceMask.Gamepad;
                         result = new InputSimulationResult(path, "/UnionAirVirtualGamepad/leftTrigger");
                         error = null;
                         return true;
@@ -817,7 +845,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (ControlPathEquals(controlPath, "rightTrigger"))
                     {
                         _setRightTrigger = value;
-                        QueueGamepadState();
+                        touched = VirtualDeviceMask.Gamepad;
                         result = new InputSimulationResult(path, "/UnionAirVirtualGamepad/rightTrigger");
                         error = null;
                         return true;
@@ -825,7 +853,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (ControlPathEquals(controlPath, "leftStick/x"))
                     {
                         _gamepadState.leftStick = new Vector2(value, _gamepadState.leftStick.y);
-                        QueueGamepadState();
+                        touched = VirtualDeviceMask.Gamepad;
                         result = new InputSimulationResult(path, "/UnionAirVirtualGamepad/leftStick/x");
                         error = null;
                         return true;
@@ -833,7 +861,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (ControlPathEquals(controlPath, "leftStick/y"))
                     {
                         _gamepadState.leftStick = new Vector2(_gamepadState.leftStick.x, value);
-                        QueueGamepadState();
+                        touched = VirtualDeviceMask.Gamepad;
                         result = new InputSimulationResult(path, "/UnionAirVirtualGamepad/leftStick/y");
                         error = null;
                         return true;
@@ -841,7 +869,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (ControlPathEquals(controlPath, "rightStick/x"))
                     {
                         _gamepadState.rightStick = new Vector2(value, _gamepadState.rightStick.y);
-                        QueueGamepadState();
+                        touched = VirtualDeviceMask.Gamepad;
                         result = new InputSimulationResult(path, "/UnionAirVirtualGamepad/rightStick/x");
                         error = null;
                         return true;
@@ -849,7 +877,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     if (ControlPathEquals(controlPath, "rightStick/y"))
                     {
                         _gamepadState.rightStick = new Vector2(_gamepadState.rightStick.x, value);
-                        QueueGamepadState();
+                        touched = VirtualDeviceMask.Gamepad;
                         result = new InputSimulationResult(path, "/UnionAirVirtualGamepad/rightStick/y");
                         error = null;
                         return true;
@@ -859,16 +887,21 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (TryParseDeviceControlPath(path, out deviceName, out controlPath) &&
                     deviceName.ToLowerInvariant() == "mouse")
                 {
+                    // Only the addressed component is written: a replay may set scroll/x and
+                    // scroll/y on the same frame, and they have to survive into the one snapshot
+                    // that frame queues rather than zeroing each other out.
                     if (ControlPathEquals(controlPath, "scroll/x"))
                     {
-                        QueueMouseScroll(new Vector2(value, 0f));
+                        _pendingScroll = new Vector2(value, _pendingScroll.y);
+                        touched = VirtualDeviceMask.Mouse;
                         result = new InputSimulationResult(path, "/UnionAirVirtualMouse/scroll/x");
                         error = null;
                         return true;
                     }
                     if (ControlPathEquals(controlPath, "scroll/y"))
                     {
-                        QueueMouseScroll(new Vector2(0f, value));
+                        _pendingScroll = new Vector2(_pendingScroll.x, value);
+                        touched = VirtualDeviceMask.Mouse;
                         result = new InputSimulationResult(path, "/UnionAirVirtualMouse/scroll/y");
                         error = null;
                         return true;
@@ -881,54 +914,72 @@ namespace LeonAkasaka.UnionAir.Editor
             return false;
         }
 
-        static void PressButton(ButtonTarget target)
+        /// <summary>
+        /// Records a press or release in the held-input dictionaries without queueing anything,
+        /// and reports which device now needs a snapshot.
+        /// </summary>
+        static VirtualDeviceMask MutateButton(ButtonTarget target, bool press)
         {
             switch (target.Device)
             {
                 case VirtualButtonDevice.Keyboard:
-                    Increment(_heldKeys, target.Key);
-                    QueueKeyboardState();
-                    break;
+                    if (press) Increment(_heldKeys, target.Key);
+                    else Decrement(_heldKeys, target.Key);
+                    return VirtualDeviceMask.Keyboard;
                 case VirtualButtonDevice.Gamepad:
-                    Increment(_heldGamepadButtons, target.GamepadButton);
-                    QueueGamepadState();
-                    break;
+                    if (press) Increment(_heldGamepadButtons, target.GamepadButton);
+                    else Decrement(_heldGamepadButtons, target.GamepadButton);
+                    return VirtualDeviceMask.Gamepad;
                 case VirtualButtonDevice.Mouse:
-                    Increment(_heldMouseButtons, target.MouseButton);
-                    QueueMouseState();
-                    break;
+                    if (press) Increment(_heldMouseButtons, target.MouseButton);
+                    else Decrement(_heldMouseButtons, target.MouseButton);
+                    return VirtualDeviceMask.Mouse;
+                default:
+                    return VirtualDeviceMask.None;
             }
         }
+
+        static void PressButton(ButtonTarget target)
+            => FlushDevices(MutateButton(target, true), true);
 
         static void ReleaseButton(ButtonTarget target)
+            => FlushDevices(MutateButton(target, false), true);
+
+        /// <summary>
+        /// Queues one whole-device snapshot per touched device, then optionally flushes.
+        /// </summary>
+        /// <remarks>
+        /// Separating mutation from flushing is what lets several events share one frame: each
+        /// snapshot is built from the current held-input dictionaries, so N mutations followed by
+        /// a single flush produce one merged state per device — which is how a chord reaches the
+        /// game as simultaneous presses rather than as a sequence that overwrites itself.
+        /// <para>
+        /// <paramref name="update"/> must be false for anything driven by the player loop. The
+        /// immediate endpoints call <c>InputSystem.Update()</c> to make their effect visible right
+        /// away, but doing so from inside the player loop's own input update would flush events
+        /// out of band and destroy the frame timing a replay or pointer sequence guarantees.
+        /// </para>
+        /// </remarks>
+        static void FlushDevices(VirtualDeviceMask mask, bool update)
         {
-            switch (target.Device)
-            {
-                case VirtualButtonDevice.Keyboard:
-                    Decrement(_heldKeys, target.Key);
-                    QueueKeyboardState();
-                    break;
-                case VirtualButtonDevice.Gamepad:
-                    Decrement(_heldGamepadButtons, target.GamepadButton);
-                    QueueGamepadState();
-                    break;
-                case VirtualButtonDevice.Mouse:
-                    Decrement(_heldMouseButtons, target.MouseButton);
-                    QueueMouseState();
-                    break;
-            }
+            if (mask == VirtualDeviceMask.None) return;
+
+            if ((mask & VirtualDeviceMask.Keyboard) != 0) QueueKeyboardStateNoUpdate();
+            if ((mask & VirtualDeviceMask.Gamepad) != 0) QueueGamepadStateNoUpdate();
+            if ((mask & VirtualDeviceMask.Mouse) != 0) QueueMouseStateNoUpdate();
+
+            if (update) InputSystem.Update();
         }
 
-        static void QueueKeyboardState()
+        static void QueueKeyboardStateNoUpdate()
         {
             var kb = EnsureVirtualKeyboard();
             var keys = new Key[_heldKeys.Count];
             _heldKeys.Keys.CopyTo(keys, 0);
             InputSystem.QueueStateEvent(kb, new KeyboardState(keys));
-            InputSystem.Update();
         }
 
-        static void QueueGamepadState()
+        static void QueueGamepadStateNoUpdate()
         {
             var gp = EnsureVirtualGamepad();
             ushort buttons = 0;
@@ -952,28 +1003,15 @@ namespace LeonAkasaka.UnionAir.Editor
             _gamepadState.leftTrigger = leftTriggerHeld ? 1f : _setLeftTrigger;
             _gamepadState.rightTrigger = rightTriggerHeld ? 1f : _setRightTrigger;
             InputSystem.QueueStateEvent(gp, _gamepadState);
-            InputSystem.Update();
         }
 
-        static void QueueMouseState()
-        {
-            QueueMouseStateNoUpdate();
-            InputSystem.Update();
-        }
-
-        static void QueueMouseScroll(Vector2 scroll)
-        {
-            var mouse = EnsureVirtualMouse();
-            InputSystem.QueueStateEvent(mouse, CreateMouseState(scroll));
-            InputSystem.Update();
-        }
-
-        // The pointer sequence relies on the player loop's own input update so that
-        // presses are observable via wasPressedThisFrame; it must not call InputSystem.Update().
+        // Scroll is a delta rather than a held state, so it is staged here and consumed by the
+        // next mouse snapshot. That keeps a scroll mergeable with buttons on the same frame.
         static void QueueMouseStateNoUpdate()
         {
             var mouse = EnsureVirtualMouse();
-            InputSystem.QueueStateEvent(mouse, CreateMouseState(default(Vector2)));
+            InputSystem.QueueStateEvent(mouse, CreateMouseState(_pendingScroll));
+            _pendingScroll = default(Vector2);
         }
 
         static MouseState CreateMouseState(Vector2 scroll)
@@ -1012,18 +1050,32 @@ namespace LeonAkasaka.UnionAir.Editor
 
         static List<string> ReleaseHeldButtons(InputAction action)
         {
+            List<string> released;
+            FlushDevices(MutateReleaseHeldButtons(action, out released), true);
+            return released;
+        }
+
+        /// <summary>
+        /// Releases the buttons an action currently holds without queueing anything, so that a
+        /// replay can merge the release with other events landing on the same frame.
+        /// </summary>
+        static VirtualDeviceMask MutateReleaseHeldButtons(InputAction action, out List<string> released)
+        {
+            released = new List<string>();
+            var mask = VirtualDeviceMask.None;
+
             var key = GetActionKey(action);
-            var released = new List<string>();
-            if (!_heldButtonsByAction.TryGetValue(key, out var held)) return released;
+            List<HeldButton> held;
+            if (!_heldButtonsByAction.TryGetValue(key, out held)) return mask;
 
             foreach (var button in held)
             {
-                ReleaseButton(button.Target);
+                mask |= MutateButton(button.Target, false);
                 released.Add(button.ControlPath);
             }
 
             _heldButtonsByAction.Remove(key);
-            return released;
+            return mask;
         }
 
         static void ResetVirtualInputState()
@@ -1032,6 +1084,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 AbortSequence("Play mode ended during the pointer sequence.", 409);
 
             _mousePosition = default(Vector2);
+            _pendingScroll = default(Vector2);
             _heldKeys.Clear();
             _heldGamepadButtons.Clear();
             _heldMouseButtons.Clear();
@@ -1069,43 +1122,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append("\"").Append(RestResponse.EscapeJson(values[i])).Append("\"");
             }
             return sb.ToString();
-        }
-
-        /// <summary>Extracts a raw "[...]" array token from a JSON body for the given key.</summary>
-        static string GetArrayToken(string json, string key)
-        {
-            if (string.IsNullOrEmpty(json)) return null;
-            var search = $"\"{key}\"";
-            int idx = json.IndexOf(search, System.StringComparison.Ordinal);
-            if (idx < 0) return null;
-            int colon = json.IndexOf(':', idx + search.Length);
-            if (colon < 0) return null;
-            int start = colon + 1;
-            while (start < json.Length && (json[start] == ' ' || json[start] == '\t')) start++;
-            if (start >= json.Length || json[start] != '[') return null;
-            int depth = 0, end = start;
-            while (end < json.Length)
-            {
-                if      (json[end] == '[') depth++;
-                else if (json[end] == ']') { depth--; if (depth == 0) break; }
-                end++;
-            }
-            return json.Substring(start, end - start + 1);
-        }
-
-        static bool TryParseVector2(string token, out float x, out float y)
-        {
-            x = 0; y = 0;
-            token = token.Trim();
-            if (!token.StartsWith("[") || !token.EndsWith("]")) return false;
-            var inner = token.Substring(1, token.Length - 2);
-            var parts = inner.Split(',');
-            if (parts.Length < 2) return false;
-            var inv = System.Globalization.CultureInfo.InvariantCulture;
-            return float.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, inv, out x)
-                && float.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, inv, out y)
-                && IsFinite(x)
-                && IsFinite(y);
         }
 
         static bool TryParseRequiredFloat(string json, string key, out float value)
@@ -1163,14 +1179,21 @@ namespace LeonAkasaka.UnionAir.Editor
         static bool ControlPathEquals(string actual, string expected)
             => string.Equals(actual, expected, System.StringComparison.OrdinalIgnoreCase);
 
-        static bool IsFinite(float value)
-            => !float.IsNaN(value) && !float.IsInfinity(value);
-
         enum VirtualButtonDevice
         {
             Keyboard,
             Gamepad,
             Mouse
+        }
+
+        /// <summary>Virtual devices whose state changed and therefore need a snapshot queued.</summary>
+        [System.Flags]
+        internal enum VirtualDeviceMask
+        {
+            None = 0,
+            Keyboard = 1 << 0,
+            Gamepad = 1 << 1,
+            Mouse = 1 << 2
         }
 
         readonly struct ButtonTarget

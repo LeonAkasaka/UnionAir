@@ -14,7 +14,14 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         static PlayModeInputInit()
         {
+            // Registering here is what tells the main assembly that replays are possible at all;
+            // without this package there is no driver and POST /api/editor/play rejects an
+            // 'inputs' list before entering Play mode.
+            InputReplayService.RegisterDriver(InputReplayDriver.Instance);
+
+            EditorApplication.playModeStateChanged -= OnPlayModeChanged;
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
+            AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
         }
 
@@ -23,6 +30,12 @@ namespace LeonAkasaka.UnionAir.Editor
             if (state == PlayModeStateChange.EnteredPlayMode ||
                 state == PlayModeStateChange.ExitingPlayMode)
                 PlayModeInputHandler.Cleanup();
+
+            // Starting an armed replay has to follow the cleanup above. Handler ordering for
+            // playModeStateChanged across assemblies is undefined, so sharing one handler is the
+            // only way to guarantee the cleanup cannot wipe state the replay just established.
+            if (state == PlayModeStateChange.EnteredPlayMode)
+                InputReplayService.OnEnteredPlayMode();
         }
 
         private static void OnBeforeAssemblyReload()

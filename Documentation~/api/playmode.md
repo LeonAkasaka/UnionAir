@@ -7,24 +7,111 @@ Base URL: `http://localhost:<port>/api/` (default port: **8765**). See the [API 
 
 ## POST /api/editor/play
 
-Enters Play mode (`EditorApplication.isPlaying = true`).
+Enters Play mode (`EditorApplication.isPlaying = true`). An optional `inputs` list schedules frame-accurate input that UnionAir replays from the first Play mode frame.
 
 > Can be called only when the Play Mode category is enabled.
 > If a domain reload occurs, the HTTP server will restart temporarily. Poll `GET /api/editor/status` and wait until `isPlaying: true`.
+> `inputs` requires the optional `com.unity.inputsystem` package.
 
-### Response
+Use `inputs` when a test needs input at a specific frame — a combo, a buffered input, or several buttons pressed on the same frame. The immediate endpoints (`perform`, `set`, `pointer`) act at the moment the request is processed, which no client can align to a player frame.
+
+### Request Body (JSON, optional)
+
+```json
+{
+  "inputs": [
+    { "frame": 30, "type": "perform", "action": "Player/Jump", "mode": "press"   },
+    { "frame": 33, "type": "perform", "action": "Player/Jump", "mode": "release" },
+    { "frame": 40, "type": "set",     "action": "Player/Move", "value": [1.0, 0.0] },
+    { "frame": 50, "type": "pointer", "mode": "press", "normalizedPosition": { "x": 0.5, "y": 0.5 } }
+  ]
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `inputs` | ❌ | Events to replay, in any frame order. Omit it and the endpoint behaves exactly as before |
+
+#### Event fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `frame` | ✅ | Non-negative offset in player frames from the first Play mode frame. This is the frame the **game observes** the input on: the frame where `wasPressedThisFrame` is true inside the game's `Update()` |
+| `type` | ✅ | `perform` (Button action), `set` (Axis/Vector2/Stick action), or `pointer` (virtual mouse) |
+| `action` | ✅* | `perform` and `set`: `Map/Action`, or a bare name that is unambiguous |
+| `mode` | ✅* | `perform`: `press` or `release`. `pointer`: `press`, `release`, or `move` |
+| `value` | ✅* | `set`: `[x, y]` for a Vector2/Stick action, or a finite number for an Axis action |
+| `position` / `normalizedPosition` / `origin` | ✅* | `pointer`: same meaning as in `POST /api/playmode/input/pointer`. Required for `press` and `move`, optional for `release` |
+| `button` | ❌ | `pointer`: `left` (default), `right`, or `middle` |
+
+*Required for the event types listed against them.
+
+`tap` and `holdFrames` are rejected in a replay. On a timeline the duration of a press is expressed by scheduling `release` on a later frame, so accepting them would give the same thing two spellings.
+
+### Timing
+
+Events scheduled on the same frame are applied in request order and then merged into a **single state snapshot per virtual device**, which is what makes a chord reach the game as simultaneous presses. Two keys pressed on frame 40 are observed by the game on the same frame, not one after the other.
+
+A `press` with no scheduled `release` stays held after the replay finishes, matching `POST /api/playmode/input/perform` with mode `press`.
+
+An event whose frame has already passed — because the player loop skipped frames — is applied on the next observed frame and reported with `late: true`. Nothing is ever silently dropped.
+
+Frame 0 is the raw first player frame, which runs before the game's own `Start()`. A game that enables its action maps in `Start()` or `OnEnable()` will not be listening yet, so schedule the first event a few frames in.
+
+For a reproducible run, open the target scene first with `POST /api/scenes/open`. Starting from a title screen makes the replay depend on a scene load whose duration varies between runs.
+
+### Validation
+
+The whole list is validated **before** Play mode is entered. A single invalid event returns `400` and nothing happens — no replay is armed and the Editor stays in Edit mode. Error messages name the offending entry:
+
+```json
+{ "error": "inputs[3]: 'action' is required for type 'perform'." }
+```
+
+This matters because entering Play mode causes a domain reload and the HTTP response is sent before the replay runs; a problem found later could not be reported to the caller at all.
+
+There is no cap on list length or frame range. `POST /api/editor/stop` ends a runaway replay.
+
+### Response — 200, without `inputs`
 
 ```json
 { "playing": true, "note": "Domain reload may occur. Poll GET /api/editor/status until isPlaying is true." }
 ```
 
+### Response — 202, with `inputs`
+
+```json
+{
+  "playing": true,
+  "replay": {
+    "id": "ir-20260729-091808-721bae",
+    "state": "queued",
+    "eventCount": 4,
+    "statusUrl": "/api/playmode/input/result?id=ir-20260729-091808-721bae"
+  },
+  "note": "Poll GET /api/playmode/input/result until state leaves queued and running."
+}
+```
+
+The response is sent before Play mode is requested, because entering it starts a domain reload that would otherwise drop the connection before the caller learned the replay id. Poll `GET /api/playmode/input/result` for the outcome.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | An `inputs` entry is invalid (the message names its index), `inputs` is present but empty, or the `com.unity.inputsystem` package is missing |
+| 403 | Play Mode category is disabled |
+| 409 | `inputs` was supplied while already in Play mode, or while another replay is active |
+| 500 | The replay could not be written to `Library/UnionAir`. Play mode is not entered, because a replay that cannot be persisted cannot survive the domain reload |
+
 ---
 
 ## POST /api/editor/stop
 
-Exits Play mode (`EditorApplication.isPlaying = false`).
+Exits Play mode (`EditorApplication.isPlaying = false`), and abandons an input replay if one is armed or running.
 
 > Can be called only when the Play Mode category is enabled.
+> This is the way out of a runaway replay. A replay that is armed but has not started yet is withdrawn along with the pending Play mode request, so stopping immediately after `POST /api/editor/play` does not leave Play mode starting a moment later.
 
 ### Response
 
@@ -208,7 +295,7 @@ Release:
 | 400 | `action` is missing, `mode` is invalid, `value` was provided, or the action is not a Button action |
 | 403 | Play Mode category is disabled |
 | 404 | Action not found |
-| 409 | Unity Editor is not in Play mode, a pointer operation is in progress, or a bare action name matches multiple maps. Ambiguous responses include `candidates` |
+| 409 | Unity Editor is not in Play mode, a pointer operation or an input replay is in progress, or a bare action name matches multiple maps. Ambiguous responses include `candidates` |
 | 422 | Button action exists, but no supported Keyboard/Gamepad/Mouse/Pointer Button binding can be simulated |
 
 ---
@@ -314,7 +401,7 @@ Mouse scroll uses the Input System's delta-control semantics: each `set` call qu
 | 400 | `action` is missing, `value` is malformed or missing, or the action is a Button action |
 | 403 | Play Mode category is disabled |
 | 404 | Action not found |
-| 409 | Unity Editor is not in Play mode, a pointer operation is in progress, or a bare action name matches multiple maps. Ambiguous responses include `candidates` |
+| 409 | Unity Editor is not in Play mode, a pointer operation or an input replay is in progress, or a bare action name matches multiple maps. Ambiguous responses include `candidates` |
 | 422 | Action exists, but no supported direct Gamepad or Mouse scroll Axis/Vector2 binding can be set |
 
 ---
@@ -379,9 +466,85 @@ Simulates a mouse click, press, release, or move at a screen coordinate through 
 |--------|-------|
 | 400 | Both or neither of `position`/`normalizedPosition` given; invalid `origin`, `mode`, `button`, or `holdFrames` |
 | 403 | Play Mode category is disabled |
-| 409 | Not in Play mode, the editor is paused, another pointer operation is in progress, or Play mode ended during the sequence |
+| 409 | Not in Play mode, the editor is paused, another pointer operation or an input replay is in progress, or Play mode ended during the sequence |
 | 422 | Pixel `position` is outside the screen |
 | 500 | Player frames did not advance within 5 seconds |
+
+---
+
+## GET /api/playmode/input/result
+
+Returns the input replay scheduled by `POST /api/editor/play`: the current one while it runs, otherwise the most recently finished one.
+
+> In the always-enabled **Read** category, so it can be polled regardless of the Play Mode category setting and during a test run.
+> UnionAir retains only the current replay and the latest completed result.
+
+This endpoint is also the completion signal. Without it a client cannot tell when the replay finished, and therefore cannot tell when inspecting the game's state is meaningful.
+
+### Query Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `id` | ― | Return this replay specifically. Use it when several replays run in sequence and `latest` could have moved on |
+
+### Response
+
+```json
+{
+  "state": "completed",
+  "events": [
+    { "index": 0, "frame": 30, "late": false, "unityFrame": 32, "status": "applied", "control": "/UnionAirVirtualKeyboard/space", "error": null },
+    { "index": 1, "frame": 33, "late": false, "unityFrame": 35, "status": "applied", "control": "/UnionAirVirtualKeyboard/space", "error": null }
+  ],
+  "lateCount": 0,
+  "failedCount": 0,
+  "abortReason": null,
+  "abortCode": null,
+  "id": "ir-20260729-091808-721bae",
+  "eventCount": 2,
+  "appliedCount": 2,
+  "baseFrame": 2,
+  "lastObservedFrame": 33,
+  "updateMode": "dynamic",
+  "sessionId": "ab453ee8",
+  "requestedAt": "2026-07-29T09:18:08.0000000Z",
+  "startedAt": "2026-07-29T09:18:11.0000000Z",
+  "finishedAt": "2026-07-29T09:18:11.2000000Z",
+  "durationSeconds": 0.2,
+  "lifecycleGenerationAtRequest": 12,
+  "lifecycleGenerationAtFinish": 13
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `state` | `queued` (armed, waiting for Play mode), `running`, `completed`, or `aborted` |
+| `events[].index` | Index in the request array; the caller's handle on the event |
+| `events[].frame` | The frame the event was **actually observed on**, relative to `baseFrame`. `null` while pending. Compare it against the requested frame to prove the schedule held |
+| `events[].unityFrame` | Absolute `Time.frameCount` when the event was applied, for correlating with `GET /api/editor/logs` |
+| `events[].late` | Whether the event was applied later than its scheduled frame |
+| `events[].status` | `pending`, `applied`, or `failed` |
+| `events[].control` | Resolved control path, for example `/UnionAirVirtualKeyboard/space` |
+| `events[].error` | Why this event failed, or `null` |
+| `lateCount` / `failedCount` | Totals across the replay |
+| `abortCode` | `cancelled`, `playModeNeverEntered`, `framesStalled`, `playModeExited`, `domainReload`, `driverUnavailable`, or `driverRefused`. `null` when not aborted |
+| `abortReason` | Human-readable sentence for `abortCode` |
+| `baseFrame` | `Time.frameCount` of the first observed player frame, which relative frame 0 is anchored to |
+| `updateMode` | Input System update mode the replay ran under: `dynamic` or `fixed` |
+
+### Notes
+
+**A failed event does not abort the replay.** Stopping partway would strand whatever input is already held and lose the frames that would have worked, so a failure is recorded and the replay continues. This means `state: "completed"` can coexist with every event having failed — check `failedCount`, not just `state`.
+
+A replay is aborted if it is still running when Play mode ends, when a domain reload interrupts it (a script recompile during Play mode destroys the frame timing it exists to guarantee), or when player frames stop advancing for five seconds. The stall detector allows a longer grace for the very first frame, because scene initialization and shader warmup can hold the frame counter still for seconds after Play mode starts. Pausing the Editor suspends the stall deadline entirely, so a replay can be single-stepped through with `POST /api/editor/pause` and `POST /api/editor/step`.
+
+With the Input System set to `ProcessEventsInFixedUpdate`, a player frame can run zero or several fixed updates, so a frame is a looser unit. Events are still applied on the first input update of each player frame, and any slippage is reported through `late`.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 404 | No replay has been recorded, or `id` names one that is no longer retained |
 
 ---
 

@@ -106,7 +106,10 @@ namespace LeonAkasaka.UnionAir.Editor
 
         [UnionAirEndpoint("POST", "play",
             Category = UnionAirEndpointCategories.PlayMode,
-            Summary = "Requests entering Play mode.")]
+            Summary = "Requests entering Play mode. An optional 'inputs' list schedules frame-accurate input, replayed from the first Play mode frame; 'frame' is the frame the game observes the input on. The whole list is validated before Play mode is entered, so an invalid entry returns 400 and nothing happens. With 'inputs' the response is 202 and carries the replay id to poll through GET /api/playmode/input/result; without it the response is unchanged. Requires the com.unity.inputsystem package.",
+            OptionalBody = new string[] { "inputs" },
+            RequestExample = "{\"inputs\":[{\"frame\":5,\"type\":\"perform\",\"action\":\"Player/Jump\",\"mode\":\"press\"},{\"frame\":8,\"type\":\"perform\",\"action\":\"Player/Jump\",\"mode\":\"release\"}]}",
+            ResponseExample = "{\"playing\":true,\"replay\":{\"id\":\"ir-20260729-083741-cb2984\",\"state\":\"queued\",\"eventCount\":2,\"statusUrl\":\"/api/playmode/input/result?id=ir-20260729-083741-cb2984\"},\"note\":\"Poll GET /api/playmode/input/result until state leaves queued and running.\"}")]
         private void Play(UnionAirRequestContext ctx)
             => new EditorPlayHandler().Handle(ctx.Request, ctx.Response);
 
