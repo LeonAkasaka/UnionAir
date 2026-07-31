@@ -9,8 +9,42 @@ UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making i
 
 ## Requirements
 
-- Unity **6000.0** or later
-- Unity Test Framework (optional; required only for the Test Runner API)
+- Unity **2022.3** or later
+- Unity Test Framework **1.4.0** or later (optional; required only for the Test Runner API)
+- Input System `com.unity.inputsystem` (optional; required only for Play Mode input actions and input replay). Unity must also have **Active Input Handling** set to *Input System Package* or *Both*.
+
+### Supported versions
+
+| Unity | Support level |
+| --- | --- |
+| **6000.0 LTS and later** | **Fully supported.** Primary target; all features are developed and verified here. Baseline is 6000.0.80f1. |
+| **2022.3 LTS** | **Supported.** Builds and core behavior are verified (2022.3.62f2). |
+| 2023.x | Best effort. Expected to work and shares the same code paths, but is not verified on every change. |
+
+Unity 6 is the primary target. 2022.3 LTS is kept working deliberately; issues reported against it are accepted.
+
+#### Test Runner and Unity Test Framework
+
+The Test Runner API is delivered as a separate assembly that is compiled only when
+`com.unity.test-framework` **1.4.0 or later** is present. Version 1.4.0 introduced the
+result-saving and run-cancellation APIs that UnionAir depends on.
+
+Unity 6000.0 ships a new enough version by default. Unity 2022.3 and 2023.1 do **not** —
+they default to 1.1.33 and 1.3.9 respectively. On those versions the Test Runner assembly is
+skipped entirely, so **no compile errors occur**, but the `/api/tests` and `/api/test-runs`
+endpoints and the Test Runner category are absent.
+
+To use the Test Runner API on 2022.3 or 2023.x, request a compatible version in your
+project's `Packages/manifest.json`:
+
+```json
+"dependencies": {
+  "com.unity.test-framework": "1.4.6"
+}
+```
+
+UnionAir does not declare this dependency itself, because the Test Runner category is
+disabled by default and upgrading the package should stay the project's decision.
 
 ## Installation
 
@@ -54,7 +88,7 @@ Add the dependency to `Packages/manifest.json`:
 | **Asset Write** | Prefabs, materials, asset files, AssetDatabase refresh, compilation requests | Disabled by default |
 | **Play Mode** | Enter/exit/pause/step play mode, Input System actions, and Canvas UI interaction | Disabled by default |
 | **Editor Actions** | Selection, object ping, asset open, and Unity Editor menu item execution | Disabled by default |
-| **Test Runner** | Discover, execute, monitor, cancel, and download results for EditMode and PlayMode tests | Disabled by default; available when Unity Test Framework is installed |
+| **Test Runner** | Discover, execute, monitor, cancel, and download results for EditMode and PlayMode tests | Disabled by default; available when Unity Test Framework 1.4.0+ is installed |
 | **Profiling** | ProfilerRecorder metrics, NDJSON samples, Profiler raw captures, and memory snapshots | Disabled by default |
 
 > Compilation results are structured, with `severity`, `code`, project-relative `file`, `line`, and `column` per diagnostic, and survive the domain reload that a successful compilation triggers. Compilations started from an IDE are recorded too. See **[The Compile-and-Fix Loop](Documentation~/api/compile.md#the-compile-and-fix-loop)**.

@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Lowered the minimum supported Editor version from `6000.0` to `2022.3`. Unity 6000.0 LTS and later remains the primary target and the only version every change is verified against; 2022.3 LTS is now a supported version whose builds and core behavior are verified; 2023.x is best effort. Nothing in the package needed a Unity version guard — the entire codebase already compiled on 2022.3 apart from the Test Runner assembly.
+- The Test Runner assembly now requires `com.unity.test-framework` **1.4.0 or later** rather than merely requiring the package to be present. UnionAir uses `TestRunnerApi.RegisterTestCallback`, `SaveResultToFile`, and `CancelTestRun`, all of which were added in 1.4.0. Unity 2022.3 and 2023.1 default to 1.1.33 and 1.3.9, where those APIs do not exist and the assembly previously failed to compile with three `CS0117` errors. The assembly is now skipped on versions below 1.4.0, so such projects compile cleanly; the `/api/tests` and `/api/test-runs` endpoints and the Test Runner category are simply absent. Add `"com.unity.test-framework": "1.4.6"` to a project's `Packages/manifest.json` to enable them. UnionAir does not declare the dependency itself, because the Test Runner category is disabled by default and the upgrade should stay the project's decision.
+
 ### Added
 
 - `POST /api/editor/play` now accepts an optional `inputs` list that schedules frame-accurate input, replayed from the first Play mode frame. `frame` means the frame the game observes the input on — the frame where `wasPressedThisFrame` is true inside the game's `Update()` — not the frame an event was queued. Events sharing a frame are merged into a single state snapshot per virtual device, so chords reach the game as simultaneous presses. Without `inputs` the endpoint is unchanged; with it the response is `202` and carries the replay id. Requires the `com.unity.inputsystem` package.

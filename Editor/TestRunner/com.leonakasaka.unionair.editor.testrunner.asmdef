@@ -15,13 +15,13 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [
-        "UNION_AIR_TEST_FRAMEWORK"
+        "UNION_AIR_TEST_FRAMEWORK_1_4"
     ],
     "versionDefines": [
         {
             "name": "com.unity.test-framework",
-            "expression": "",
-            "define": "UNION_AIR_TEST_FRAMEWORK"
+            "expression": "1.4.0",
+            "define": "UNION_AIR_TEST_FRAMEWORK_1_4"
         }
     ],
     "noEngineReferences": false

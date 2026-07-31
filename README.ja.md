@@ -11,8 +11,42 @@ UnionAir は Unity Editor の状態をシンプルな **REST API**(HTTP)とし�
 
 ## 動作要件
 
-- Unity **6000.0** 以降
-- Unity Test Framework(任意。Test Runner API を使う場合のみ必要)
+- Unity **2022.3** 以降
+- Unity Test Framework **1.4.0** 以降(任意。Test Runner API を使う場合のみ必要)
+- Input System `com.unity.inputsystem`(任意。Play Mode の入力アクションと入力リプレイを使う場合のみ必要)。あわせて Unity の **Active Input Handling** を *Input System Package* または *Both* に設定する必要があります。
+
+### サポート対象バージョン
+
+| Unity | サポート水準 |
+| --- | --- |
+| **6000.0 LTS 以降** | **全面対応。** 最優先ターゲットであり、全機能をこの環境で開発・検証しています。基準は 6000.0.80f1 です。 |
+| **2022.3 LTS** | **対応。** ビルドと基本的な動作を検証しています(2022.3.62f2)。 |
+| 2023.x | ベストエフォート。同じコード経路を通るため動作する見込みですが、変更ごとの検証は行っていません。 |
+
+Unity 6 が最優先ターゲットです。2022.3 LTS は意図的に維持しており、同バージョンに対する不具合報告も受け付けます。
+
+#### Test Runner と Unity Test Framework について
+
+Test Runner API は独立したアセンブリとして提供され、`com.unity.test-framework` の
+**1.4.0 以降**が存在する場合にのみコンパイルされます。UnionAir が依存している
+結果保存 API とテスト実行キャンセル API が 1.4.0 で追加されたためです。
+
+Unity 6000.0 は既定で十分新しいバージョンを同梱していますが、Unity 2022.3 と 2023.1 は
+既定がそれぞれ 1.1.33 / 1.3.9 であり、**要件を満たしません**。これらのバージョンでは
+Test Runner アセンブリ自体がスキップされるため **コンパイルエラーは発生しません**が、
+`/api/tests` と `/api/test-runs` のエンドポイント、および Test Runner カテゴリは利用できません。
+
+2022.3 / 2023.x で Test Runner API を使う場合は、プロジェクトの
+`Packages/manifest.json` で対応バージョンを指定してください。
+
+```json
+"dependencies": {
+  "com.unity.test-framework": "1.4.6"
+}
+```
+
+UnionAir 自身はこの依存を宣言していません。Test Runner カテゴリは既定で無効であり、
+パッケージの更新はプロジェクト側の判断に委ねるべきだと考えているためです。
 
 ## インストール
 
@@ -56,7 +90,7 @@ https://github.com/LeonAkasaka/UnionAir.git
 | **Asset Write** | プレハブ、マテリアル、アセットファイル、AssetDatabase リフレッシュ、コンパイル要求 | 既定で無効 |
 | **Play Mode** | Play モードの開始/終了/一時停止/ステップ、Input System アクション、Canvas UI 操作 | 既定で無効 |
 | **Editor Actions** | 選択、オブジェクトの ping、アセットのオープン、Unity Editor メニュー項目の実行 | 既定で無効 |
-| **Test Runner** | EditMode / PlayMode テストの発見、実行、監視、キャンセル、結果ダウンロード | 既定で無効。Unity Test Framework 導入時のみ利用可能 |
+| **Test Runner** | EditMode / PlayMode テストの発見、実行、監視、キャンセル、結果ダウンロード | 既定で無効。Unity Test Framework 1.4.0 以降の導入時のみ利用可能 |
 | **Profiling** | ProfilerRecorder metric、NDJSON sample、Profiler raw capture、memory snapshot | 既定で無効 |
 
 > コンパイル結果は構造化されており、診断ごとに `severity`、`code`、プロジェクト相対の `file`、`line`、`column` を持ち、コンパイル成功時の domain reload をまたいで保持されます。IDE から開始されたコンパイルも記録されます。**[コンパイルと修正のループ](Documentation~/api/compile.ja.md#コンパイルと修正のループ)** を参照してください。

@@ -31,7 +31,7 @@ https://github.com/LeonAkasaka/UnionAir.git
 
 パッケージをプロジェクトの `Packages/com.leonakasaka.unionair/` フォルダに配置した場合は、埋め込みパッケージとして Unity が自動検出します。
 
-Test Runner API は任意機能です。プロジェクトに Unity Test Framework パッケージ(`com.unity.test-framework`)が導入されている場合のみ表示され、UnionAir EditorWindow で **Test Runner** カテゴリを明示的に有効化するまで無効です。
+Test Runner API は任意機能です。プロジェクトに Unity Test Framework パッケージ(`com.unity.test-framework`)の **1.4.0 以降**が導入されている場合のみ表示され、UnionAir EditorWindow で **Test Runner** カテゴリを明示的に有効化するまで無効です。Unity 2022.3 と 2023.1 は既定でより古いバージョン(それぞれ 1.1.33 / 1.3.9)を使うため、この API は利用できません。詳細は [サポート対象バージョン](../README.ja.md#サポート対象バージョン) を参照してください。
 
 **Profiling** カテゴリも既定で無効です。AI向けのmetric要約、frame単位NDJSON、Unity Profiler raw capture、Memory Profiler snapshotを提供します。詳細は[Profiling API](api/profiling.ja.md)を参照してください。
 

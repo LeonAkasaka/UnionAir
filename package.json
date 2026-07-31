@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "displayName": "UnionAir - Unity REST Bridge",
   "description": "Exposes Unity Editor state (hierarchy, GameObjects, assets) as a REST API for external tools including LLM MCP bridges, development bots, and CI tooling.",
-  "unity": "6000.0",
+  "unity": "2022.3",
   "type": "tool",
   "license": "MIT",
   "documentationUrl": "https://github.com/LeonAkasaka/UnionAir/blob/main/Documentation~/index.md",
