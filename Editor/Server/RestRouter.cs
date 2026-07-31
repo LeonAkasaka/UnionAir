@@ -28,9 +28,15 @@ namespace LeonAkasaka.UnionAir.Editor
             var request = context.Request;
             var response = context.Response;
 
+            if (!RestRequestPolicy.IsOriginAllowed(request.Headers.GetValues("Origin")))
+            {
+                RestResponse.SendError(response,
+                    "Browser-originated requests are not allowed.", 403);
+                return true;
+            }
+
             if (request.HttpMethod == "OPTIONS")
             {
-                RestResponse.AddCorsHeaders(response);
                 response.StatusCode = 204;
                 return true;
             }
@@ -56,6 +62,15 @@ namespace LeonAkasaka.UnionAir.Editor
                             ? descriptor.CategoryDefinition.DisplayName + " category is disabled."
                             : descriptor.Error,
                         403);
+                    return true;
+                }
+
+                if (!RestRequestPolicy.HasSupportedContentType(
+                        request.HasEntityBody,
+                        request.ContentType))
+                {
+                    RestResponse.SendError(response,
+                        "Requests with a body must use Content-Type: application/json.", 415);
                     return true;
                 }
 
@@ -162,5 +177,34 @@ namespace LeonAkasaka.UnionAir.Editor
             return queryValue == "true" || queryValue == "1";
         }
 
+    }
+
+    /// <summary>
+    /// Defines transport-level request rules that are enforced before an endpoint handler runs.
+    /// Kept independent from <see cref="HttpListenerRequest"/> so the policy can be unit tested.
+    /// </summary>
+    internal static class RestRequestPolicy
+    {
+        internal static bool IsOriginAllowed(string[] originHeaderValues)
+            => originHeaderValues == null;
+
+        internal static bool HasSupportedContentType(bool hasEntityBody, string contentType)
+        {
+            if (!hasEntityBody)
+                return true;
+
+            if (string.IsNullOrWhiteSpace(contentType))
+                return false;
+
+            var parameterIndex = contentType.IndexOf(';');
+            var mediaType = parameterIndex >= 0
+                ? contentType.Substring(0, parameterIndex)
+                : contentType;
+
+            return string.Equals(
+                mediaType.Trim(),
+                "application/json",
+                System.StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

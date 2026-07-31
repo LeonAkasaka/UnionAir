@@ -6,9 +6,11 @@
 
 ベース URL: `http://localhost:<port>/api/`(デフォルトポート: **8765**)
 
-エンドポイントに別の media type の記載がない限り、レスポンスは `Content-Type: application/json; charset=utf-8` で返されます。NUnit 結果のダウンロードは `application/xml` です。すべてのレスポンスは CORS ヘッダー(`Access-Control-Allow-Origin: *`)を含みます。
+エンドポイントに別の media type の記載がない限り、レスポンスは `Content-Type: application/json; charset=utf-8` で返されます。NUnit 結果のダウンロードは `application/xml` です。レスポンスには CORS を許可するヘッダーが含まれません。`Origin` ヘッダーを持つリクエストは `403` で拒否されるため、ブラウザの `fetch` と XMLHttpRequest は既定で非対応です。ローカル CLI や連携クライアントは `Origin` を送信しないでください。
 JSON レスポンス内の文字列フィールドは制御文字を含め一貫してエスケープされます。
 非有限の浮動小数点値(`NaN`、`Infinity`、`-Infinity`)は JSON 数値フィールドでは `null` として出力されます。
+
+空でないボディを持つすべてのリクエストには `Content-Type: application/json` が必要です。`charset=utf-8` などの media type parameter は使用できます。それ以外または未指定の Content-Type は `415` を返します。空のリクエストに Content-Type は不要です。
 
 ボディが任意または未使用の POST エンドポイントは空のボディを受け付けます。クライアントは空の POST に `Content-Length: 0` を付ける必要があります。`Content-Length` と `Transfer-Encoding` のどちらもない POST は、UnionAir に到達する前に Windows の `HttpListener` によって `411 Length Required` で拒否される場合があります。標準的な HTTP ライブラリと `curl -X POST` は通常、長さゼロのヘッダーを自動的に追加します。
 

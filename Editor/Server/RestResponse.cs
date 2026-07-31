@@ -8,12 +8,12 @@ using System.Threading;
 namespace LeonAkasaka.UnionAir.Editor
 {
     /// <summary>
-    /// Helper for writing JSON HTTP responses with CORS headers.
+    /// Helper for writing HTTP responses.
     /// </summary>
     public static class RestResponse
     {
         /// <summary>
-        /// Writes a JSON response with UTF-8 encoding and CORS headers.
+        /// Writes a JSON response with UTF-8 encoding.
         /// </summary>
         /// <param name="response">HTTP response to write to.</param>
         /// <param name="json">Complete JSON payload to send.</param>
@@ -22,7 +22,6 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             response.StatusCode = statusCode;
             response.ContentType = "application/json; charset=utf-8";
-            AddCorsHeaders(response);
 
             var bytes = Encoding.UTF8.GetBytes(json);
             response.ContentLength64 = bytes.Length;
@@ -30,7 +29,7 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// Writes a binary response with the supplied MIME type and CORS headers.
+        /// Writes a binary response with the supplied MIME type.
         /// </summary>
         /// <param name="response">HTTP response to write to.</param>
         /// <param name="data">Binary response body.</param>
@@ -39,7 +38,6 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             response.StatusCode = 200;
             response.ContentType = mimeType;
-            AddCorsHeaders(response);
 
             response.ContentLength64 = data.Length;
             response.OutputStream.Write(data, 0, data.Length);
@@ -126,7 +124,6 @@ namespace LeonAkasaka.UnionAir.Editor
                     {
                         response.StatusCode = 200;
                         response.ContentType = mimeType;
-                        AddCorsHeaders(response);
                         response.AddHeader("Content-Disposition",
                             $"attachment; filename=\"{EscapeHeaderFileName(downloadName)}\"");
                         response.ContentLength64 = contentLength;
@@ -219,14 +216,13 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// Adds the CORS headers used by all UnionAir responses.
+        /// Retained for source compatibility. UnionAir no longer emits CORS headers.
         /// </summary>
-        /// <param name="response">HTTP response to modify.</param>
+        /// <param name="response">HTTP response left unchanged.</param>
+        [System.Obsolete(
+            "UnionAir no longer emits CORS headers. Browser-originated requests are rejected by the server.")]
         public static void AddCorsHeaders(HttpListenerResponse response)
         {
-            response.AddHeader("Access-Control-Allow-Origin", "*");
-            response.AddHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, PATCH, OPTIONS");
-            response.AddHeader("Access-Control-Allow-Headers", "Content-Type");
         }
 
         /// <summary>

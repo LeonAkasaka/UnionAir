@@ -104,8 +104,9 @@ Read this before enabling any write category:
 
 - The server binds to **`localhost` only** — it is not reachable from other machines on the network.
 - There is **no authentication**. Any process running on the same machine can call every enabled endpoint.
-- Responses include `Access-Control-Allow-Origin: *`, so **any web page open in a browser on the same machine** can also call the API and read the responses (scene hierarchy, assets, logs, screenshots).
-- Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, Editor Actions, Test Runner, and Profiling categories are opt-in; enabling them exposes state-changing operations and diagnostic artifacts — including arbitrary project test code, heap snapshots, Unity Editor menu execution, and asset deletion — to any local client or browser origin. Enable them only when every local client (and browser tab) is trusted.
+- Requests carrying an `Origin` header are rejected before routing, and responses do not opt into CORS. Browser `fetch` and XMLHttpRequest clients are therefore unsupported by default; local CLI and integration clients that omit `Origin` continue to work.
+- Requests with a non-empty body must use `Content-Type: application/json`. Empty POST requests remain valid without a content type.
+- Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, Editor Actions, Test Runner, and Profiling categories are opt-in; enabling them exposes state-changing operations and diagnostic artifacts — including arbitrary project test code, heap snapshots, Unity Editor menu execution, and asset deletion — to any local process. Enable them only when every local client is trusted.
 
 ## Quick Example
 
@@ -147,7 +148,7 @@ To use with an LLM MCP client, run a separate Node.js MCP bridge that calls thes
 - Automated coverage is limited to the EditMode tests in `Tests/Editor`, which exercise only Editor-independent logic; compilation, domain reloads, Play mode, and the HTTP server are verified by hand, and there is no CI. See [Tests](CONTRIBUTING.md#tests) for how to run them.
 - Request-body JSON parsing is a lightweight custom reader; deeply nested or unusual JSON bodies may hit edge cases.
 - JSON response serialization is hand-written per endpoint; a shared serializer is a planned refactor.
-- The wildcard CORS policy (`Access-Control-Allow-Origin: *`) may be tightened in a future release.
+- Browser-originated `fetch` and XMLHttpRequest clients are not supported; there is currently no configurable Origin allowlist.
 
 ## Contributing
 

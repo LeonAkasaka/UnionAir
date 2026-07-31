@@ -44,6 +44,8 @@ public class MyToolController
 
 受信リクエストの確認には `UnionAirRequestContext.Request`、ルートテンプレートのパラメータには `UnionAirRequestContext.RouteValues`、レスポンスの書き込みには `UnionAirRequestContext.Response` を使用します。
 
+カスタムエンドポイントには UnionAir の transport policy が適用されます。`Origin` ヘッダーを持つリクエストは controller 実行前に拒否されるため、ブラウザの `fetch` と XMLHttpRequest は既定で非対応です。空でないボディを持つリクエストには `Content-Type: application/json` が必要です。空のリクエストに Content-Type は不要です。
+
 `RequestBodyReader` は、UnionAir の built-in ハンドラーと同じ軽量 JSON ヘルパーを提供します:
 
 ```csharp
@@ -56,12 +58,14 @@ if (!RequestBodyReader.TryGetStringArray(body, "tags", out var tags))
 
 `TryGetStringArray` は top-level key のみを読み取り、key がない場合は空配列を返し、存在する値が有効な文字列配列でない場合は `false` を返します。
 
-`RestResponse` は built-in エンドポイントと同じ Content-Type、UTF-8 エンコーディング、CORS ヘッダー、エラー形式で JSON レスポンスを書き込みます:
+`RestResponse` は built-in エンドポイントと同じ Content-Type、UTF-8 エンコーディング、エラー形式で JSON レスポンスを書き込みます。CORS ヘッダーは追加しません:
 
 ```csharp
 RestResponse.Send(ctx.Response, "{\"status\":\"ok\"}");
 RestResponse.SendError(ctx.Response, "Missing required field: target", 400);
 ```
+
+`RestResponse.AddCorsHeaders` はソース互換性のため obsolete な no-op として残されています。ブラウザアクセスを必要とするカスタムコントローラは UnionAir のリクエストポリシーを迂回せず、独自の transport を実装して保護する必要があります。
 
 後で完了するhandlerはreturn前に`ctx.Defer()`を呼び、最終的に自分でresponseをcloseする必要があります。deferしたbackground I/Oでは.NET response streamを使用できますが、worker threadからUnity APIを呼び出してはいけません。
 

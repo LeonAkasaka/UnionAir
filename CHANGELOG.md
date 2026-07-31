@@ -48,6 +48,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Closed a cross-site request forgery exposure in the unauthenticated localhost bridge. Requests carrying an `Origin` header are now rejected before routing, responses no longer opt into wildcard CORS, and non-empty request bodies require `Content-Type: application/json`. Origin-free local CLI and integration clients remain compatible, including empty POST requests without a content type.
+
 - `POST /api/assets/reimport` now rejects loaded scenes with a structured `409 Conflict` before calling `AssetDatabase.ImportAsset()`, preventing that reimport from opening Unity's interactive Reload dialog and blocking subsequent UnionAir requests. Recursive folder imports report all loaded scene conflicts in Scene Manager order.
 - `POST /api/editor/refresh` and `POST /api/compile` with `refresh: true` now detect external changes to loaded scene files from SHA-256 baselines retained across domain reloads. They refuse to call `AssetDatabase.Refresh()` and report the loaded scenes instead of allowing Unity's interactive Reload dialog to block the API.
 - Loaded-scene disk baselines are now bootstrapped through the background-safe Editor update pump after scene restoration on a cold Editor start. Initialization no longer prunes persisted baselines from an incomplete early scene list, readiness and file-read retries are bounded, and a failed scene-open/save baseline records one actionable warning instead of silently leaving the scene untracked.

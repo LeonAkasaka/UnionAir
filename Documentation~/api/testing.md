@@ -157,6 +157,6 @@ Any Unity Test Framework run, including one started in the Test Runner Window, l
 
 - `GET /api/health`, `GET /api/help`, `GET /api/editor/status`, and `GET /api/editor/logs`
 - run status, result XML, and cancel endpoints above
-- CORS `OPTIONS`
+- origin-free `OPTIONS` (requests carrying `Origin` are rejected with `403` before this lock is evaluated)
 
 Every other built-in or custom endpoint returns `409` with the active run source and the UnionAir run ID when applicable. This lock is evaluated before category enablement, so it takes precedence over the `403` normally returned by a disabled category. External runs are observable through editor status and logs, but cannot be canceled and their results are not retained by UnionAir. If a completion callback is missed, UnionAir releases a stale gate only after Unity Test Framework has been positively observed as idle for a grace period; a stale UnionAir run is marked `aborted`.

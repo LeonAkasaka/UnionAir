@@ -106,8 +106,9 @@ https://github.com/LeonAkasaka/UnionAir.git
 
 - サーバは **`localhost` のみ**にバインドされ、ネットワーク上の他のマシンからは到達できません。
 - **認証はありません。** 同じマシン上で動作する任意のプロセスが、有効化されているすべてのエンドポイントを呼び出せます。
-- レスポンスには `Access-Control-Allow-Origin: *` が含まれるため、**同じマシンのブラウザで開いている任意の Web ページ**からも API を呼び出してレスポンス(シーン階層、アセット、ログ、スクリーンショット)を読み取れます。
-- 既定で有効なのは **Read** カテゴリのみです。Scene Write / Asset Write / Play Mode / Editor Actions / Test Runner / Profiling はオプトインであり、有効化するとプロジェクトの任意のテストコード、heap snapshot、Unity Editor のメニュー実行、アセット削除を含む操作や診断成果物が、任意のローカルクライアントとブラウザオリジンに公開されます。すべてのローカルクライアント(およびブラウザタブ)を信頼できる場合にのみ有効化してください。
+- `Origin` ヘッダーを持つリクエストはルーティング前に拒否され、レスポンスは CORS を許可しません。そのためブラウザの `fetch` と XMLHttpRequest は既定で非対応です。`Origin` を送信しないローカル CLI や連携クライアントは引き続き利用できます。
+- 空でないボディを持つリクエストには `Content-Type: application/json` が必要です。空の POST は Content-Type なしでも引き続き有効です。
+- 既定で有効なのは **Read** カテゴリのみです。Scene Write / Asset Write / Play Mode / Editor Actions / Test Runner / Profiling はオプトインであり、有効化するとプロジェクトの任意のテストコード、heap snapshot、Unity Editor のメニュー実行、アセット削除を含む操作や診断成果物が、任意のローカルプロセスに公開されます。すべてのローカルクライアントを信頼できる場合にのみ有効化してください。
 
 ## クイックサンプル
 
@@ -149,7 +150,7 @@ LLM MCP クライアントから利用するには、これらの REST エンド
 - 自動テストは `Tests/Editor` の EditMode テストのみで、Editor に依存しないロジックだけを対象としています。コンパイル、ドメインリロード、Play モード、HTTP サーバは手動で確認しており、CI は未整備です。実行方法は [テスト](CONTRIBUTING.ja.md#テスト) を参照してください。
 - リクエストボディの JSON パースは軽量な独自リーダーであり、深くネストした JSON や特殊なケースにエッジケースがあります。
 - レスポンスの JSON シリアライズはエンドポイントごとの手書き実装であり、共有シリアライザへのリファクタリングを予定しています。
-- CORS のワイルドカードポリシー(`Access-Control-Allow-Origin: *`)は将来のリリースで厳格化される可能性があります。
+- ブラウザ由来の `fetch` と XMLHttpRequest は非対応であり、設定可能な Origin 許可リストは現在ありません。
 
 ## コントリビュート
 

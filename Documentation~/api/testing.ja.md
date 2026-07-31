@@ -160,6 +160,6 @@ Test Runner Window から開始したものを含む、すべての Unity Test F
 
 - `GET /api/health`、`GET /api/help`、`GET /api/editor/status`、`GET /api/editor/logs`
 - 上記 run status、result XML、cancel endpoint
-- CORS `OPTIONS`
+- `Origin` のない `OPTIONS`(`Origin` を持つリクエストは、この lock の評価前に `403` で拒否されます)
 
 その他の built-in / custom endpoint は、active run source と該当する場合は UnionAir run ID を含む `409` を返します。このlockはcategory enablementより先に評価されるため、無効カテゴリが通常返す`403`より優先されます。外部 run は editor status と logs で観測できますが、cancel と結果保持の対象外です。完了callbackを取りこぼした場合、UnionAirはUnity Test Frameworkがgrace periodにわたってidleだと確実に観測できた場合のみstale gateを解除し、stale UnionAir runは`aborted`と確定します。

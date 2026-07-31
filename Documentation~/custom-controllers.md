@@ -41,6 +41,8 @@ Custom handlers are disabled by default. Enable them in **Window > UnionAir > RE
 
 Use `UnionAirRequestContext.Request` to inspect the incoming request, `UnionAirRequestContext.RouteValues` for route template parameters, and `UnionAirRequestContext.Response` to write the response.
 
+Custom endpoints inherit UnionAir's transport policy. Requests carrying an `Origin` header are rejected before the controller runs, so browser `fetch` and XMLHttpRequest clients are unsupported by default. A request with a non-empty body must use `Content-Type: application/json`; an empty request does not require a content type.
+
 `RequestBodyReader` provides the same lightweight JSON helpers used by UnionAir's built-in handlers:
 
 ```csharp
@@ -53,12 +55,14 @@ if (!RequestBodyReader.TryGetStringArray(body, "tags", out var tags))
 
 `TryGetStringArray` reads only a top-level key, returns an empty array when the key is absent, and returns `false` when a present value is not a valid array of strings.
 
-`RestResponse` writes JSON responses with the same content type, UTF-8 encoding, CORS headers, and error shape as built-in endpoints:
+`RestResponse` writes JSON responses with the same content type, UTF-8 encoding, and error shape as built-in endpoints. It does not add CORS headers:
 
 ```csharp
 RestResponse.Send(ctx.Response, "{\"status\":\"ok\"}");
 RestResponse.SendError(ctx.Response, "Missing required field: target", 400);
 ```
+
+`RestResponse.AddCorsHeaders` is retained as an obsolete no-op for source compatibility. Custom controllers that require browser access must implement and secure their own transport rather than bypass UnionAir's request policy.
 
 Handlers that complete later must call `ctx.Defer()` before returning and eventually close the response themselves. Deferred background I/O may use the .NET response stream, but it must not call Unity APIs from a worker thread.
 

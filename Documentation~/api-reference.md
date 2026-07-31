@@ -3,9 +3,11 @@
 
 Base URL: `http://localhost:<port>/api/` (default port: **8765**)
 
-Responses are returned with `Content-Type: application/json; charset=utf-8` unless an endpoint documents another media type. NUnit result downloads use `application/xml`. All responses include the CORS header (`Access-Control-Allow-Origin: *`).
+Responses are returned with `Content-Type: application/json; charset=utf-8` unless an endpoint documents another media type. NUnit result downloads use `application/xml`. Responses do not include CORS opt-in headers. Requests carrying an `Origin` header are rejected with `403`, so browser `fetch` and XMLHttpRequest clients are unsupported by default; local CLI and integration clients must omit `Origin`.
 String fields in JSON responses are escaped consistently, including control characters.
 Non-finite floating-point values (`NaN`, `Infinity`, `-Infinity`) are emitted as `null` in JSON numeric fields.
+
+Every request with a non-empty body must use `Content-Type: application/json`; media-type parameters such as `charset=utf-8` are accepted. Other or missing content types return `415`. Empty requests do not require a content type.
 
 POST endpoints whose body is optional or unused accept an empty body. Clients must frame an empty POST with `Content-Length: 0`; Windows `HttpListener` may reject a POST that has neither `Content-Length` nor `Transfer-Encoding` with `411 Length Required` before UnionAir receives it. Standard HTTP libraries and `curl -X POST` normally add the zero-length header automatically.
 

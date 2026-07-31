@@ -232,4 +232,55 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             StringAssert.Contains("missing", error);
         }
     }
+
+    internal sealed class RestRequestPolicyTests
+    {
+        [Test]
+        public void IsOriginAllowed_AllowsAnAbsentHeader()
+        {
+            Assert.IsTrue(RestRequestPolicy.IsOriginAllowed(null));
+        }
+
+        [Test]
+        public void IsOriginAllowed_RejectsAPresentHeaderWithoutValues()
+        {
+            Assert.IsFalse(RestRequestPolicy.IsOriginAllowed(new string[0]));
+        }
+
+        [TestCase("")]
+        [TestCase("null")]
+        [TestCase("https://attacker.example")]
+        public void IsOriginAllowed_RejectsAnyPresentHeader(string origin)
+        {
+            Assert.IsFalse(RestRequestPolicy.IsOriginAllowed(new[] { origin }));
+        }
+
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase("text/plain")]
+        public void HasSupportedContentType_AllowsAnyTypeForAnEmptyBody(string contentType)
+        {
+            Assert.IsTrue(RestRequestPolicy.HasSupportedContentType(false, contentType));
+        }
+
+        [TestCase("application/json")]
+        [TestCase("APPLICATION/JSON")]
+        [TestCase("application/json; charset=utf-8")]
+        [TestCase(" application/json ; charset=UTF-8")]
+        public void HasSupportedContentType_AllowsJsonForANonEmptyBody(string contentType)
+        {
+            Assert.IsTrue(RestRequestPolicy.HasSupportedContentType(true, contentType));
+        }
+
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase("text/plain")]
+        [TestCase("application/x-www-form-urlencoded")]
+        [TestCase("multipart/form-data; boundary=test")]
+        [TestCase("application/problem+json")]
+        public void HasSupportedContentType_RejectsOtherTypesForANonEmptyBody(string contentType)
+        {
+            Assert.IsFalse(RestRequestPolicy.HasSupportedContentType(true, contentType));
+        }
+    }
 }
