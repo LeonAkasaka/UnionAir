@@ -244,7 +244,7 @@ Filters are applied before pagination. Records are ordered by `finishedAt` desce
 }
 ```
 
-Invalid filter or pagination values return `400`. An empty history returns `total: 0` and an empty `records` array.
+Invalid filter or pagination values return `400`. An empty history returns `total: 0` and an empty `records` array. If the retained-record directory cannot be enumerated, the endpoint returns `500` rather than presenting a partial scan as complete.
 
 ```bash
 curl "http://localhost:8765/api/compile/records?target=player&offset=0&limit=20"

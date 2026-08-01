@@ -247,7 +247,7 @@ filter はページングの前に適用されます。レコードは `finished
 }
 ```
 
-不正な filter またはページング値には `400` を返します。履歴が空の場合は `total: 0` と空の `records` 配列を返します。
+不正な filter またはページング値には `400` を返します。履歴が空の場合は `total: 0` と空の `records` 配列を返します。保持レコードのディレクトリを列挙できない場合は、不完全な scan を完全な結果として見せずに `500` を返します。
 
 ```bash
 curl "http://localhost:8765/api/compile/records?target=player&offset=0&limit=20"

@@ -155,6 +155,35 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             }
         }
 
+        [Test]
+        public void LoadRetainedNewestFirst_ReportsIncompleteDirectoryEnumeration()
+        {
+            var directory = Path.Combine(
+                Path.GetTempPath(),
+                "UnionAir-CompileRecordQueryTests-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+
+            try
+            {
+                LogAssert.Expect(
+                    LogType.Warning,
+                    new Regex("Could not enumerate retained compile records"));
+
+                bool completed;
+                var records = CompileService.LoadRetainedNewestFirst(
+                    directory,
+                    out completed,
+                    _ => throw new IOException("Injected enumeration failure."));
+
+                Assert.IsFalse(completed);
+                Assert.IsEmpty(records);
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
         private static CompileRecord Record(
             string id,
             string finishedAt,

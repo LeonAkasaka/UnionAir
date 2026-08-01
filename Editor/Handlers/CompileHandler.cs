@@ -131,8 +131,16 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var page = CompileDecision.QueryRetained(
-                CompileService.ListRetained(), query, out var total);
+            bool scanCompleted;
+            var records = CompileService.ListRetained(out scanCompleted);
+            if (!scanCompleted)
+            {
+                RestResponse.SendError(
+                    response, "Retained compile records could not be enumerated.", 500);
+                return;
+            }
+
+            var page = CompileDecision.QueryRetained(records, query, out var total);
             var hasMore = (long)query.offset + page.Count < total;
 
             var sb = new StringBuilder();

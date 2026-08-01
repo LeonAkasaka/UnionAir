@@ -629,11 +629,8 @@ namespace LeonAkasaka.UnionAir.Editor
 
         internal static int RetainedRecordCount => RetainedRecords;
 
-        internal static List<CompileRecord> ListRetained()
-        {
-            bool completed;
-            return LoadRetainedNewestFirst(RecordsDirectory, out completed);
-        }
+        internal static List<CompileRecord> ListRetained(out bool completed)
+            => LoadRetainedNewestFirst(RecordsDirectory, out completed);
 
         private static void ReconcileLatest()
         {
@@ -693,6 +690,12 @@ namespace LeonAkasaka.UnionAir.Editor
         internal static List<CompileRecord> LoadRetainedNewestFirst(
             string directory,
             out bool completed)
+            => LoadRetainedNewestFirst(directory, out completed, null);
+
+        internal static List<CompileRecord> LoadRetainedNewestFirst(
+            string directory,
+            out bool completed,
+            Func<DirectoryInfo, FileInfo[]> enumerate)
         {
             var records = new List<CompileRecord>();
             completed = false;
@@ -704,7 +707,9 @@ namespace LeonAkasaka.UnionAir.Editor
                     return records;
                 }
 
-                var files = new List<FileInfo>(new DirectoryInfo(directory).GetFiles("*.json"));
+                var directoryInfo = new DirectoryInfo(directory);
+                var files = new List<FileInfo>(
+                    enumerate == null ? directoryInfo.GetFiles("*.json") : enumerate(directoryInfo));
                 foreach (var file in files)
                 {
                     var record = Load(file.FullName);
