@@ -6,10 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Changed
-
-- Lowered the minimum supported Editor version from `6000.0` to `2022.3`. Unity 6000.0 LTS and later remains the primary target and the only version every change is verified against; 2022.3 LTS is now a supported version whose builds and core behavior are verified; 2023.x is best effort. Nothing in the package needed a Unity version guard — the entire codebase already compiled on 2022.3 apart from the Test Runner assembly.
-- The Test Runner assembly now requires `com.unity.test-framework` **1.4.0 or later** rather than merely requiring the package to be present. UnionAir uses `TestRunnerApi.RegisterTestCallback`, `SaveResultToFile`, and `CancelTestRun`, all of which were added in 1.4.0. Unity 2022.3 and 2023.1 default to 1.1.33 and 1.3.9, where those APIs do not exist and the assembly previously failed to compile with three `CS0117` errors. The assembly is now skipped on versions below 1.4.0, so such projects compile cleanly; the `/api/tests` and `/api/test-runs` endpoints and the Test Runner category are simply absent. Add `"com.unity.test-framework": "1.4.6"` to a project's `Packages/manifest.json` to enable them. UnionAir does not declare the dependency itself, because the Test Runner category is disabled by default and the upgrade should stay the project's decision.
+## [0.3.0] - 2026-08-01
 
 ### Added
 
@@ -44,11 +41,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Lowered the minimum supported Editor version from `6000.0` to `2022.3`. Unity 6000.0 LTS and later remains the primary target and the only version every change is verified against; 2022.3 LTS is now a supported version whose builds and core behavior are verified; 2023.x is best effort. Nothing in the package needed a Unity version guard — the entire codebase already compiled on 2022.3 apart from the Test Runner assembly.
+- The Test Runner assembly now requires `com.unity.test-framework` **1.4.0 or later** rather than merely requiring the package to be present. UnionAir uses `TestRunnerApi.RegisterTestCallback`, `SaveResultToFile`, and `CancelTestRun`, all of which were added in 1.4.0. Unity 2022.3 and 2023.1 default to 1.1.33 and 1.3.9, where those APIs do not exist and the assembly previously failed to compile with three `CS0117` errors. The assembly is now skipped on versions below 1.4.0, so such projects compile cleanly; the `/api/tests` and `/api/test-runs` endpoints and the Test Runner category are simply absent. Add `"com.unity.test-framework": "1.4.6"` to a project's `Packages/manifest.json` to enable them. UnionAir does not declare the dependency itself, because the Test Runner category is disabled by default and the upgrade should stay the project's decision.
+
 - **Breaking:** `timestamp` in `GET /api/editor/logs` entries is now UTC ISO 8601 with a `Z` suffix (`2026-05-16T04:12:00.1234567Z`) instead of an offset-free local time, matching the Test Runner and Profiling APIs. Clients that parsed the previous format as local time must be updated.
 
-### Fixed
+- Documented that category enablement is stored in `EditorPrefs`, which Unity scopes to the user and Editor version rather than to the project. Enabling a write category for one project enables it for every project opened with the same Editor. The behavior is unchanged; only `README.md` and `SECURITY.md` were previously silent about it.
+
+### Security
 
 - Closed a cross-site request forgery exposure in the unauthenticated localhost bridge. Requests carrying an `Origin` header are now rejected before routing, responses no longer opt into wildcard CORS, and non-empty request bodies require `Content-Type: application/json`. Origin-free local CLI and integration clients remain compatible, including empty POST requests without a content type.
+
+### Fixed
 
 - `POST /api/assets/reimport` now rejects loaded scenes with a structured `409 Conflict` before calling `AssetDatabase.ImportAsset()`, preventing that reimport from opening Unity's interactive Reload dialog and blocking subsequent UnionAir requests. Recursive folder imports report all loaded scene conflicts in Scene Manager order.
 - `POST /api/editor/refresh` and `POST /api/compile` with `refresh: true` now detect external changes to loaded scene files from SHA-256 baselines retained across domain reloads. They refuse to call `AssetDatabase.Refresh()` and report the loaded scenes instead of allowing Unity's interactive Reload dialog to block the API.
@@ -231,3 +235,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Auto-start on Editor load via `[InitializeOnLoad]`
 - Graceful shutdown on domain reload; auto-restart after domain reload and play mode exit
 - Console log capture with 1000-entry ring buffer (`LogStore`)
+
+<!-- 0.1.0 and 0.2.0 predate this repository being published and were never tagged,
+     so they have no release page to link to. -->
+[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.3.0

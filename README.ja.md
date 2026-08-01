@@ -57,7 +57,7 @@ UnionAir 自身はこの依存を宣言していません。Test Runner カテ�
 3. 次の URL を入力します:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git
+https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 ```
 
 ### manifest.json から
@@ -67,10 +67,12 @@ https://github.com/LeonAkasaka/UnionAir.git
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.3.0"
   }
 }
 ```
+
+タグを固定してください。`main` は常にリリース可能な状態を保っていますがタグより先行しており、UPM の Git URL は固定 ref しか受け付けません(バージョン範囲の指定構文はありません)。
 
 ## セットアップ
 
@@ -109,6 +111,7 @@ https://github.com/LeonAkasaka/UnionAir.git
 - `Origin` ヘッダーを持つリクエストはルーティング前に拒否され、レスポンスは CORS を許可しません。そのためブラウザの `fetch` と XMLHttpRequest は既定で非対応です。`Origin` を送信しないローカル CLI や連携クライアントは引き続き利用できます。
 - 空でないボディを持つリクエストには `Content-Type: application/json` が必要です。空の POST は Content-Type なしでも引き続き有効です。
 - 既定で有効なのは **Read** カテゴリのみです。Scene Write / Asset Write / Play Mode / Editor Actions / Test Runner / Profiling はオプトインであり、有効化するとプロジェクトの任意のテストコード、heap snapshot、Unity Editor のメニュー実行、アセット削除を含む操作や診断成果物が、任意のローカルプロセスに公開されます。すべてのローカルクライアントを信頼できる場合にのみ有効化してください。
+- カテゴリの有効/無効は**プロジェクト単位ではありません**。設定は `EditorPrefs` に保存され、Unity はこれをユーザーアカウントと Editor バージョン単位で管理します。あるプロジェクトで有効化したカテゴリは、同じ Editor で開く他のすべてのプロジェクトでも有効なままになります。
 
 ## クイックサンプル
 

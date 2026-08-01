@@ -55,7 +55,7 @@ disabled by default and upgrading the package should stay the project's decision
 3. Enter:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git
+https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 ```
 
 ### Via manifest.json
@@ -65,10 +65,12 @@ Add the dependency to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.3.0"
   }
 }
 ```
+
+Pin the tag. `main` is kept releasable but runs ahead of it, and a UPM Git URL takes a fixed ref only — there is no version range syntax.
 
 ## Setup
 
@@ -107,6 +109,7 @@ Read this before enabling any write category:
 - Requests carrying an `Origin` header are rejected before routing, and responses do not opt into CORS. Browser `fetch` and XMLHttpRequest clients are therefore unsupported by default; local CLI and integration clients that omit `Origin` continue to work.
 - Requests with a non-empty body must use `Content-Type: application/json`. Empty POST requests remain valid without a content type.
 - Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, Editor Actions, Test Runner, and Profiling categories are opt-in; enabling them exposes state-changing operations and diagnostic artifacts — including arbitrary project test code, heap snapshots, Unity Editor menu execution, and asset deletion — to any local process. Enable them only when every local client is trusted.
+- Category enablement is **not per-project**. It lives in `EditorPrefs`, which Unity scopes to the user account and Editor version, so a category enabled for one project stays enabled for every project opened with the same Editor.
 
 ## Quick Example
 

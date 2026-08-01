@@ -16,7 +16,7 @@ LLM MCP ブリッジ・開発ボット・CI ツールなど、HTTP を扱える�
 **Window > Package Manager** を開き、**+** から **Install package from git URL...** を選択して次の URL を入力します:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git
+https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 ```
 
 または、`Packages/manifest.json` に直接依存関係を追加します:
@@ -24,7 +24,7 @@ https://github.com/LeonAkasaka/UnionAir.git
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.3.0"
   }
 }
 ```

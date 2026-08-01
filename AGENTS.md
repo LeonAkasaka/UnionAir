@@ -55,6 +55,8 @@ Update `README.md` only for overview-level changes (e.g., a new capability being
 
 - The version is managed via the `version` field in `package.json`
 - At release time, rename the `[Unreleased]` section in `CHANGELOG.md` to the version number with a date
+- Installation instructions pin a tag (`...UnionAir.git#vX.Y.Z`) in four files — both READMEs and both `Documentation~/index` pages. Releasing means updating all eight occurrences; `package.json`'s `repository.url` stays unpinned. The full procedure is in [CONTRIBUTING.md](CONTRIBUTING.md#releasing), which is the source of truth.
+- Never move a tag once it is pushed
 
 ## Branching and Commits
 
