@@ -629,6 +629,12 @@ namespace LeonAkasaka.UnionAir.Editor
 
         internal static int RetainedRecordCount => RetainedRecords;
 
+        internal static List<CompileRecord> ListRetained()
+        {
+            bool completed;
+            return LoadRetainedNewestFirst(RecordsDirectory, out completed);
+        }
+
         private static void ReconcileLatest()
         {
             if (_latest != null && _latest.state == "completed" && _latest.target == "editor")
@@ -642,7 +648,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!SessionState.GetBool(LatestRebuildExhaustedKey, false))
             {
                 bool scanCompleted;
-                var records = LoadRetainedNewestFirst(out scanCompleted);
+                var records = LoadRetainedNewestFirst(RecordsDirectory, out scanCompleted);
                 _latest = CompileDecision.SelectLatestEditor(records);
                 if (_latest != null)
                 {
@@ -677,37 +683,40 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Loads the retained records, newest first.
         /// </summary>
+        /// <param name="directory">Directory holding the per-id record files.</param>
         /// <param name="completed">Whether the directory could be enumerated without error.</param>
         /// <remarks>
         /// A record that fails to parse is skipped and does not make the scan incomplete; only a
         /// failure to enumerate the directory does, because that is the case where the caller
         /// cannot conclude anything about what the directory holds.
         /// </remarks>
-        private static List<CompileRecord> LoadRetainedNewestFirst(out bool completed)
+        internal static List<CompileRecord> LoadRetainedNewestFirst(
+            string directory,
+            out bool completed)
         {
             var records = new List<CompileRecord>();
             completed = false;
             try
             {
-                if (!Directory.Exists(RecordsDirectory))
+                if (!Directory.Exists(directory))
                 {
                     completed = true;
                     return records;
                 }
 
-                var files = new List<FileInfo>(new DirectoryInfo(RecordsDirectory).GetFiles("*.json"));
-                files.Sort((a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
+                var files = new List<FileInfo>(new DirectoryInfo(directory).GetFiles("*.json"));
                 foreach (var file in files)
                 {
                     var record = Load(file.FullName);
                     if (record != null) records.Add(record);
                 }
+                records.Sort(CompileDecision.CompareRecordsNewestFirst);
 
                 completed = true;
             }
             catch (Exception ex)
             {
-                Debug.LogWarning("[UnionAir] Could not rebuild the latest compile record: " + ex.Message);
+                Debug.LogWarning("[UnionAir] Could not enumerate retained compile records: " + ex.Message);
             }
 
             return records;

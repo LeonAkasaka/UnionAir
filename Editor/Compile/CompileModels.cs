@@ -46,6 +46,16 @@ namespace LeonAkasaka.UnionAir.Editor
         public int warningCount;
     }
 
+    /// <summary>Validated filters and pagination for retained compilation records.</summary>
+    internal sealed class CompileRecordQuery
+    {
+        public int offset;
+        public int limit = 20;
+        public string target = "";
+        public string source = "";
+        public string state = "";
+    }
+
     /// <summary>Durable record of a single script compilation cycle.</summary>
     [Serializable]
     internal sealed class CompileRecord
@@ -165,6 +175,32 @@ namespace LeonAkasaka.UnionAir.Editor
 
             sb.Append(",\"messagesTruncated\":").Append(RestResponse.FormatBool(messagesTruncated));
             sb.Append(",\"error\":").Append(NullableString(error));
+            sb.Append("}");
+            return sb.ToString();
+        }
+
+        /// <summary>Renders the compact shape returned by the retained-record collection.</summary>
+        internal string ToSummaryJson()
+        {
+            var sb = new StringBuilder();
+            sb.Append("{");
+            AppendString(sb, "id", id);
+            sb.Append(",");
+            AppendString(sb, "source", source);
+            sb.Append(",");
+            AppendString(sb, "state", state);
+            sb.Append(",\"result\":").Append(NullableString(result));
+            sb.Append(",");
+            AppendString(sb, "target", target);
+            sb.Append(",\"requestedAt\":").Append(NullableString(requestedAt));
+            sb.Append(",\"startedAt\":").Append(NullableString(startedAt));
+            sb.Append(",\"finishedAt\":").Append(NullableString(finishedAt));
+            sb.Append(",\"durationSeconds\":")
+              .Append(durationSeconds.ToString("G17", CultureInfo.InvariantCulture));
+            sb.Append(",\"errorCount\":").Append(Int(errorCount));
+            sb.Append(",\"warningCount\":").Append(Int(warningCount));
+            sb.Append(",\"statusUrl\":\"/api/compile/")
+              .Append(RestResponse.EscapeJson(id)).Append("\"");
             sb.Append("}");
             return sb.ToString();
         }

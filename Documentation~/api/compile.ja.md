@@ -208,6 +208,53 @@ curl http://localhost:8765/api/compile
 
 ---
 
+## GET /api/compile/records
+
+保持されている終端状態のコンパイルレコードを、件数制限された新しい順の summary として列挙します。実行中の `current` は含まれないため、`GET /api/compile` から取得してください。完全なレコードは各 summary の `statusUrl` から取得できます。
+
+| query | 既定値 | 説明 |
+|-------|--------|------|
+| `offset` | `0` | filter 適用後の結果に対する0以上の offset |
+| `limit` | `20` | 1から100のページサイズ |
+| `target` | すべて | `editor`、`player`、`other` の完全一致 filter。大文字小文字は区別しません |
+| `source` | すべて | `unionAir`、`external` の完全一致 filter。大文字小文字は区別しません |
+| `state` | すべて | `completed`、`aborted` の完全一致 filter。大文字小文字は区別しません |
+
+filter はページングの前に適用されます。レコードは `finishedAt`、`requestedAt`、`id` の順にそれぞれ降順で並び、履歴が変わらない限り結果は決定的です。`total` はページング前の filter 済み件数、`hasMore` は返されたページの後に別のレコードがあるかを表します。
+
+```json
+{
+  "total": 1,
+  "offset": 0,
+  "limit": 20,
+  "hasMore": false,
+  "records": [
+    {
+      "id": "c-20260728-040030-67c0fd",
+      "source": "external",
+      "state": "completed",
+      "result": "succeeded",
+      "target": "player",
+      "requestedAt": "2026-07-28T04:00:30.0000000Z",
+      "startedAt": "2026-07-28T04:00:30.1000000Z",
+      "finishedAt": "2026-07-28T04:00:34.0000000Z",
+      "durationSeconds": 3.9,
+      "errorCount": 0,
+      "warningCount": 0,
+      "statusUrl": "/api/compile/c-20260728-040030-67c0fd"
+    }
+  ]
+}
+```
+
+不正な filter またはページング値には `400` を返します。履歴が空の場合は `total: 0` と空の `records` 配列を返します。
+
+```bash
+curl "http://localhost:8765/api/compile/records?target=player&offset=0&limit=20"
+```
+
+---
+
 ## GET /api/compile/{id}
 
 保持されているコンパイルレコードを1件返します。

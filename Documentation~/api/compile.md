@@ -205,6 +205,53 @@ curl http://localhost:8765/api/compile
 
 ---
 
+## GET /api/compile/records
+
+Lists retained terminal compilation records as bounded, newest-first summaries. The active `current` record is not included; read it from `GET /api/compile`. Use each summary's `statusUrl` to retrieve the complete record.
+
+| Query | Default | Description |
+|-------|---------|-------------|
+| `offset` | `0` | Non-negative offset within the filtered results |
+| `limit` | `20` | Page size from 1 to 100 |
+| `target` | all | Exact `editor`, `player`, or `other` filter, case-insensitive |
+| `source` | all | Exact `unionAir` or `external` filter, case-insensitive |
+| `state` | all | Exact `completed` or `aborted` filter, case-insensitive |
+
+Filters are applied before pagination. Records are ordered by `finishedAt` descending, then `requestedAt` descending, then `id` descending, so repeated requests over unchanged history are deterministic. `total` is the number of filtered records before pagination and `hasMore` reports whether another record follows the returned page.
+
+```json
+{
+  "total": 1,
+  "offset": 0,
+  "limit": 20,
+  "hasMore": false,
+  "records": [
+    {
+      "id": "c-20260728-040030-67c0fd",
+      "source": "external",
+      "state": "completed",
+      "result": "succeeded",
+      "target": "player",
+      "requestedAt": "2026-07-28T04:00:30.0000000Z",
+      "startedAt": "2026-07-28T04:00:30.1000000Z",
+      "finishedAt": "2026-07-28T04:00:34.0000000Z",
+      "durationSeconds": 3.9,
+      "errorCount": 0,
+      "warningCount": 0,
+      "statusUrl": "/api/compile/c-20260728-040030-67c0fd"
+    }
+  ]
+}
+```
+
+Invalid filter or pagination values return `400`. An empty history returns `total: 0` and an empty `records` array.
+
+```bash
+curl "http://localhost:8765/api/compile/records?target=player&offset=0&limit=20"
+```
+
+---
+
 ## GET /api/compile/{id}
 
 Returns one retained compilation record.

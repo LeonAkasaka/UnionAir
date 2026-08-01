@@ -22,6 +22,15 @@ namespace LeonAkasaka.UnionAir.Editor
         private void Start(UnionAirRequestContext ctx)
             => new CompileHandler().HandleStart(ctx.Request, ctx.Response);
 
+        [UnionAirEndpoint("GET", "records",
+            Category = UnionAirEndpointCategories.Read,
+            TestRunPolicy = UnionAirTestRunPolicy.Allowed,
+            OptionalQuery = new string[] { "offset", "limit", "target", "source", "state" },
+            Summary = "Lists retained compilation record summaries in deterministic newest-first order. Supports offset/limit pagination and target, source, and state filters. Active compilations remain available through GET /api/compile.",
+            ResponseExample = "{\"total\":1,\"offset\":0,\"limit\":20,\"hasMore\":false,\"records\":[{\"id\":\"c-20260728-040030-67c0fd\",\"source\":\"external\",\"state\":\"completed\",\"result\":\"succeeded\",\"target\":\"player\",\"requestedAt\":\"2026-07-28T04:00:30.0000000Z\",\"startedAt\":\"2026-07-28T04:00:30.1000000Z\",\"finishedAt\":\"2026-07-28T04:00:34.0000000Z\",\"durationSeconds\":3.9,\"errorCount\":0,\"warningCount\":0,\"statusUrl\":\"/api/compile/c-20260728-040030-67c0fd\"}]}")]
+        private void Records(UnionAirRequestContext ctx)
+            => new CompileHandler().HandleRecords(ctx.Request, ctx.Response);
+
         [UnionAirEndpoint("GET", "{id}",
             Category = UnionAirEndpointCategories.Read,
             TestRunPolicy = UnionAirTestRunPolicy.Allowed,

@@ -1,4 +1,7 @@
+using System;
+using System.Collections.Specialized;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -68,5 +71,108 @@ namespace LeonAkasaka.UnionAir.Editor
 
             return null;
         }
+
+        internal static bool TryCreateRecordQuery(
+            NameValueCollection values,
+            out CompileRecordQuery query,
+            out string error)
+        {
+            query = new CompileRecordQuery();
+            error = null;
+            values = values ?? new NameValueCollection();
+
+            if (!TryParseRange(values["offset"], 0, 0, int.MaxValue, out query.offset) ||
+                !TryParseRange(values["limit"], 20, 1, 100, out query.limit))
+            {
+                error = "Query parameter 'offset' must be non-negative and 'limit' must be between 1 and 100.";
+                return false;
+            }
+
+            if (!TryNormalize(values["target"], new string[] { "editor", "player", "other" }, out query.target))
+            {
+                error = "Query parameter 'target' must be 'editor', 'player', or 'other'.";
+                return false;
+            }
+            if (!TryNormalize(values["source"], new string[] { "unionAir", "external" }, out query.source))
+            {
+                error = "Query parameter 'source' must be 'unionAir' or 'external'.";
+                return false;
+            }
+            if (!TryNormalize(values["state"], new string[] { "completed", "aborted" }, out query.state))
+            {
+                error = "Query parameter 'state' must be 'completed' or 'aborted'.";
+                return false;
+            }
+
+            return true;
+        }
+
+        internal static List<CompileRecord> QueryRetained(
+            IReadOnlyList<CompileRecord> records,
+            CompileRecordQuery query,
+            out int total)
+        {
+            var matches = new List<CompileRecord>();
+            if (records != null)
+            {
+                for (var i = 0; i < records.Count; i++)
+                {
+                    var record = records[i];
+                    if (record == null || (record.state != "completed" && record.state != "aborted"))
+                        continue;
+                    if (!Matches(record.target, query.target) ||
+                        !Matches(record.source, query.source) ||
+                        !Matches(record.state, query.state))
+                        continue;
+                    matches.Add(record);
+                }
+            }
+
+            matches.Sort(CompareRecordsNewestFirst);
+            total = matches.Count;
+
+            var page = new List<CompileRecord>();
+            var start = Math.Min(query.offset, total);
+            var end = (int)Math.Min((long)total, (long)start + query.limit);
+            for (var i = start; i < end; i++) page.Add(matches[i]);
+            return page;
+        }
+
+        internal static int CompareRecordsNewestFirst(CompileRecord left, CompileRecord right)
+        {
+            var finished = string.CompareOrdinal(right?.finishedAt ?? "", left?.finishedAt ?? "");
+            if (finished != 0) return finished;
+            var requested = string.CompareOrdinal(right?.requestedAt ?? "", left?.requestedAt ?? "");
+            if (requested != 0) return requested;
+            return string.CompareOrdinal(right?.id ?? "", left?.id ?? "");
+        }
+
+        private static bool TryParseRange(string value, int defaultValue, int min, int max, out int result)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                result = defaultValue;
+                return true;
+            }
+            return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result) &&
+                   result >= min && result <= max;
+        }
+
+        private static bool TryNormalize(string value, string[] allowed, out string normalized)
+        {
+            normalized = "";
+            if (string.IsNullOrEmpty(value)) return true;
+            foreach (var candidate in allowed)
+            {
+                if (!string.Equals(value, candidate, StringComparison.OrdinalIgnoreCase)) continue;
+                normalized = candidate;
+                return true;
+            }
+            return false;
+        }
+
+        private static bool Matches(string value, string filter)
+            => string.IsNullOrEmpty(filter) ||
+               string.Equals(value, filter, StringComparison.OrdinalIgnoreCase);
     }
 }
