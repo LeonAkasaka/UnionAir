@@ -107,6 +107,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         {
             Assert.AreEqual("editor", CompileMessageParser.ClassifyTarget("Library/ScriptAssemblies"));
             Assert.AreEqual("player", CompileMessageParser.ClassifyTarget("Library/PlayerScriptAssemblies"));
+            Assert.AreEqual("player", CompileMessageParser.ClassifyTarget("Library/Bee/PlayerScriptAssemblies"));
             Assert.AreEqual("other", CompileMessageParser.ClassifyTarget("Temp/Custom"));
             Assert.AreEqual("other", CompileMessageParser.ClassifyTarget(""));
         }
@@ -115,6 +116,23 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         public void ClassifyTarget_AcceptsWindowsSeparators()
         {
             Assert.AreEqual("editor", CompileMessageParser.ClassifyTarget(@"Library\ScriptAssemblies"));
+            Assert.AreEqual("player", CompileMessageParser.ClassifyTarget(@"Library\PlayerScriptAssemblies"));
+            Assert.AreEqual("player", CompileMessageParser.ClassifyTarget(@"Library\Bee\PlayerScriptAssemblies"));
+        }
+
+        [Test]
+        public void ClassifyTarget_AcceptsCaseAndTrailingSeparators()
+        {
+            Assert.AreEqual("editor", CompileMessageParser.ClassifyTarget("library/scriptassemblies/"));
+            Assert.AreEqual("player", CompileMessageParser.ClassifyTarget("library/bee/playerscriptassemblies/"));
+        }
+
+        [Test]
+        public void ClassifyTarget_RequiresWholePathSegments()
+        {
+            Assert.AreEqual("other", CompileMessageParser.ClassifyTarget("NotLibrary/Bee/PlayerScriptAssemblies"));
+            Assert.AreEqual("other", CompileMessageParser.ClassifyTarget("Library/Bee/PlayerScriptAssembliesBackup"));
+            Assert.AreEqual("other", CompileMessageParser.ClassifyTarget("Temp/LibraryLike/ScriptAssemblies"));
         }
 
         [Test]

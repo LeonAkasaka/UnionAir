@@ -101,12 +101,21 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (string.IsNullOrEmpty(outputDirectory)) return "other";
 
-            var normalized = outputDirectory.Replace('\\', '/');
-            if (normalized.IndexOf("Library/PlayerScriptAssemblies", StringComparison.OrdinalIgnoreCase) >= 0)
+            var normalized = outputDirectory.Replace('\\', '/').TrimEnd('/');
+            if (EndsWithPath(normalized, "Library/PlayerScriptAssemblies") ||
+                EndsWithPath(normalized, "Library/Bee/PlayerScriptAssemblies"))
                 return "player";
-            if (normalized.IndexOf("Library/ScriptAssemblies", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (EndsWithPath(normalized, "Library/ScriptAssemblies"))
                 return "editor";
             return "other";
+        }
+
+        private static bool EndsWithPath(string path, string suffix)
+        {
+            if (!path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return false;
+
+            var prefixLength = path.Length - suffix.Length;
+            return prefixLength == 0 || path[prefixLength - 1] == '/';
         }
 
         /// <summary>

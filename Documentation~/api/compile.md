@@ -171,6 +171,8 @@ Both are returned in one response because a polling client needs them in the sam
 > `severity` comes from the compiler message type, never from the message text, because the words "error" and "warning" are localized while the code token is not.
 > Individual messages are capped at 4000 characters and the list at 200 entries.
 
+Player outputs include both the legacy `Library/PlayerScriptAssemblies` directory and Unity 6's `Library/Bee/PlayerScriptAssemblies` directory. Matching is case- and separator-insensitive, while similarly named unrelated directories remain `other`.
+
 ### State and Result
 
 | `state` | `result` | Meaning |

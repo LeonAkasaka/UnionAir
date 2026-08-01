@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added `GET /api/compile/records` to enumerate retained terminal compilation summaries in deterministic newest-first order, with bounded offset/limit pagination and target, source, and state filters.
 
+### Fixed
+
+- Classified Unity 6 Bee Player compilation outputs under `Library/Bee/PlayerScriptAssemblies` as `player`, while preserving conservative handling of mixed and unrelated output directories.
+
 ## [0.3.0] - 2026-08-01
 
 ### Added

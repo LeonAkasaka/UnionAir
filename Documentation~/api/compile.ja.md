@@ -174,6 +174,8 @@ curl -X POST http://localhost:8765/api/compile \
 > `severity` はメッセージ本文ではなく、常にコンパイラのメッセージ種別から取得します。"error" と "warning" という語はローカライズされますが、コードのトークンはされないためです。
 > 個々のメッセージは 4000 文字、リストは 200 件で打ち切られます。
 
+Player 出力には、従来の `Library/PlayerScriptAssemblies` ディレクトリと Unity 6 の `Library/Bee/PlayerScriptAssemblies` ディレクトリの両方が含まれます。大文字小文字と区切り文字を区別せずに照合しますが、名前が似ている無関係なディレクトリは `other` のままです。
+
 ### state と result
 
 | `state` | `result` | 意味 |
