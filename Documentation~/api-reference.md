@@ -80,7 +80,7 @@ Play mode control, Input System simulation, screen queries, and UI interaction:
 
 Structured script compilation results, including cycles started outside UnionAir:
 
-`POST /api/compile` · `GET /api/compile` · `GET /api/compile/{id}`
+`POST /api/compile` · `GET /api/compile` · `GET /api/compile/records` · `GET /api/compile/{id}`
 
 ### [Test Runner](api/testing.md)
 

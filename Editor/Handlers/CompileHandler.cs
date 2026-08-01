@@ -120,6 +120,44 @@ namespace LeonAkasaka.UnionAir.Editor
                    $"\"existingCompile\":{record.ToApiJson()}}}";
         }
 
+        /// <summary>Lists retained terminal records as bounded summaries.</summary>
+        public void HandleRecords(HttpListenerRequest request, HttpListenerResponse response)
+        {
+            CompileRecordQuery query;
+            string error;
+            if (!CompileDecision.TryCreateRecordQuery(request.QueryString, out query, out error))
+            {
+                RestResponse.SendError(response, error, 400);
+                return;
+            }
+
+            bool scanCompleted;
+            var records = CompileService.ListRetained(out scanCompleted);
+            if (!scanCompleted)
+            {
+                RestResponse.SendError(
+                    response, "Retained compile records could not be enumerated.", 500);
+                return;
+            }
+
+            var page = CompileDecision.QueryRetained(records, query, out var total);
+            var hasMore = (long)query.offset + page.Count < total;
+
+            var sb = new StringBuilder();
+            sb.Append("{\"total\":").Append(total.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"offset\":").Append(query.offset.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"limit\":").Append(query.limit.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"hasMore\":").Append(RestResponse.FormatBool(hasMore));
+            sb.Append(",\"records\":[");
+            for (var i = 0; i < page.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(page[i].ToSummaryJson());
+            }
+            sb.Append("]}");
+            RestResponse.Send(response, sb.ToString());
+        }
+
         /// <summary>
         /// Returns a single retained compilation record by id.
         /// </summary>
