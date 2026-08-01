@@ -24,6 +24,11 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
                     new List<CompileAssemblyRecord> { Assembly("Library/PlayerScriptAssemblies") },
                     "external"));
             Assert.AreEqual(
+                "player",
+                CompileDecision.ResolveTarget(
+                    new List<CompileAssemblyRecord> { Assembly("Library/Bee/PlayerScriptAssemblies") },
+                    "external"));
+            Assert.AreEqual(
                 "other",
                 CompileDecision.ResolveTarget(
                     new List<CompileAssemblyRecord>
