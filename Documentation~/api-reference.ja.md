@@ -98,6 +98,10 @@ ProfilerRecorder metric、NDJSON sample、Profiler raw capture、Memory Profiler
 
 `GET /api/profiling/metrics` · `POST|GET /api/profiling/sessions` · `GET|DELETE /api/profiling/sessions/{id}` · `POST .../{id}/stop` · `GET .../{id}/samples.ndjson` · `GET .../{id}/profile.raw` · `POST|GET /api/memory-snapshots` · `GET|DELETE /api/memory-snapshots/{id}` · `GET .../{id}/snapshot`
 
+### [Editor アクティビティ](api/activities.ja.md)
+
+「Editor が X で処理中である」ことを表す共通語彙。アクティビティの一覧、`409` がそれをどう報告するか、`blockedDuring` の意味。
+
 ### [Build](api/build.ja.md)
 
 ビルド構成とプラットフォームモジュールの導入状況:

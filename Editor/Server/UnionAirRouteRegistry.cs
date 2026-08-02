@@ -128,6 +128,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 categoryDefinition,
                 endpoint.PlayModePolicy,
                 endpoint.TestRunPolicy,
+                endpoint.BlockedDuring,
+                endpoint.UseActivityOverride,
                 endpoint.UseRiskOverride,
                 endpoint.Risk,
                 endpoint.Summary,
@@ -196,6 +198,18 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
+        /// <summary>
+        /// Activities during which a category that changes the project is rejected.
+        /// </summary>
+        /// <remarks>
+        /// A player build and a build target switch both read the project from disk while they run,
+        /// so a write racing either produces output that matches nothing the caller can inspect.
+        /// Neither activity exists yet in a shipped release, so this changes no current behavior;
+        /// it is declared here because the category, not the individual route, is what conflicts.
+        /// </remarks>
+        private const UnionAirActivity ProjectChangeBlockers =
+            UnionAirActivity.Build | UnionAirActivity.BuildTargetSwitch;
+
         private static List<UnionAirCategoryDefinition> CreateBuiltInCategories()
         {
             return new List<UnionAirCategoryDefinition>
@@ -213,28 +227,32 @@ namespace LeonAkasaka.UnionAir.Editor
                     UnionAirRouteSource.Builtin,
                     UnionAirEndpointRisk.SceneUpdate,
                     true,
-                    false),
+                    false,
+                    ProjectChangeBlockers),
                 new UnionAirCategoryDefinition(
                     UnionAirEndpointCategories.AssetWrite,
                     "Asset Write",
                     UnionAirRouteSource.Builtin,
                     UnionAirEndpointRisk.AssetUpdate,
                     true,
-                    false),
+                    false,
+                    ProjectChangeBlockers),
                 new UnionAirCategoryDefinition(
                     UnionAirEndpointCategories.PlayMode,
                     "Play Mode",
                     UnionAirRouteSource.Builtin,
                     UnionAirEndpointRisk.PlayMode,
                     true,
-                    false),
+                    false,
+                    ProjectChangeBlockers),
                 new UnionAirCategoryDefinition(
                     UnionAirEndpointCategories.EditorActions,
                     "Editor Actions",
                     UnionAirRouteSource.Builtin,
                     UnionAirEndpointRisk.EditorState | UnionAirEndpointRisk.RequestDependent,
                     true,
-                    false),
+                    false,
+                    ProjectChangeBlockers),
                 new UnionAirCategoryDefinition(
                     UnionAirEndpointCategories.Profiling,
                     "Profiling",
@@ -272,7 +290,8 @@ namespace LeonAkasaka.UnionAir.Editor
                     source,
                     attribute.Risk,
                     attribute.CanDisable,
-                    attribute.EnabledByDefault));
+                    attribute.EnabledByDefault,
+                    attribute.BlockedDuring));
             }
         }
 

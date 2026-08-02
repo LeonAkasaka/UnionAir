@@ -65,6 +65,7 @@ UnionAir はスクリプトのコンパイルサイクルを、メッセージ�
 ```json
 {
   "error": "A script compilation is already active.",
+  "activeActivity": { "activity": "compile", "source": "unionAir", "id": "c-20260728-041549-2194f1" },
   "activeCompile": { "id": "c-20260728-041549-2194f1", "source": "unionAir", "state": "queued" }
 }
 ```
@@ -145,7 +146,8 @@ curl -X POST http://localhost:8765/api/compile \
 | フィールド | 型 | 説明 |
 |-----------|-----|------|
 | `id` | string | このサイクルの識別子 |
-| `source` | string | API 経由の要求は `unionAir`、それ以外は `external` |
+| `source` | string | API 経由の要求は `unionAir`、ビルドが実行するプレイヤーコンパイルは `build`、それ以外は `external` |
+| `buildId` | string \| null | `source: "build"` のレコードで、そのサイクルを所有するビルド |
 | `state` | string | `queued` / `running` / `completed` / `aborted` |
 | `result` | string \| null | 下記の result 表を参照。実行中は `null` |
 | `target` | string | すべてのコンパイル出力が Editor アセンブリなら `editor`、すべてがプレイヤーアセンブリなら `player`、それ以外は `other` |
@@ -173,6 +175,12 @@ curl -X POST http://localhost:8765/api/compile \
 
 > `severity` はメッセージ本文ではなく、常にコンパイラのメッセージ種別から取得します。"error" と "warning" という語はローカライズされますが、コードのトークンはされないためです。
 > 個々のメッセージは 4000 文字、リストは 200 件で打ち切られます。
+
+### ビルドが所有するコンパイル
+
+プレイヤービルドは自身のスクリプトコンパイルを実行します。そのサイクルは無関係な `external` サイクルとして引き受けられるのではなく、`source: "build"` と所有するビルドを示す `buildId` とともに記録されます。したがって帰属が明確です。ビルドレコードは id でそれを指し、Editor のコンパイルを監視しているクライアントは `?source=external` や `?source=unionAir` で除外できます。
+
+このサイクルが `latest` になることはありません。`latest` は完了した **Editor** コンパイルのみを保持します。ビルドのプレイヤーコンパイル開始時にまだ実行中のコンパイルレコードがあった場合、そのビルドを名指しする理由とともに中断されます。手動で開始したサイクルによって失われたものと取り違えないためです。
 
 Player 出力には、従来の `Library/PlayerScriptAssemblies` ディレクトリと Unity 6 の `Library/Bee/PlayerScriptAssemblies` ディレクトリの両方が含まれます。大文字小文字と区切り文字を区別せずに照合しますが、名前が似ている無関係なディレクトリは `other` のままです。
 
@@ -219,7 +227,7 @@ curl http://localhost:8765/api/compile
 | `offset` | `0` | filter 適用後の結果に対する0以上の offset |
 | `limit` | `20` | 1から100のページサイズ |
 | `target` | すべて | `editor`、`player`、`other` の完全一致 filter。大文字小文字は区別しません |
-| `source` | すべて | `unionAir`、`external` の完全一致 filter。大文字小文字は区別しません |
+| `source` | すべて | `unionAir`、`external`、`build` の完全一致 filter。大文字小文字は区別しません |
 | `state` | すべて | `completed`、`aborted` の完全一致 filter。大文字小文字は区別しません |
 
 filter はページングの前に適用されます。レコードは `finishedAt`、`requestedAt`、`id` の順にそれぞれ降順で並び、履歴が変わらない限り結果は決定的です。`total` はページング前の filter 済み件数、`hasMore` は返されたページの後に別のレコードがあるかを表します。

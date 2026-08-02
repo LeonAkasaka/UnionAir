@@ -106,6 +106,11 @@ namespace LeonAkasaka.UnionAir.Editor
 
         [UnionAirEndpoint("POST", "play",
             Category = UnionAirEndpointCategories.PlayMode,
+            // Entering Play mode during a compilation loses the request: Unity reloads the domain
+            // when the cycle finishes and the mode change is discarded with it. Exiting, pausing,
+            // and stepping are deliberately not blocked, because stopping a running game is exactly
+            // what a client needs to be able to do while something else is in flight.
+            BlockedDuring = UnionAirActivity.Compile,
             Summary = "Requests entering Play mode. An optional 'inputs' list schedules frame-accurate input, replayed from the first Play mode frame; 'frame' is the frame the game observes the input on. The whole list is validated before Play mode is entered, so an invalid entry returns 400 and nothing happens. With 'inputs' the response is 202 and carries the replay id to poll through GET /api/playmode/input/result; without it the response is unchanged. Requires the com.unity.inputsystem package.",
             OptionalBody = new string[] { "inputs" },
             RequestExample = "{\"inputs\":[{\"frame\":5,\"type\":\"perform\",\"action\":\"Player/Jump\",\"mode\":\"press\"},{\"frame\":8,\"type\":\"perform\",\"action\":\"Player/Jump\",\"mode\":\"release\"}]}",

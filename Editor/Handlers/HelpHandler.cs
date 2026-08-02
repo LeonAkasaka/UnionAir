@@ -82,6 +82,8 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append(category.EnabledByDefault ? "true" : "false");
             sb.Append(",");
             AppendRiskArray(sb, "risk", category.Risk);
+            sb.Append(",\"blockedDuring\":");
+            UnionAirActivityDecision.AppendActivityArray(sb, category.BlockedDuring);
             if (!string.IsNullOrEmpty(category.Error))
             {
                 sb.Append(",");
@@ -147,6 +149,8 @@ namespace LeonAkasaka.UnionAir.Editor
             AppendString(sb, "playModePolicy", PlayModePolicyName(endpoint.PlayModePolicy));
             sb.Append(",");
             AppendString(sb, "testRunPolicy", TestRunPolicyName(endpoint.TestRunPolicy));
+            sb.Append(",\"blockedDuring\":");
+            UnionAirActivityDecision.AppendActivityArray(sb, endpoint.BlockedDuring);
             sb.Append(",");
             AppendStringArray(sb, "pathParams", endpoint.PathParams);
             sb.Append(",");

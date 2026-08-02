@@ -212,6 +212,17 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Whether this category is enabled before users make an explicit override.
         /// </summary>
         public bool EnabledByDefault { get; set; }
+
+        /// <summary>
+        /// Editor activities during which endpoints in this category are rejected, unless an
+        /// endpoint overrides it with <see cref="UnionAirEndpointAttribute.UseActivityOverride"/>.
+        /// </summary>
+        /// <remarks>
+        /// Declared per category because the conflict is usually a property of what the category
+        /// does — scene and asset writes race a player build reading the project from disk — rather
+        /// than of an individual route.
+        /// </remarks>
+        public UnionAirActivity BlockedDuring { get; set; } = UnionAirActivity.None;
     }
 
     /// <summary>
@@ -263,6 +274,23 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Whether this endpoint can be called while a Unity Test Framework run is active.
         /// </summary>
         public UnionAirTestRunPolicy TestRunPolicy { get; set; } = UnionAirTestRunPolicy.Blocked;
+
+        /// <summary>
+        /// Editor activities during which this endpoint is rejected, added to whatever its category
+        /// declares.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="UnionAirActivity.PlayMode"/> and <see cref="UnionAirActivity.TestRun"/> are
+        /// still controlled by <see cref="PlayModePolicy"/> and <see cref="TestRunPolicy"/>, which
+        /// have request-level behavior no activity mask expresses. They are folded into the value
+        /// reported by <c>GET /api/help</c> so a client sees one list.
+        /// </remarks>
+        public UnionAirActivity BlockedDuring { get; set; } = UnionAirActivity.None;
+
+        /// <summary>
+        /// Whether <see cref="BlockedDuring"/> replaces the category value instead of adding to it.
+        /// </summary>
+        public bool UseActivityOverride { get; set; }
 
         /// <summary>
         /// Optional endpoint-specific risk metadata used when it differs from the category risk.

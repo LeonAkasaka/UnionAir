@@ -15,6 +15,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
             TestRunPolicy = UnionAirTestRunPolicy.Blocked,
+            BlockedDuring = UnionAirActivity.AssetUpdate,
             Summary = "Requests a script compilation and returns 202 with the id to poll through GET /api/compile/{id}. The response is sent before any compilation work begins, because refreshing and compiling block the Editor and can end in a domain reload that drops the connection. With refresh enabled, returns 409 before refreshing when a loaded scene changed externally, preventing Unity's interactive Reload dialog. Also returns 409 when a compilation is already active, when the Editor is entering or in Play mode, or while assets are updating.",
             OptionalBody = new string[] { "refresh", "clean", "requestId" },
             RequestExample = "{\"refresh\":true,\"clean\":false}",

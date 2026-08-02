@@ -13,6 +13,8 @@ POST endpoints whose body is optional or unused accept an empty body. Clients mu
 
 Errors are returned as JSON: `{"error":"<message>"}` with an appropriate HTTP status code. Endpoints in a disabled category normally return `403`. While a test run is active, the test-run lock is evaluated first, so a non-allowed endpoint returns `409` with `activeTestRun` even when its category is disabled; a retry after the run may then return `403`.
 
+A `409` caused by the Editor being busy also carries an `activeActivity` object naming the activity, its source, and the id that owns it, and every endpoint declares what blocks it as `blockedDuring` in `GET /api/help`. See [Editor Activities](api/activities.md).
+
 The machine-readable manifest for all endpoints is available at [`GET /api/help`](api/general.md#get-apihelp).
 
 ---
@@ -94,6 +96,10 @@ Unity Test Framework discovery, asynchronous execution, monitoring, cancellation
 ProfilerRecorder metrics, NDJSON samples, Profiler raw captures, Memory Profiler snapshots, and Test Runner attachment:
 
 `GET /api/profiling/metrics` · `POST|GET /api/profiling/sessions` · `GET|DELETE /api/profiling/sessions/{id}` · `POST .../{id}/stop` · `GET .../{id}/samples.ndjson` · `GET .../{id}/profile.raw` · `POST|GET /api/memory-snapshots` · `GET|DELETE /api/memory-snapshots/{id}` · `GET .../{id}/snapshot`
+
+### [Editor Activities](api/activities.md)
+
+The shared vocabulary for "the Editor is busy with X": what the activities are, how a `409` names one, and what `blockedDuring` means.
 
 ### [Build](api/build.md)
 

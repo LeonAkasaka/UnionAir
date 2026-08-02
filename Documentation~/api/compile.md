@@ -62,6 +62,7 @@ The record is persisted and this response is sent **before** any compilation wor
 ```json
 {
   "error": "A script compilation is already active.",
+  "activeActivity": { "activity": "compile", "source": "unionAir", "id": "c-20260728-041549-2194f1" },
   "activeCompile": { "id": "c-20260728-041549-2194f1", "source": "unionAir", "state": "queued" }
 }
 ```
@@ -74,7 +75,7 @@ With `refresh: true`, `409` with `code: "loaded_scene_external_change_blocked"` 
 
 The guard runs again immediately before the scheduled refresh. If a scene changes during that small interval after the `202` response, the retained compile record resolves to `state: "aborted"` and `result: "notStarted"` with the conflicting scene paths in `error`; `AssetDatabase.Refresh()` is not called.
 
-`409` when the Editor is entering or in Play mode, or while assets are updating. `400` when `requestId` contains unsupported characters or is a reserved Windows device name.
+`409` when the Editor is entering or in Play mode, or while assets are updating. Both carry an `activeActivity` object naming what is blocking; see [Editor Activities](activities.md). `400` when `requestId` contains unsupported characters or is a reserved Windows device name.
 
 ```bash
 curl -X POST http://localhost:8765/api/compile \
@@ -142,7 +143,8 @@ Both are returned in one response because a polling client needs them in the sam
 | Field | Type | Description |
 |-----------|-----|------|
 | `id` | string | Identifier for this cycle |
-| `source` | string | `unionAir` when requested through the API, `external` otherwise |
+| `source` | string | `unionAir` when requested through the API, `build` for the player compilation a build runs, `external` otherwise |
+| `buildId` | string \| null | Build that owns the cycle, for `source: "build"` records |
 | `state` | string | `queued`, `running`, `completed`, or `aborted` |
 | `result` | string \| null | See the result table below; `null` while the cycle is active |
 | `target` | string | `editor` only when every compiled output is an Editor assembly, `player` when every output is a player assembly, otherwise `other` |
@@ -170,6 +172,12 @@ Both are returned in one response because a polling client needs them in the sam
 
 > `severity` comes from the compiler message type, never from the message text, because the words "error" and "warning" are localized while the code token is not.
 > Individual messages are capped at 4000 characters and the list at 200 entries.
+
+### Compilations a build owns
+
+A player build runs its own script compilation. That cycle is recorded with `source: "build"` and a `buildId` naming the build, rather than being adopted as an unrelated `external` cycle. It is therefore attributable: the build record points at it by id, and a client watching Editor compilations can filter it out with `?source=external` or `?source=unionAir`.
+
+Such a cycle never becomes `latest`, which only ever holds a completed **Editor** compilation. If a compile record was still in flight when a build's player compilation started, it is aborted with a reason naming the build, so it is not mistaken for one lost to a hand-started cycle.
 
 Player outputs include both the legacy `Library/PlayerScriptAssemblies` directory and Unity 6's `Library/Bee/PlayerScriptAssemblies` directory. Matching is case- and separator-insensitive, while similarly named unrelated directories remain `other`.
 
@@ -216,7 +224,7 @@ Lists retained terminal compilation records as bounded, newest-first summaries. 
 | `offset` | `0` | Non-negative offset within the filtered results |
 | `limit` | `20` | Page size from 1 to 100 |
 | `target` | all | Exact `editor`, `player`, or `other` filter, case-insensitive |
-| `source` | all | Exact `unionAir` or `external` filter, case-insensitive |
+| `source` | all | Exact `unionAir`, `external`, or `build` filter, case-insensitive |
 | `state` | all | Exact `completed` or `aborted` filter, case-insensitive |
 
 Filters are applied before pagination. Records are ordered by `finishedAt` descending, then `requestedAt` descending, then `id` descending, so repeated requests over unchanged history are deterministic. `total` is the number of filtered records before pagination and `hasMore` reports whether another record follows the returned page.

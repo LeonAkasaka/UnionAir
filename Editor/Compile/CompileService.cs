@@ -176,15 +176,31 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (!adopted)
             {
-                // A previous cycle that never reported a result cannot be revived.
+                // A build runs its own player compilation. Attributing that cycle to the build,
+                // rather than adopting it as an unrelated external one, is what lets the build
+                // record point at it by id and keeps it out of a caller's view of Editor compiles.
+                var buildId = UnionAirActivityCoordinator.IsDeclared(UnionAirActivity.Build)
+                    ? UnionAirActivityCoordinator.IdOf(UnionAirActivity.Build)
+                    : "";
+                var ownedByBuild = !string.IsNullOrEmpty(buildId);
+
+                // A previous cycle that never reported a result cannot be revived. The reason names
+                // the build when there is one, so a record aborted by a build's player compilation
+                // is not mistaken for one lost to a hand-started cycle.
                 if (_current != null && _current.IsActive)
                 {
-                    Abort(_current, "A new compilation started before this one reported a result.");
+                    Abort(_current, ownedByBuild
+                        ? "The player compilation for build " + buildId + " started before this one reported a result."
+                        : "A new compilation started before this one reported a result.");
                     Commit(_current);
                 }
 
-                _current = NewRecord(UnionAirCompileGate.ExternalSource, NewId());
-                UnionAirCompileGate.Begin(UnionAirCompileGate.ExternalSource, _current.id);
+                var source = ownedByBuild
+                    ? UnionAirCompileGate.BuildSource
+                    : UnionAirCompileGate.ExternalSource;
+                _current = NewRecord(source, NewId());
+                _current.buildId = buildId;
+                UnionAirCompileGate.Begin(source, _current.id);
             }
 
             _activeContext = context;

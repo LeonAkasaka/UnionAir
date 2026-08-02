@@ -24,7 +24,11 @@ Returns the execution status of the Unity Editor.
   "sessionId": "f40cbf3fc3224a97b5b7ac7aa3b1ea38",
   "lifecycleGeneration": 3,
   "settled": true,
-  "hasCompileErrors": false
+  "hasCompileErrors": false,
+  "compileState": null,
+  "compileId": null,
+  "compileSource": null,
+  "activeActivity": null
 }
 ```
 
@@ -42,6 +46,9 @@ Returns the execution status of the Unity Editor.
 | `lifecycleGeneration` | number | Assembly domain counter for the current Editor process, starting at 1 |
 | `settled` | bool | Whether the Editor is neither compiling nor updating assets |
 | `hasCompileErrors` | bool | Hint from `EditorUtility.scriptCompilationFailed` |
+| `compileState` | string \| null | `queued` or `running` for an in-flight compilation, otherwise `null` |
+| `compileId` / `compileSource` | string \| null | Identity of the in-flight compilation |
+| `activeActivity` | object \| null | What the Editor is busy with; see [Editor Activities](activities.md) |
 
 This endpoint remains available while tests run. Other than health, help, logs, and Test Runner status/result/cancel operations, endpoints return `409` until the active run finishes.
 
@@ -52,6 +59,8 @@ The server stops while the assembly domain reloads, so a request during that win
 `sessionId` changes only when the Editor process restarts, which also resets `lifecycleGeneration` to 1.
 
 > `settled` is a snapshot, not a guarantee that no reload is imminent. Compilation can finish — clearing `isCompiling` — moments before the domain reload actually begins. Clients must tolerate a dropped connection on any request and retry rather than treating `settled` as a completion signal.
+>
+> `activeActivity` is the one field to read when a request came back `409`. It names the activity, its source, and the id that owns it, and it applies the same priority the rejection does, so a client does not have to work out from `isCompiling`, `isUpdating`, `isPlaying`, and `isTestRunning` which one to wait for. See [Editor Activities](activities.md).
 >
 > `hasCompileErrors` is derived from the Console log, which Unity clears on recompile depending on the user's Console settings. Treat it as a hint rather than an authoritative result.
 

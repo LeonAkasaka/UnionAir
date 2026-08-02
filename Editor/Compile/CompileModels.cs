@@ -62,8 +62,20 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         public string id = "";
 
-        /// <summary><c>unionAir</c> when requested through the API, otherwise <c>external</c>.</summary>
+        /// <summary>
+        /// <c>unionAir</c> when requested through the API, <c>build</c> for the player compilation
+        /// a build runs, otherwise <c>external</c>.
+        /// </summary>
         public string source = "";
+
+        /// <summary>
+        /// Build that owns this cycle, for <c>source: "build"</c> records; empty otherwise.
+        /// </summary>
+        /// <remarks>
+        /// A build runs its own player compilation. Recording which build it belongs to is what
+        /// keeps that cycle from looking like an unrelated compilation someone started by hand.
+        /// </remarks>
+        public string buildId = "";
 
         /// <summary><c>queued</c>, <c>running</c>, <c>completed</c>, or <c>aborted</c>.</summary>
         public string state = "queued";
@@ -117,6 +129,7 @@ namespace LeonAkasaka.UnionAir.Editor
             AppendString(sb, "id", id);
             sb.Append(",");
             AppendString(sb, "source", source);
+            sb.Append(",\"buildId\":").Append(NullableString(buildId));
             sb.Append(",");
             AppendString(sb, "state", state);
             sb.Append(",\"result\":").Append(NullableString(result));

@@ -36,6 +36,11 @@ namespace LeonAkasaka.UnionAir.Editor
               .Append(RestResponse.FormatNullableString(compileActive ? compile.id : null));
             sb.Append(",\"compileSource\":")
               .Append(RestResponse.FormatNullableString(compileActive ? compile.source : null));
+
+            // One field naming what the Editor is busy with, so a client does not have to infer it
+            // from isCompiling, isUpdating, isPlaying, and isTestRunning and get the priority wrong.
+            sb.Append(",\"activeActivity\":");
+            UnionAirActivityDecision.AppendActivity(sb, UnionAirActivityCoordinator.Current());
             sb.Append("}");
             RestResponse.Send(response, sb.ToString());
         }
