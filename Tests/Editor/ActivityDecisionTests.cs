@@ -109,6 +109,50 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void IsDebris_IsFalseWhenNothingIsDeclared()
+        {
+            Assert.IsFalse(UnionAirActivityDecision.IsDebris(false, "", null, false));
+            Assert.IsFalse(UnionAirActivityDecision.IsDebris(false, "b-1", "b-1", true));
+        }
+
+        [Test]
+        public void IsDebris_IsFalseForTheLiveRecordThatOwnsIt()
+        {
+            Assert.IsFalse(UnionAirActivityDecision.IsDebris(true, "b-1", "b-1", true));
+        }
+
+        [Test]
+        public void IsDebris_IsTrueWhenNoRecordWasRestored()
+        {
+            Assert.IsTrue(UnionAirActivityDecision.IsDebris(true, "b-1", null, false));
+            Assert.IsTrue(UnionAirActivityDecision.IsDebris(true, "b-1", "", false));
+        }
+
+        [Test]
+        public void IsDebris_IsTrueForATerminalRecordEvenWhenTheIdMatches()
+        {
+            // The flag is released last, after the record reaches its terminal state. A terminal
+            // record still paired with a set flag means the release did not happen, and nothing
+            // else will do it. This is the case two of the three hand-written copies of this
+            // predicate got wrong: one omitted the test, the other inverted it.
+            Assert.IsTrue(UnionAirActivityDecision.IsDebris(true, "b-1", "b-1", false));
+        }
+
+        [Test]
+        public void IsDebris_IsTrueWhenAnotherRecordOwnsTheFlag()
+        {
+            Assert.IsTrue(UnionAirActivityDecision.IsDebris(true, "b-2", "b-1", true));
+        }
+
+        [Test]
+        public void IsDebris_TreatsAnUnnamedFlagAsUnowned()
+        {
+            // A flag with no id cannot be owned by a record that has one.
+            Assert.IsTrue(UnionAirActivityDecision.IsDebris(true, "", "b-1", true));
+            Assert.IsTrue(UnionAirActivityDecision.IsDebris(true, null, "b-1", true));
+        }
+
+        [Test]
         public void RejectionJson_DerivesAMessageFromTheActivity()
         {
             var json = UnionAirActivityDecision.RejectionJson(
