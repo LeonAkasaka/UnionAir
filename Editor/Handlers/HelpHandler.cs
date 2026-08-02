@@ -221,6 +221,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 AppendRiskName(sb, "editorState", ref first);
             if ((risk & UnionAirEndpointRisk.Profiling) != 0)
                 AppendRiskName(sb, "profiling", ref first);
+            if ((risk & UnionAirEndpointRisk.ExecutableOutput) != 0)
+                AppendRiskName(sb, "executableOutput", ref first);
             sb.Append("]");
         }
 

@@ -30,6 +30,7 @@ Endpoints are grouped into categories that can be enabled or disabled in the Uni
 | Editor Actions | `editorActions` | Disabled |
 | Test Runner | `testRunner` | Disabled; present only with Unity Test Framework |
 | Profiling | `profiling` | Disabled |
+| Build | `build` | Disabled |
 | Custom | `custom` | Per custom category |
 
 ---
@@ -93,6 +94,12 @@ Unity Test Framework discovery, asynchronous execution, monitoring, cancellation
 ProfilerRecorder metrics, NDJSON samples, Profiler raw captures, Memory Profiler snapshots, and Test Runner attachment:
 
 `GET /api/profiling/metrics` · `POST|GET /api/profiling/sessions` · `GET|DELETE /api/profiling/sessions/{id}` · `POST .../{id}/stop` · `GET .../{id}/samples.ndjson` · `GET .../{id}/profile.raw` · `POST|GET /api/memory-snapshots` · `GET|DELETE /api/memory-snapshots/{id}` · `GET .../{id}/snapshot`
+
+### [Build](api/build.md)
+
+Build configuration and platform module availability:
+
+`GET /api/build/settings` · `GET /api/build/targets`
 
 ---
 

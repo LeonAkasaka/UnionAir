@@ -64,7 +64,17 @@ namespace LeonAkasaka.UnionAir.Editor
         EditorState = 1 << 5,
 
         /// <summary>The endpoint may enable profiling or capture diagnostic artifacts containing project data.</summary>
-        Profiling = 1 << 6
+        Profiling = 1 << 6,
+
+        /// <summary>
+        /// The endpoint may produce executable output, such as a player build written outside the
+        /// Unity project's asset folders.
+        /// </summary>
+        /// <remarks>
+        /// Distinct from <see cref="AssetUpdate"/>: the artifact is a runnable program rather than a
+        /// project file, and it is not written through the AssetDatabase.
+        /// </remarks>
+        ExecutableOutput = 1 << 7
     }
 
     /// <summary>
@@ -119,6 +129,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         /// <summary>Built-in endpoints that capture performance and memory diagnostics.</summary>
         public const string Profiling = "profiling";
+
+        /// <summary>Built-in endpoints that report build configuration and produce player builds.</summary>
+        public const string Build = "build";
 
         /// <summary>Default category identifier for custom endpoints when no more specific category is supplied.</summary>
         public const string Custom = "custom";

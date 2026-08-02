@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added a disabled-by-default **Build** category with read-only build configuration endpoints. `GET /api/build/settings` reports the active build target, the build scene list with the build index Unity actually assigns each entry, the scripting backend, API compatibility level, stripping level, and define symbols for a named build target, plus the development and debugging flags a build would use. `GET /api/build/targets` lists the build targets this Editor defines and whether each platform module is installed — which is a property of the Editor rather than the project, so nothing in the project directory reports it.
+- Added the `executableOutput` endpoint risk for endpoints that produce runnable output rather than project files, and reported it as the risk of the Build category. No existing risk flag expressed it.
 - Added `GET /api/compile/records` to enumerate retained terminal compilation summaries in deterministic newest-first order, with bounded offset/limit pagination and target, source, and state filters.
 
 ### Changed

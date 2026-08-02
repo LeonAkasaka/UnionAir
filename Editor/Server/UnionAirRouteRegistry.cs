@@ -241,6 +241,13 @@ namespace LeonAkasaka.UnionAir.Editor
                     UnionAirRouteSource.Builtin,
                     UnionAirEndpointRisk.Profiling | UnionAirEndpointRisk.RequestDependent,
                     true,
+                    false),
+                new UnionAirCategoryDefinition(
+                    UnionAirEndpointCategories.Build,
+                    "Build",
+                    UnionAirRouteSource.Builtin,
+                    UnionAirEndpointRisk.ExecutableOutput,
+                    true,
                     false)
             };
         }

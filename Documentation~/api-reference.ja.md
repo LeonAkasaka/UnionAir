@@ -33,6 +33,7 @@ JSON レスポンス内の文字列フィールドは制御文字を含め一貫
 | Editor Actions | `editorActions` | 無効 |
 | Test Runner | `testRunner` | 無効。Unity Test Framework 導入時のみ表示 |
 | Profiling | `profiling` | 無効 |
+| Build | `build` | 無効 |
 | Custom | `custom` | カスタムカテゴリごと |
 
 ---
@@ -96,6 +97,12 @@ Unity Test Framework のテスト発見、非同期実行、監視、キャン�
 ProfilerRecorder metric、NDJSON sample、Profiler raw capture、Memory Profiler snapshot、Test Runner連携:
 
 `GET /api/profiling/metrics` · `POST|GET /api/profiling/sessions` · `GET|DELETE /api/profiling/sessions/{id}` · `POST .../{id}/stop` · `GET .../{id}/samples.ndjson` · `GET .../{id}/profile.raw` · `POST|GET /api/memory-snapshots` · `GET|DELETE /api/memory-snapshots/{id}` · `GET .../{id}/snapshot`
+
+### [Build](api/build.ja.md)
+
+ビルド構成とプラットフォームモジュールの導入状況:
+
+`GET /api/build/settings` · `GET /api/build/targets`
 
 ---
 
