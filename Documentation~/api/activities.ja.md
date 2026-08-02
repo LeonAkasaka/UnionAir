@@ -14,7 +14,7 @@
 
 | アクティビティ | 意味 | 識別子 |
 |----------|---------|---------------|
-| `buildTargetSwitch` | アクティブなビルドターゲットの切り替え中。再インポートと domain reload を伴います | 切り替えレコード |
+| `buildTargetSwitch` | アクティブなビルドターゲットの切り替え中。再インポートと domain reload を伴います | 切り替えレコード。[Build](build.ja.md#post-apibuildtarget) を参照 |
 | `build` | プレイヤービルドがキュー済みまたは実行中 | ビルドレコード |
 | `testRun` | Unity Test Framework の実行中 | UnionAir が開始した実行のレコード |
 | `playMode` | Play モード中、またはその開始/終了の遷移中 | なし。Editor から観測 |

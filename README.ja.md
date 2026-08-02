@@ -112,7 +112,7 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 | **Editor Actions** | 選択、オブジェクトの ping、アセットのオープン、Unity Editor メニュー項目の実行 | 既定で無効 |
 | **Test Runner** | EditMode / PlayMode テストの発見、実行、監視、キャンセル、結果ダウンロード | 既定で無効。Unity Test Framework 1.4.0 以降の導入時のみ利用可能 |
 | **Profiling** | ProfilerRecorder metric、NDJSON sample、Profiler raw capture、memory snapshot | 既定で無効 |
-| **Build** | ビルド構成の読み書き、導入済みプラットフォームモジュール、レポートを永続化するインプロセスのプレイヤービルド | 既定で無効 |
+| **Build** | ビルド構成の読み書き、導入済みプラットフォームモジュール、ビルドターゲットの切り替え、レポートを永続化するインプロセスのプレイヤービルド | 既定で無効 |
 
 > コンパイル結果は構造化されており、診断ごとに `severity`、`code`、プロジェクト相対の `file`、`line`、`column` を持ち、コンパイル成功時の domain reload をまたいで保持されます。IDE から開始されたコンパイルも記録されます。**[コンパイルと修正のループ](Documentation~/api/compile.ja.md#コンパイルと修正のループ)** を参照してください。
 > Unity Console のログは domain reload をまたいで保持され、増分取得用の `since` カーソルに対応しています。

@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added build target switching. `POST /api/build/target` switches the active target and returns `202` with the id to poll; `GET /api/build/target` and `GET /api/build/target/{id}` read the in-flight switch and the retained records. It is modelled as a lifecycle operation rather than a settings write, because it reimports every asset for the new platform, recompiles, and ends in a domain reload.
+- The switch record survives that reload. Unity reports nothing across it, so UnionAir resolves the record on the far side by comparing the active target against the one requested — the only piece of evidence that outlives the reload.
+- A missing platform module is reported as `409` with `code: "platform_module_not_installed"` and the targets that are installed, rather than as a generic switch failure. The fix is installing the module from the Unity Hub, which nothing about a failure message would suggest.
+- Requesting the target that is already active returns `200` with `state: "unchanged"` and creates no record.
+
 - Added persistent build settings changes. `PATCH /api/build/settings` changes the scripting backend, API compatibility level, stripping level, IL2CPP compiler configuration, define symbols, and build flags for a named build target; `POST /api/build/scenes` replaces the build scene list. This is what makes the original motivation of the umbrella issue achievable — evaluating the effect of a settings change on compilation.
 - Both endpoints state persistence explicitly per change. `project` persistence writes `ProjectSettings/ProjectSettings.asset` or `ProjectSettings/EditorBuildSettings.asset`, which appear as Git diffs and reach everyone working on the project; `user` persistence writes the per-user `Library/EditorUserBuildSettings.asset`. Presenting build flags and scripting settings as one kind of "setting" would have been the misleading part.
 - Every value is validated before anything is written, so an invalid request changes nothing. Past that point a failed change is reported rather than rolled back — undoing earlier writes could fail too and leave a third state — so each change carries `applied`, `unchanged`, or `failed`, the status is `207` when any failed, and the response includes the resulting settings.

@@ -3,12 +3,15 @@ using UnityEditor;
 namespace LeonAkasaka.UnionAir.Editor
 {
     /// <summary>
-    /// Initializes <see cref="BuildService"/> and finalizes an interrupted build.
+    /// Initializes the build services and finalizes an interrupted build.
     /// </summary>
     /// <remarks>
     /// A build has no Unity callback that fires when it is interrupted, so the reload and quit
     /// hooks are the only chance to write a terminal state for one that was in flight. What they
     /// miss — a hard crash — is caught by the reconciliation in <see cref="BuildService.Initialize"/>.
+    /// A build target switch is deliberately not finalized by those hooks: the domain reload is its
+    /// expected path, and <see cref="BuildTargetSwitchService.Initialize"/> resolves it on the far
+    /// side by comparing the active target against the requested one.
     /// </remarks>
     [InitializeOnLoad]
     internal static class BuildInit
@@ -16,6 +19,7 @@ namespace LeonAkasaka.UnionAir.Editor
         static BuildInit()
         {
             BuildService.Initialize();
+            BuildTargetSwitchService.Initialize();
 
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;

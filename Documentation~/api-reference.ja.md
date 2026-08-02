@@ -104,9 +104,9 @@ ProfilerRecorder metric、NDJSON sample、Profiler raw capture、Memory Profiler
 
 ### [Build](api/build.ja.md)
 
-ビルド構成、プラットフォームモジュールの導入状況、設定の永続的変更、プレイヤービルド:
+ビルド構成、プラットフォームモジュールの導入状況、設定の永続的変更、ビルドターゲットの切り替え、プレイヤービルド:
 
-`GET|PATCH /api/build/settings` · `GET /api/build/targets` · `POST /api/build/scenes` · `POST /api/builds` · `GET /api/builds` · `GET /api/builds/{id}` · `DELETE /api/builds/{id}`
+`GET|PATCH /api/build/settings` · `GET /api/build/targets` · `POST /api/build/scenes` · `POST|GET /api/build/target` · `GET /api/build/target/{id}` · `POST /api/builds` · `GET /api/builds` · `GET /api/builds/{id}` · `DELETE /api/builds/{id}`
 
 ---
 

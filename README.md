@@ -110,7 +110,7 @@ Pin the tag. `main` is kept releasable but runs ahead of it, and a UPM Git URL t
 | **Editor Actions** | Selection, object ping, asset open, and Unity Editor menu item execution | Disabled by default |
 | **Test Runner** | Discover, execute, monitor, cancel, and download results for EditMode and PlayMode tests | Disabled by default; available when Unity Test Framework 1.4.0+ is installed |
 | **Profiling** | ProfilerRecorder metrics, NDJSON samples, Profiler raw captures, and memory snapshots | Disabled by default |
-| **Build** | Build configuration read and write, installed platform modules, and in-process player builds with persisted reports | Disabled by default |
+| **Build** | Build configuration read and write, installed platform modules, build target switching, and in-process player builds with persisted reports | Disabled by default |
 
 > Compilation results are structured, with `severity`, `code`, project-relative `file`, `line`, and `column` per diagnostic, and survive the domain reload that a successful compilation triggers. Compilations started from an IDE are recorded too. See **[The Compile-and-Fix Loop](Documentation~/api/compile.md#the-compile-and-fix-loop)**.
 > Unity Console logs are retained across domain reloads and support an incremental `since` cursor.

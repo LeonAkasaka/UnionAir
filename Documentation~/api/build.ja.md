@@ -573,6 +573,132 @@ curl -X POST http://localhost:8765/api/builds \
 
 ---
 
+## POST /api/build/target
+
+アクティブなビルドターゲットを切り替え、ポーリング対象の id とともに `202` を返します。
+
+> Build カテゴリが有効な場合のみ呼び出せます。エンドポイントのリスクは `executableOutput` です。
+
+### これは設定の書き込みではなくライフサイクル操作です
+
+ターゲットの切り替えは新しいプラットフォーム向けに**すべてのアセット**を再インポートし、再コンパイルし、domain reload で終わります。大規模プロジェクトでは秒ではなく分の単位になり、その大半の間 UnionAir は応答しません。ビルドが引き起こすのと同種の停止が、より長く続きます。これが、`PATCH /api/build/settings` のフィールドではなく、永続レコードを伴う追跡対象アクティビティとして扱う理由です。
+
+要点はレコードです。レコードは切り替えが引き起こす domain reload を越えて残るため、接続が切れたクライアントは戻ってきて結果を読み取れます。アクティブなターゲットから推測する必要はありません。Unity はリロードをまたいで結果を報告しないため、UnionAir はリロード後にアクティブなターゲットと要求されたターゲットを比較してレコードを確定させます。
+
+### リクエスト
+
+```json
+{ "buildTarget": "StandaloneWindows64", "requestId": "ci-1" }
+```
+
+| フィールド | 必須 | 説明 |
+|-------|----------|-------------|
+| `buildTarget` | はい | [`GET /api/build/targets`](#get-apibuildtargets) が報告する `BuildTarget` 名 |
+| `requestId` | いいえ | 呼び出し側が指定する id。文字種の規則は `POST /api/compile` と同じ |
+
+### レスポンス — 202
+
+```json
+{
+  "id": "t-20260802-103012-5ba71c",
+  "state": "queued",
+  "requestedTarget": "StandaloneWindows64",
+  "previousTarget": "StandaloneWindows",
+  "sessionId": "f40cbf3fc3224a97b5b7ac7aa3b1ea38",
+  "lifecycleGenerationAtRequest": 16,
+  "statusUrl": "/api/build/target/t-20260802-103012-5ba71c",
+  "note": "Switching reimports every asset for the new platform..."
+}
+```
+
+### ステータスコード
+
+対象のモジュールが未導入の場合、`code: "platform_module_not_installed"` を伴う `409`:
+
+```json
+{
+  "error": "The platform module for 'Android' is not installed in this Unity Editor. Install it through the Unity Hub for this Editor version, then retry.",
+  "code": "platform_module_not_installed",
+  "buildTarget": "Android",
+  "installedTargets": ["StandaloneWindows", "StandaloneWindows64"]
+}
+```
+
+これは汎用的な失敗ではなく独立した条件として報告します。解決方法(Unity Hub からモジュールを導入する)は、切り替え失敗のメッセージからは決して示唆されないものだからです。`installedTargets` は、この Editor が切り替え*可能*な対象を列挙します。
+
+要求されたターゲットが既にアクティブな場合は `state: "unchanged"` を伴う `200`。再インポートは行われず、レコードも作成されません。
+
+切り替えが既に実行中の場合は `activeSwitch` オブジェクトを伴う `409`、`requestId` の再送には `existingSwitch` を伴う `409`。
+
+`buildTarget` の欠落・未知の値、`requestId` の不正には `400`。
+
+コンパイル・アセットインポート・ビルドの実行中は `activeActivity` を伴う `409`。
+
+```bash
+curl -X POST http://localhost:8765/api/build/target \
+  -H "Content-Type: application/json" \
+  -d '{"buildTarget":"StandaloneWindows64"}'
+```
+
+---
+
+## GET /api/build/target
+
+アクティブなターゲット、実行中の切り替え(`current`)、保持されている切り替えレコードを返します。
+
+```json
+{
+  "activeBuildTarget": "StandaloneWindows64",
+  "activeBuildTargetGroup": "Standalone",
+  "current": null,
+  "total": 2,
+  "records": [
+    {
+      "id": "t-20260802-103012-5ba71c",
+      "source": "unionAir",
+      "state": "completed",
+      "requestedTarget": "StandaloneWindows64",
+      "requestedTargetGroup": "Standalone",
+      "requestedNamedBuildTarget": "Standalone",
+      "previousTarget": "StandaloneWindows",
+      "activeTarget": "StandaloneWindows64",
+      "durationSeconds": 3.3,
+      "lifecycleGenerationAtRequest": 18,
+      "lifecycleGenerationAtFinish": 18,
+      "error": null,
+      "statusUrl": "/api/build/target/t-20260802-103012-5ba71c"
+    }
+  ]
+}
+```
+
+`GET /api/build/target/{id}` は 1 件のレコードを返します。UnionAir は最新 20 件を保持します。
+
+### state
+
+| `state` | 意味 |
+|---------|---------|
+| `queued` | 受理済み。切り替えは未開始 |
+| `switching` | 再インポートと再コンパイル中。Editor は応答しません |
+| `completed` | アクティブなターゲットが要求どおりになった |
+| `failed` | Unity が切り替えを拒否したか、実行せずにリロードした |
+| `aborted` | 切り替え中に Editor が終了または再起動した |
+
+`lifecycleGenerationAtRequest` と `lifecycleGenerationAtFinish` は、切り替えが domain reload をまたいだ場合に異なり、Unity がその場で完了した場合は一致します。どちらも起こります。ビルドターゲットグループ**内**の切り替え(たとえば `StandaloneWindows64` から `StandaloneWindows`)はリロードを必要としないことが多く、グループ間の切り替えは必要とします。
+
+### 断絶をまたいだポーリング
+
+```
+1. POST /api/build/target        -> 202 { id, lifecycleGenerationAtRequest }
+2. 接続拒否を想定内として GET /api/build/target/{id} をポーリング
+3. state == "completed"          -> 完了。新しいターゲットがアクティブ
+   state == "failed"             -> 'error' を読む。アクティブなターゲットは変わっていない
+   state == "aborted"            -> Editor が停止した。GET /api/build/target を確認
+4. 待機には明示的な timeout を設ける。大規模プロジェクトでは数分かかりうる
+```
+
+---
+
 ## アーティファクトの保存とリテンション
 
 プレイヤー出力とその `report.json` は、プロジェクトルート直下の `Builds/UnionAir/{id}/` に一緒に置かれます。

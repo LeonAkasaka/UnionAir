@@ -50,6 +50,45 @@ namespace LeonAkasaka.UnionAir.Editor
             ResponseExample = "{\"changes\":[{\"setting\":\"scenes\",\"outcome\":\"applied\",\"persistence\":\"project\",\"file\":\"ProjectSettings/EditorBuildSettings.asset\",\"previous\":\"Assets/Scenes/SampleScene.unity+\",\"value\":\"Assets/Scenes/SampleScene.unity+;Assets/Scenes/Menu.unity+\",\"error\":null}],\"persistent\":true,\"compilationExpected\":false,\"lifecycleGeneration\":12,\"note\":\"Changes are permanent.\",\"settings\":{}}")]
         private void SetScenes(UnionAirRequestContext ctx)
             => new BuildSettingsHandler().HandleSetScenes(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "target",
+            Category = UnionAirEndpointCategories.Build,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            TestRunPolicy = UnionAirTestRunPolicy.Blocked,
+            BlockedDuring = UnionAirActivity.Compile | UnionAirActivity.AssetUpdate | UnionAirActivity.Build | UnionAirActivity.BuildTargetSwitch,
+            Summary = "Switches the active build target and returns 202 with the id to poll. This is a lifecycle operation, not a settings write: it reimports every asset for the new platform, recompiles, and ends in a domain reload, so it can take minutes and UnionAir answers nothing for most of it. A missing platform module is reported as 409 with code 'platform_module_not_installed' and the targets that are installed. Requesting the target that is already active returns 200 with state 'unchanged' and creates no record.",
+            RequiredBody = new string[] { "buildTarget" },
+            OptionalBody = new string[] { "requestId" },
+            RequestExample = "{\"buildTarget\":\"StandaloneWindows64\"}",
+            ResponseExample = "{\"id\":\"t-20260802-103012-5ba71c\",\"state\":\"queued\",\"requestedTarget\":\"StandaloneWindows64\",\"previousTarget\":\"StandaloneWindows\",\"sessionId\":\"f40cbf3f\",\"lifecycleGenerationAtRequest\":14,\"statusUrl\":\"/api/build/target/t-20260802-103012-5ba71c\",\"note\":\"Switching reimports every asset for the new platform.\"}")]
+        private void SwitchTarget(UnionAirRequestContext ctx)
+            => new BuildTargetHandler().HandleSwitch(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("GET", "target",
+            Category = UnionAirEndpointCategories.Build,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            TestRunPolicy = UnionAirTestRunPolicy.Allowed,
+            UseRiskOverride = true,
+            Risk = UnionAirEndpointRisk.None,
+            UseActivityOverride = true,
+            BlockedDuring = UnionAirActivity.None,
+            Summary = "Returns the active build target, the in-flight switch as 'current', and the retained switch records.",
+            ResponseExample = "{\"activeBuildTarget\":\"StandaloneWindows64\",\"activeBuildTargetGroup\":\"Standalone\",\"current\":null,\"total\":1,\"records\":[{\"id\":\"t-20260802-103012-5ba71c\",\"state\":\"completed\",\"requestedTarget\":\"StandaloneWindows64\",\"previousTarget\":\"StandaloneWindows\",\"activeTarget\":\"StandaloneWindows64\",\"error\":null,\"statusUrl\":\"/api/build/target/t-20260802-103012-5ba71c\"}]}")]
+        private void TargetCollection(UnionAirRequestContext ctx)
+            => new BuildTargetHandler().HandleCollection(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("GET", "target/{id}",
+            Category = UnionAirEndpointCategories.Build,
+            PlayModePolicy = UnionAirPlayModePolicy.Allowed,
+            TestRunPolicy = UnionAirTestRunPolicy.Allowed,
+            UseRiskOverride = true,
+            Risk = UnionAirEndpointRisk.None,
+            UseActivityOverride = true,
+            BlockedDuring = UnionAirActivity.None,
+            PathParams = new string[] { "id" },
+            Summary = "Returns one retained build target switch record. The record survives the domain reload the switch causes, so this is how a client learns the outcome after its connection was dropped. UnionAir retains the 20 most recent records.")]
+        private void TargetById(UnionAirRequestContext ctx)
+            => new BuildTargetHandler().HandleById(ctx);
     }
 
     [UnionAirController("builds")]

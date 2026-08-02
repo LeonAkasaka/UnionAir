@@ -583,6 +583,132 @@ Returns `404` for an id that is not retained. `outputAvailable: true` in the res
 
 ---
 
+## POST /api/build/target
+
+Switches the active build target and returns `202` with the id to poll.
+
+> Requires the Build category to be enabled. The endpoint risk is `executableOutput`.
+
+### This is a lifecycle operation, not a settings write
+
+Switching targets reimports **every asset** for the new platform, recompiles, and ends in a domain reload. On a large project that is minutes, not seconds, and UnionAir answers nothing for most of it — the same unavailability a build causes, for longer. That is why it is a tracked activity with a durable record rather than a field on `PATCH /api/build/settings`.
+
+The record is the point. It survives the domain reload the switch causes, so a client whose connection dropped can come back and read the outcome rather than inferring it from the active target. Unity reports nothing across the reload, so on the far side UnionAir resolves the record by comparing the active target against the one that was requested.
+
+### Request
+
+```json
+{ "buildTarget": "StandaloneWindows64", "requestId": "ci-1" }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `buildTarget` | Yes | A `BuildTarget` name reported by [`GET /api/build/targets`](#get-apibuildtargets) |
+| `requestId` | No | Caller-supplied id; same character rules as `POST /api/compile` |
+
+### Response — 202
+
+```json
+{
+  "id": "t-20260802-103012-5ba71c",
+  "state": "queued",
+  "requestedTarget": "StandaloneWindows64",
+  "previousTarget": "StandaloneWindows",
+  "sessionId": "f40cbf3fc3224a97b5b7ac7aa3b1ea38",
+  "lifecycleGenerationAtRequest": 16,
+  "statusUrl": "/api/build/target/t-20260802-103012-5ba71c",
+  "note": "Switching reimports every asset for the new platform..."
+}
+```
+
+### Status Codes
+
+`409` with `code: "platform_module_not_installed"` when the target's module is missing:
+
+```json
+{
+  "error": "The platform module for 'Android' is not installed in this Unity Editor. Install it through the Unity Hub for this Editor version, then retry.",
+  "code": "platform_module_not_installed",
+  "buildTarget": "Android",
+  "installedTargets": ["StandaloneWindows", "StandaloneWindows64"]
+}
+```
+
+This is reported as its own condition rather than as a generic failure, because the fix — installing the module from the Unity Hub — is not something a switch-failed message would ever suggest. `installedTargets` names what the Editor *can* switch to.
+
+`200` with `state: "unchanged"` when the requested target is already active. Nothing is reimported and no record is created.
+
+`409` with an `activeSwitch` object when a switch is already running, and `409` with `existingSwitch` on a replayed `requestId`.
+
+`400` for a missing or unknown `buildTarget`, or a malformed `requestId`.
+
+`409` while a compilation, an asset import, or a build is active, carrying `activeActivity`.
+
+```bash
+curl -X POST http://localhost:8765/api/build/target \
+  -H "Content-Type: application/json" \
+  -d '{"buildTarget":"StandaloneWindows64"}'
+```
+
+---
+
+## GET /api/build/target
+
+Returns the active target, the in-flight switch as `current`, and the retained switch records.
+
+```json
+{
+  "activeBuildTarget": "StandaloneWindows64",
+  "activeBuildTargetGroup": "Standalone",
+  "current": null,
+  "total": 2,
+  "records": [
+    {
+      "id": "t-20260802-103012-5ba71c",
+      "source": "unionAir",
+      "state": "completed",
+      "requestedTarget": "StandaloneWindows64",
+      "requestedTargetGroup": "Standalone",
+      "requestedNamedBuildTarget": "Standalone",
+      "previousTarget": "StandaloneWindows",
+      "activeTarget": "StandaloneWindows64",
+      "durationSeconds": 3.3,
+      "lifecycleGenerationAtRequest": 18,
+      "lifecycleGenerationAtFinish": 18,
+      "error": null,
+      "statusUrl": "/api/build/target/t-20260802-103012-5ba71c"
+    }
+  ]
+}
+```
+
+`GET /api/build/target/{id}` returns one record. UnionAir retains the 20 most recent.
+
+### State
+
+| `state` | Meaning |
+|---------|---------|
+| `queued` | Accepted; the switch has not started |
+| `switching` | Reimporting and recompiling; the Editor is unavailable |
+| `completed` | The active target is the requested one |
+| `failed` | Unity refused the switch, or reloaded without performing it |
+| `aborted` | The Editor was closed or restarted mid-switch |
+
+`lifecycleGenerationAtRequest` and `lifecycleGenerationAtFinish` differ when the switch crossed a domain reload, and match when Unity completed it inline. Both happen: a switch **within** a build target group — `StandaloneWindows64` to `StandaloneWindows`, say — often needs no reload at all, while a switch between groups does.
+
+### Polling through the gap
+
+```
+1. POST /api/build/target        -> 202 { id, lifecycleGenerationAtRequest }
+2. Poll GET /api/build/target/{id}, treating a refused connection as expected.
+3. state == "completed"          -> done; the new target is active.
+   state == "failed"             -> read 'error'; the active target did not change.
+   state == "aborted"            -> the Editor died; check GET /api/build/target.
+4. Give the wait an explicit timeout. A large project can take minutes.
+```
+
+---
+
 ## Artifact storage and retention
 
 Player output and its `report.json` live together in `Builds/UnionAir/{id}/`, under the project root.

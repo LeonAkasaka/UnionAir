@@ -11,7 +11,7 @@ This page is not an endpoint group. It describes the single vocabulary UnionAir 
 
 | Activity | Meaning | Identified by |
 |----------|---------|---------------|
-| `buildTargetSwitch` | The active build target is being switched, with the reimport and domain reload it causes | The switch record |
+| `buildTargetSwitch` | The active build target is being switched, with the reimport and domain reload it causes | The switch record; see [Build](build.md#post-apibuildtarget) |
 | `build` | A player build is queued or running | The build record |
 | `testRun` | A Unity Test Framework run is active | The run record, for runs UnionAir started |
 | `playMode` | The Editor is in Play mode, or entering or leaving it | Nothing; observed from the Editor |
