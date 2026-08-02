@@ -112,7 +112,7 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 | **Editor Actions** | 選択、オブジェクトの ping、アセットのオープン、Unity Editor メニュー項目の実行 | 既定で無効 |
 | **Test Runner** | EditMode / PlayMode テストの発見、実行、監視、キャンセル、結果ダウンロード | 既定で無効。Unity Test Framework 1.4.0 以降の導入時のみ利用可能 |
 | **Profiling** | ProfilerRecorder metric、NDJSON sample、Profiler raw capture、memory snapshot | 既定で無効 |
-| **Build** | ビルド構成、ビルドシーン、スクリプティングバックエンドと定義シンボル、導入済みプラットフォームモジュール | 既定で無効 |
+| **Build** | ビルド構成、導入済みプラットフォームモジュール、レポートを永続化するインプロセスのプレイヤービルド | 既定で無効 |
 
 > コンパイル結果は構造化されており、診断ごとに `severity`、`code`、プロジェクト相対の `file`、`line`、`column` を持ち、コンパイル成功時の domain reload をまたいで保持されます。IDE から開始されたコンパイルも記録されます。**[コンパイルと修正のループ](Documentation~/api/compile.ja.md#コンパイルと修正のループ)** を参照してください。
 > Unity Console のログは domain reload をまたいで保持され、増分取得用の `since` カーソルに対応しています。
@@ -130,7 +130,7 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 - `Origin` ヘッダーを持つリクエストはルーティング前に拒否され、レスポンスは CORS を許可しません。そのためブラウザの `fetch` と XMLHttpRequest は既定で非対応です。`Origin` を送信しないローカル CLI や連携クライアントは引き続き利用できます。
 - 空でないボディを持つリクエストには `Content-Type: application/json` が必要です。空の POST は Content-Type なしでも引き続き有効です。
 - 既定で有効なのは **Read** カテゴリのみです。Scene Write / Asset Write / Play Mode / Editor Actions / Test Runner / Profiling / Build はオプトインであり、有効化するとプロジェクトの任意のテストコード、heap snapshot、Unity Editor のメニュー実行、アセット削除を含む操作や診断成果物が、任意のローカルプロセスに公開されます。すべてのローカルクライアントを信頼できる場合にのみ有効化してください。
-- **Build** カテゴリは `executableOutput` リスクを持ちます。UnionAir がビルド構成を報告し、後続のリリースではプレイヤービルドを生成する経路となるカテゴリだからです。ビルド構成にはスクリプティング定義シンボルと製品情報が含まれ、これらはプロジェクトがどうコンパイルされ出荷されるかを表します。現時点のエンドポイントは読み取り専用ですが、このカテゴリが何の入口であるかを理由に既定で無効です。
+- **Build** カテゴリは `executableOutput` リスクを持ちます。有効化すると、任意のローカルプロセスがプレイヤービルドを開始できるようになります。ビルドはプロジェクトのビルドスクリプトを実行し、実行可能なプログラムをプロジェクトディレクトリの `Builds/UnionAir/` に書き出します。またビルドは Unity のメインスレッドを 1 分以上占有し、その間 UnionAir は一切応答しません。
 - カテゴリの有効/無効は**プロジェクト単位ではありません**。設定は `EditorPrefs` に保存され、Unity はこれをユーザーアカウントと Editor バージョン単位で管理します。あるプロジェクトで有効化したカテゴリは、同じ Editor で開く他のすべてのプロジェクトでも有効なままになります。
 
 ## クイックサンプル

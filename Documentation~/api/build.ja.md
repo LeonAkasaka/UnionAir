@@ -191,6 +191,238 @@ curl "http://localhost:8765/api/build/targets?installed=true"
 
 ---
 
+## POST /api/builds
+
+**アクティブな**ビルドターゲットに対してプレイヤービルドを要求し、ポーリング対象の id とともに `202` を返します。
+
+> Build カテゴリが有効な場合のみ呼び出せます。エンドポイントのリスクは `executableOutput` です。
+
+### ビルド中は API が応答しません
+
+ビルドは実行中ずっと Unity のメインスレッドを占有し、UnionAir は同じスレッドの `EditorApplication.update` から HTTP リクエストをディスパッチします。**ビルドが終わるまでいかなるリクエストも処理されません** — `GET /api/builds/{id}` すら例外ではありません。開発時の計測では Windows プレイヤービルドで約 72 秒、キャッシュが温まっている場合で 22〜34 秒でした。
+
+クライアントの timeout はそれに合わせて設定し、ビルド中の接続拒否やハングは失敗ではなく想定された挙動として扱ってください。レコードを永続化して `202` をビルド開始**前**に送るのはこのためです。後から書き込んだレスポンスは、呼び出し側が既に諦めた接続に届くことになります。
+
+同じ理由から、**進捗の逐次報告とキャンセルは提供しません**。どちらもインプロセスでは実現不可能です。メインスレッドが `BuildPipeline.BuildPlayer` の中にある間はいかなるコールバックも動作せず、Unity はプレイヤービルドのキャンセル API 自体を公開していません。これらを提供しうるアウトオブプロセスのビルドサービスはスコープ外です。
+
+### リクエスト
+
+```json
+{
+  "requestId": "nightly-1",
+  "development": true,
+  "allowDebugging": true
+}
+```
+
+| フィールド | 必須 | 既定 | 説明 |
+|-------|----------|---------|-------------|
+| `requestId` | いいえ | 自動生成 | 呼び出し側が指定する id。文字種の規則は `POST /api/compile` と同じ |
+| `development` | いいえ | プロジェクト設定 | Development build |
+| `allowDebugging` | いいえ | プロジェクト設定 | Script debugging |
+| `connectProfiler` | いいえ | プロジェクト設定 | Autoconnect Profiler |
+| `deepProfiling` | いいえ | プロジェクト設定 | Deep profiling support |
+| `waitForPlayerConnection` | いいえ | `false` | 起動時にプレイヤー接続を待機 |
+| `clean` | いいえ | `false` | 先にビルドキャッシュを消去 |
+| `strictMode` | いいえ | `false` | エラーが 1 つでもあればビルドを失敗させる |
+
+**受け付けるオプションはこれらのみです。** 出力先はリクエストから受け取りません。ビルドターゲットも同様です。ターゲットの切り替えはビルドのパラメータではなく、それ自体が独立したライフサイクル操作です。
+
+省略されたオプションは、プロジェクトの Build Settings ウィンドウで現在選択されている値にフォールバックします。したがって空のボディで要求したビルドは、人が Build を押して得られるビルドと同じです。上書きはそのビルド 1 回にのみ適用され、プロジェクトには**書き戻されません**。`clean` と `strictMode` はプロジェクトから継承しません。どちらも永続化されたプロジェクト設定ではないためです。
+
+`allowDebugging` / `connectProfiler` / `deepProfiling` / `waitForPlayerConnection` は `development: true` を必要とし、そうでなければ `400` を返します。Unity 自身の Build Settings ウィンドウも development build なしではこれらを無効化しており、`BuildPipeline` は黙って落とすため、要求されたものとは静かに異なるビルドが生成されてしまうからです。
+
+`requestId` を指定するとリクエストが回復可能になります。ビルド中は接続が落ちるため `202` の取りこぼしは稀な事態ではなく現実的な結果です。2 回目のリクエストを送るのではなく `GET /api/builds/{requestId}` をポーリングしてください。
+
+### レスポンス — 202
+
+```json
+{
+  "id": "b-20260802-101530-3f9ac1",
+  "state": "queued",
+  "buildTarget": "StandaloneWindows64",
+  "sessionId": "f40cbf3fc3224a97b5b7ac7aa3b1ea38",
+  "lifecycleGenerationAtRequest": 9,
+  "statusUrl": "/api/builds/b-20260802-101530-3f9ac1",
+  "note": "The build occupies the Unity main thread. UnionAir answers no request, including this status URL, until it finishes..."
+}
+```
+
+### ステータスコード
+
+読み込み済みシーンに**未保存の変更**がある場合、`code: "loaded_scene_unsaved_blocked"` を伴う `409`:
+
+```json
+{
+  "error": "Cannot build while loaded scenes have unsaved changes. BuildPipeline.BuildPlayer reads scenes from disk, so the build would not contain them. Save the reported scenes explicitly before retrying.",
+  "code": "loaded_scene_unsaved_blocked",
+  "loadedScenes": [
+    { "path": "Assets/Scenes/SampleScene.unity", "name": "SampleScene", "isDirty": true, "isActive": true, "reason": "unsaved" }
+  ]
+}
+```
+
+`BuildPipeline.BuildPlayer` はシーンを保存済みアセットから読み取り、Build Settings ウィンドウと異なりスクリプトから呼ばれた場合は確認ダイアログを出しません。API 経由で編集され保存されていないシーンは黙って除外され、ビルドは **Editor の表示と一致しない内容に対して成功を報告**します。これは自動化クライアントにとって最悪の失敗形態です。シーンが暗黙に保存されることはありません。ビルド要求の副作用として他人の未保存の作業をディスクへ書き込むことは、拒否されるよりも大きな驚きだからです。一度も保存されておらず保存先パスを持たないシーンは `reason` が `unsavedNewScene` になります。
+
+これは[読み込み済みシーンの外部変更ガード](editor.ja.md#loaded-scene-conflict--409)とは別の判定です。あちらは読み込み済みシーンをディスク上のファイルと比較します。両方が同時に成立することもあり、一方が他方を含意しません。
+
+保持期間内に `requestId` が既に使用されていた場合、`existingBuild` オブジェクトを伴う `409`。ボディには既存レコード全体が含まれます。
+
+ビルドが既にキュー済みまたは実行中の場合、`activeBuild` オブジェクトを伴う `409`。
+
+アクティブなビルドターゲットのプラットフォームモジュールが未導入の場合、ターゲット名と `GET /api/build/targets` を示す `409`。
+
+コンパイル・アセットインポート・ビルドターゲット切り替えが実行中の場合、`activeActivity` を伴う `409`。[Editor アクティビティ](activities.ja.md) を参照してください。
+
+Build Settings に有効なシーンが 1 つもない場合、`requestId` が不正な場合、`development` なしでデバッグ用オプションが要求された場合は `400`。
+
+```bash
+curl -X POST http://localhost:8765/api/builds \
+  -H "Content-Type: application/json" \
+  -d '{"requestId":"nightly-1"}'
+```
+
+---
+
+## GET /api/builds
+
+実行中のビルドを `current` として、保持されているレコードの要約と、アーティファクトが占有しているディスク量を返します。
+
+```json
+{
+  "current": null,
+  "total": 1,
+  "storage": {
+    "root": "Builds/UnionAir",
+    "totalBytes": 140839956,
+    "artifactCount": 1,
+    "maxArtifactCount": 3,
+    "maxTotalBytes": 2147483648,
+    "retainedRecords": 20
+  },
+  "records": [
+    {
+      "id": "b-20260802-101530-3f9ac1",
+      "state": "completed",
+      "result": "succeeded",
+      "buildTarget": "StandaloneWindows64",
+      "requestedAt": "2026-08-02T09:41:12.0200139Z",
+      "finishedAt": "2026-08-02T09:41:34.2200139Z",
+      "durationSeconds": 22.2,
+      "outputDirectory": "Builds/UnionAir/b-20260802-101530-3f9ac1",
+      "outputBytes": 140838619,
+      "outputAvailable": true,
+      "compileId": "c-20260802-094112-9d15d8",
+      "error": null,
+      "statusUrl": "/api/builds/b-20260802-101530-3f9ac1"
+    }
+  ]
+}
+```
+
+`storage` が存在するのは、アーティファクトが設計上 git から不可視であり(下記参照)、したがってディスクが埋まっていることに人が気づく通常の手段からも不可視だからです。発見可能性は代わりに API が提供します。レコードが出力パスとバイト数を持ち、このエンドポイントが合計を報告し、`DELETE` が回収し、リテンションが自動的に整理します。
+
+---
+
+## GET /api/builds/{id}
+
+保持されているビルドレコードを 1 件返します。スナップショット化されたビルドレポートを含みます。
+
+```json
+{
+  "id": "b-20260802-101530-3f9ac1",
+  "state": "completed",
+  "result": "succeeded",
+  "buildTarget": "StandaloneWindows64",
+  "options": { "development": true, "allowDebugging": true, "connectProfiler": false, "deepProfiling": false, "waitForPlayerConnection": false, "clean": false, "strictMode": false },
+  "scenes": ["Assets/Scenes/SampleScene.unity"],
+  "compileId": "c-20260802-094112-9d15d8",
+  "outputDirectory": "Builds/UnionAir/b-20260802-101530-3f9ac1",
+  "outputPath": "Builds/UnionAir/b-20260802-101530-3f9ac1/TestUnity6.exe",
+  "outputBytes": 140838619,
+  "outputAvailable": true,
+  "reportPath": "Builds/UnionAir/b-20260802-101530-3f9ac1/report.json",
+  "report": {
+    "result": "succeeded",
+    "platform": "StandaloneWindows64",
+    "totalTimeSeconds": 21.99,
+    "totalSizeBytes": 140838619,
+    "totalErrors": 0,
+    "totalWarnings": 0,
+    "messages": [],
+    "messagesTruncated": false
+  },
+  "error": null,
+  "statusUrl": "/api/builds/b-20260802-101530-3f9ac1"
+}
+```
+
+### state と result
+
+| `state` | `result` | 意味 |
+|---------|----------|---------|
+| `queued` | ― | ビルドは受理されたがまだ開始していない |
+| `running` | ― | ビルド実行中。この間、他のリクエストは処理されない |
+| `completed` | `succeeded` | Unity がビルド成功を報告 |
+| `failed` | `failed` | Unity がビルド失敗を報告。`report.messages` を参照 |
+| `failed` | `cancelled` | Unity 内部でビルドがキャンセルされた |
+| `aborted` | `aborted` / `notStarted` | 結果報告前に Editor がリロード・終了・クラッシュした |
+
+`report` はライブオブジェクトではなく**スナップショット**です。`BuildReport` はネイティブ状態に裏打ちされた Unity オブジェクトで domain reload により失われるため、`BuildPipeline.BuildPlayer` が返った直後にプレーンなフィールドへコピーされます。これによりレコードは保持されている限り読み取り可能なままです。`messages` はエラーと警告のみを保持します。成功したビルドは情報レベルのエントリを数千件報告し、レコードはディスクに書かれポーリングのたびに全体が返されるためです。上限は 200 件で、打ち切りは `messagesTruncated` が報告します。
+
+`compileId` は**このビルドが実行したプレイヤーコンパイル**のコンパイルレコードを指します。そのサイクルは無関係な external コンパイルとして引き受けられるのではなく `source: "build"` として記録されます。[ビルドが所有するコンパイル](compile.ja.md)を参照してください。
+
+`report.startedAt` と `report.endedAt` は Unity 由来の値を UTC に正規化したものです。`report.outputPath` は Unity が報告した絶対パス、レコードの `outputPath` はプロジェクト相対パスです。
+
+`outputAvailable` はレコード読み取り時に算出されます。リテンションはレコードよりずっと早く出力を削除するためです。`outputAvailable: false` のレコードも、そのビルドが何を生成したかは報告します。
+
+---
+
+## DELETE /api/builds/{id}
+
+ビルドレコードとそのアーティファクトディレクトリを削除します。
+
+```json
+{
+  "deleted": "b-20260802-101530-3f9ac1",
+  "reclaimedBytes": 99727454,
+  "outputAvailable": false,
+  "totalBytes": 140839956
+}
+```
+
+保持されていない id には `404` を返します。レスポンスの `outputAvailable: true` は、ディレクトリを完全に削除できなかったことを意味します。通常は中のファイルが開かれている場合です。
+
+---
+
+## アーティファクトの保存とリテンション
+
+プレイヤー出力とその `report.json` は、プロジェクトルート直下の `Builds/UnionAir/{id}/` に一緒に置かれます。
+
+コンパイルレコード・プロファイリング成果物・メモリスナップショットが `Library/UnionAir/` にあるにもかかわらず、`Library/` は意図的に**使いません**。Unity は任意のタイミングで `Library/` を再生成するため、数百 MB のアーティファクトが黙って破棄されるか、それを指すレコードから切り離されるかのどちらかになります。ビルド出力は Editor 内部の診断情報ではなくユーザー向けの成果物であり、人が探す場所にあるべきです。
+
+**git からの除外は決定的にします。** ディレクトリ作成時に `*` を含む `.gitignore` を書き込みます。完了時ではなく作成時なのは、途中で失敗したビルドもコミット可能な出力を残さないためです。UnionAir は利用側プロジェクトの `.gitignore` に依存できません。Unity 標準テンプレートは `/[Bb]uilds/` を除外しますが、すべてのプロジェクトがそれを使うわけではないため、git 上の可視性はプロジェクトごとに異なり、挙動として文書化できなくなります。また計測された出力サイズは GitHub の 100 MiB ファイル上限に十分近く、誤コミットは煩わしさではなく重大な事故になります。
+
+| 上限 | 値 |
+|-----|-------|
+| 保持するアーティファクトディレクトリ数 | 3 |
+| アーティファクト合計サイズ | 2 GiB |
+| 保持するレコード数 | 20 |
+
+いずれかの上限を超えると、直前に完了したビルドを保護しつつ古いものから削除します。上限は 5 GB のプロファイリングクォータとは独立に設定しています。同じ値ではビルドを約 50 件保持してしまうためです。
+
+レコードは小さく、アーティファクトより長く残ります。古いビルドについて問い合わせたクライアントは `404` ではなく、そのビルドが何を生成したかを知ることができます。
+
+レコードはアーティファクトディレクトリ内に `report.json` としても書き出されます。API を介さずにそのディレクトリを見つけた人にも、内容が説明されるようにするためです。
+
+### ビルド後も読み込み済みシーンは追跡されたまま
+
+`BuildPipeline.BuildPlayer` はビルド対象シーンを自ら開き、読み込み済みシーンに対して `sceneClosed` を発火させますが、対応する `sceneOpened` は発火しません。その結果、[外部変更ガード](editor.ja.md#loaded-scene-conflict--409)が保持するディスク基準値が失われます。放置すると、以後の `POST /api/editor/refresh` や `POST /api/compile` はそのシーンを `untracked` として報告し続け、人が手動で保存または再オープンするまで解消しません。ビルド→コンパイルのループが理由もなく壊れてしまいます。
+
+UnionAir はビルド前に基準値を退避し、ビルド後に復元します。ただし**ファイルが 1 バイトも変わっていないシーンに限ります**。ビルド中にディスク上で変更されたシーンはその比較に失敗し、untracked のまま残り、引き続きガードに引っかかります。
+
+---
+
 ## 関連ドキュメント
 
 - [Compile API](compile.ja.md) — これらの設定が説明するコンパイル結果

@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added player builds to the Build category. `POST /api/builds` requests a build for the active target and returns `202` with the id to poll; `GET /api/builds`, `GET /api/builds/{id}`, and `DELETE /api/builds/{id}` read, enumerate, and reclaim them. A build is the only check that covers what compilation and EditMode tests do not: player-target assemblies, stripping, scripting backend, and platform-specific define symbols.
+- A build occupies the Unity main thread, so **UnionAir answers no request while one runs** — measured at roughly 72 seconds for a Windows player, 22–34 seconds warm. The record is persisted and the `202` sent before the build starts, and the response says so, so a client can set its timeouts. Live progress and cancellation are not offered because neither is achievable in process.
+- Build output and its `report.json` are written to `Builds/UnionAir/{id}/` under the project root, with a generated `.gitignore` containing `*`. `Library/` is deliberately not used: Unity regenerates it, which would either destroy a hundred-megabyte artifact silently or orphan it from its record. Retention trims oldest-first under a 3-directory, 2 GiB cap set independently of the profiling quota, and `GET /api/builds` reports total usage so disk consumption stays visible despite the git exclusion.
+- The completed `BuildReport` is snapshotted into a durable DTO the moment `BuildPipeline.BuildPlayer` returns, because the report is a Unity object a domain reload discards. Records reach `queued`, `running`, `completed`, `failed`, or `aborted`, are written atomically, and survive a domain reload or an Editor crash.
+- `POST /api/builds` rejects a request with `409` when any loaded scene has unsaved changes. `BuildPipeline.BuildPlayer` reads scenes from disk and does not prompt from script, so an unsaved scene would be silently excluded and the build would report success for content that does not match the Editor. Scenes are never saved implicitly.
+- A replayed `requestId` returns `409` with the existing record rather than starting a second build. This matters more than for compilation: the connection drops for the whole build, so losing the `202` is a realistic outcome.
+- `GET /api/editor/status` now reports `buildState` and `buildId`, and a queued or running build makes `settled` false.
+
 - Added a single coordination point for mutually exclusive Editor activities — compilation, test runs, Play mode, asset updating, builds, and build target switches. UnionAir previously tracked these with two independent `SessionState` gates plus ad-hoc checks inside individual handlers, which made a third one untestable. Declared activities keep durable identity across domain reloads; Play mode and asset updating are observed from `EditorApplication` rather than mirrored.
 - `GET /api/editor/status` now reports `activeActivity` with the activity name, its source, and the id that owns it. When several activities are running it reports the most exclusive one, so a client is told to wait for the build rather than for the compilation the build is running.
 - A `409` caused by the Editor being busy now carries an `activeActivity` object. The shipped `activeTestRun` and `activeCompile` objects are unchanged and still present.
@@ -30,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A player build no longer leaves loaded scenes reported as externally changed. `BuildPipeline.BuildPlayer` raises `sceneClosed` for the loaded scene without a matching `sceneOpened`, which dropped the disk baseline and made every later refresh or compile request return `409` with `reason: "untracked"` until the scene was saved or reopened by hand. Baselines are now captured before the build and restored afterwards, but only for scenes whose file is byte-identical — a scene changed on disk during the build still trips the guard.
 - Classified Unity 6 Bee Player compilation outputs under `Library/Bee/PlayerScriptAssemblies` as `player`, while preserving conservative handling of mixed and unrelated output directories.
 
 ## [0.3.0] - 2026-08-01

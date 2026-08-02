@@ -28,6 +28,8 @@ Returns the execution status of the Unity Editor.
   "compileState": null,
   "compileId": null,
   "compileSource": null,
+  "buildState": null,
+  "buildId": null,
   "activeActivity": null
 }
 ```
@@ -44,10 +46,12 @@ Returns the execution status of the Unity Editor.
 | `testRunId` | string \| null | UnionAir run ID; `null` for external runs and when idle |
 | `sessionId` | string | Identifier regenerated once per Editor process |
 | `lifecycleGeneration` | number | Assembly domain counter for the current Editor process, starting at 1 |
-| `settled` | bool | Whether the Editor is neither compiling nor updating assets |
+| `settled` | bool | Whether the Editor is neither compiling, updating assets, nor running a player build |
 | `hasCompileErrors` | bool | Hint from `EditorUtility.scriptCompilationFailed` |
 | `compileState` | string \| null | `queued` or `running` for an in-flight compilation, otherwise `null` |
 | `compileId` / `compileSource` | string \| null | Identity of the in-flight compilation |
+| `buildState` | string \| null | `queued` or `running` for an in-flight player build, otherwise `null` |
+| `buildId` | string \| null | Identity of the in-flight build |
 | `activeActivity` | object \| null | What the Editor is busy with; see [Editor Activities](activities.md) |
 
 This endpoint remains available while tests run. Other than health, help, logs, and Test Runner status/result/cancel operations, endpoints return `409` until the active run finishes.
