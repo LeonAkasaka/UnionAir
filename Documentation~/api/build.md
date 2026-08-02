@@ -648,6 +648,8 @@ This is reported as its own condition rather than as a generic failure, because 
 
 `400` for a missing or unknown `buildTarget`, or a malformed `requestId`.
 
+`500` when the switch record could not be written, in which case **no switch was started**. The record is the only thing that survives the domain reload the switch causes, so a switch begun without one could never report its outcome.
+
 `409` while a compilation, an asset import, or a build is active, carrying `activeActivity`.
 
 ```bash
@@ -699,6 +701,8 @@ Returns the active target, the in-flight switch as `current`, and the retained s
 | `completed` | The active target is the requested one |
 | `failed` | Unity refused the switch, or reloaded without performing it |
 | `aborted` | The Editor was closed or restarted mid-switch |
+
+A queued switch whose start was discarded by an unrelated domain reload resolves to `failed` rather than staying queued. The deferred start lives in the domain that accepted the request, so a reload before it runs — an IDE save is enough — leaves nothing to run it.
 
 `lifecycleGenerationAtRequest` and `lifecycleGenerationAtFinish` differ when the switch crossed a domain reload, and match when Unity completed it inline. Both happen: a switch **within** a build target group — `StandaloneWindows64` to `StandaloneWindows`, say — often needs no reload at all, while a switch between groups does.
 

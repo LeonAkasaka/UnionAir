@@ -53,6 +53,22 @@ namespace LeonAkasaka.UnionAir.Editor
         internal static void Initialize()
         {
             _current = Load(CurrentPath);
+            Reconcile();
+
+            // The mirror case: an activity with no live record behind it. Reached when the record
+            // was never written, or was written and then lost. Nothing else would ever close it,
+            // and the project would report itself busy for the rest of the Editor session.
+            if (UnionAirActivityCoordinator.IsDeclared(UnionAirActivity.BuildTargetSwitch) &&
+                (_current == null || _current.IsActive ||
+                 _current.id != UnionAirActivityCoordinator.IdOf(UnionAirActivity.BuildTargetSwitch)))
+            {
+                UnionAirActivityCoordinator.ClearDebris(
+                    UnionAirActivity.BuildTargetSwitch, "no build target switch record was restored for it.");
+            }
+        }
+
+        private static void Reconcile()
+        {
             if (_current == null || !_current.IsActive)
                 return;
 
@@ -67,11 +83,25 @@ namespace LeonAkasaka.UnionAir.Editor
             // so the active target is the only evidence of what happened.
             var active = EditorUserBuildSettings.activeBuildTarget.ToString();
             if (string.Equals(active, _current.requestedTarget, StringComparison.Ordinal))
+            {
                 Finish(_current, "completed", null);
-            else if (_current.state == "switching")
+                return;
+            }
+
+            if (_current.state == "switching")
+            {
                 Finish(_current, "failed",
                     "The Unity Editor reloaded without switching to " + _current.requestedTarget +
                     "; the active target is " + active + ".");
+                return;
+            }
+
+            // Still queued: the deferred start lived in the previous domain and did not survive
+            // the reload, so nothing will ever run it. Left alone it would sit queued forever
+            // behind an activity that never closes.
+            Finish(_current, "failed",
+                "The Unity Editor reloaded the assembly domain before the switch to " +
+                _current.requestedTarget + " started; the active target is still " + active + ".");
         }
 
         internal static string NewId()
@@ -89,18 +119,33 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Registers a queued record and defers the switch.
         /// </summary>
+        /// <returns><c>false</c> when the record could not be persisted and nothing was started.</returns>
         /// <remarks>
+        /// <para>
         /// The response is sent before the switch begins, for the same reason a build's is: the
         /// reimport blocks the Unity main thread and the domain reload drops the connection, so a
         /// response written afterwards would never reach the caller that needs the id.
+        /// </para>
+        /// <para>
+        /// The activity is opened only once the record is on disk, and here that is load-bearing
+        /// rather than merely careful. The switch's terminal path is <see cref="Initialize"/> on
+        /// the far side of the reload, and it can only reconcile a record it can read. A switch
+        /// started without one would leave an activity that nothing ever closes.
+        /// </para>
         /// </remarks>
-        internal static void ScheduleSwitch(
+        internal static bool ScheduleSwitch(
             BuildTargetSwitchRecord record,
             BuildTargetGroup group,
             BuildTarget target)
         {
+            var previous = _current;
             _current = record;
-            SaveCurrent();
+            if (!SaveCurrent())
+            {
+                _current = previous;
+                return false;
+            }
+
             UnionAirActivityCoordinator.Begin(
                 UnionAirActivity.BuildTargetSwitch, UnionAirActivityCoordinator.UnionAirSource, record.id);
 
@@ -112,6 +157,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 Run(id, group, target);
             };
             EditorApplication.update += pending;
+            return true;
         }
 
         private static void Run(string id, BuildTargetGroup group, BuildTarget target)
@@ -234,10 +280,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
                 out result);
 
-        private static void SaveCurrent()
+        private static bool SaveCurrent()
         {
-            if (_current == null) return;
-            TryWrite(CurrentPath, _current, "current build target switch record");
+            if (_current == null) return false;
+            return TryWrite(CurrentPath, _current, "current build target switch record");
         }
 
         private static void SaveRecord(BuildTargetSwitchRecord record)
@@ -247,13 +293,14 @@ namespace LeonAkasaka.UnionAir.Editor
             TryWrite(path, record, "build target switch record");
         }
 
-        private static void TryWrite(string path, BuildTargetSwitchRecord record, string what)
+        private static bool TryWrite(string path, BuildTargetSwitchRecord record, string what)
         {
-            try { ProfilingArtifactStore.WriteAtomicJson(path, JsonUtility.ToJson(record)); }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[UnionAir] Could not write the {what}: {ex.Message}");
-            }
+            string error;
+            if (ProfilingArtifactStore.TryWriteAtomicJson(path, JsonUtility.ToJson(record), out error))
+                return true;
+
+            Debug.LogWarning($"[UnionAir] Could not write the {what}: {error}");
+            return false;
         }
 
         internal static bool TryGetRecordPath(string id, out string path)

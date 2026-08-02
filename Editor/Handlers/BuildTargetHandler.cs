@@ -83,7 +83,19 @@ namespace LeonAkasaka.UnionAir.Editor
             var id = string.IsNullOrEmpty(requestId) ? BuildTargetSwitchService.NewId() : requestId;
             var record = BuildTargetSwitchService.NewRecord(
                 id, entry.Target, entry.Group, entry.NamedBuildTarget);
-            BuildTargetSwitchService.ScheduleSwitch(record, entry.Group, entry.Target);
+
+            // Nothing is started unless the record is durable. The switch ends in a domain reload
+            // and the record is the only thing that survives it to report the outcome.
+            if (!BuildTargetSwitchService.ScheduleSwitch(record, entry.Group, entry.Target))
+            {
+                RestResponse.SendError(
+                    response,
+                    "The build target switch record could not be written to Library/UnionAir/BuildTargetSwitches, " +
+                    "so no switch was started. The Unity Console carries the underlying file error. " +
+                    "Retry once the cause is cleared.",
+                    500);
+                return;
+            }
 
             var sb = new StringBuilder();
             sb.Append("{");

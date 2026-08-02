@@ -46,7 +46,7 @@ Returns the execution status of the Unity Editor.
 | `testRunId` | string \| null | UnionAir run ID; `null` for external runs and when idle |
 | `sessionId` | string | Identifier regenerated once per Editor process |
 | `lifecycleGeneration` | number | Assembly domain counter for the current Editor process, starting at 1 |
-| `settled` | bool | Whether the Editor is neither compiling, updating assets, nor running a player build |
+| `settled` | bool | Whether the Editor is neither compiling, updating assets, running a player build, nor switching build target |
 | `hasCompileErrors` | bool | Hint from `EditorUtility.scriptCompilationFailed` |
 | `compileState` | string \| null | `queued` or `running` for an in-flight compilation, otherwise `null` |
 | `compileId` / `compileSource` | string \| null | Identity of the in-flight compilation |

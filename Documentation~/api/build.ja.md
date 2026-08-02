@@ -638,6 +638,8 @@ curl -X POST http://localhost:8765/api/builds \
 
 `buildTarget` の欠落・未知の値、`requestId` の不正には `400`。
 
+切り替えレコードを書き込めなかった場合は `500` を返し、**切り替えは開始されません**。切り替えが引き起こす domain reload を越えて残るのはレコードだけなので、レコードなしで開始した切り替えは結果を報告できないからです。
+
 コンパイル・アセットインポート・ビルドの実行中は `activeActivity` を伴う `409`。
 
 ```bash
@@ -689,6 +691,8 @@ curl -X POST http://localhost:8765/api/build/target \
 | `completed` | アクティブなターゲットが要求どおりになった |
 | `failed` | Unity が切り替えを拒否したか、実行せずにリロードした |
 | `aborted` | 切り替え中に Editor が終了または再起動した |
+
+キュー済みの切り替えが無関係な domain reload によって開始処理を失った場合、queued のままにならず `failed` に解決されます。遅延実行される開始処理はリクエストを受け付けたドメインに存在するため、実行前のリロード(IDE での保存で十分です)によって実行するものが無くなるからです。
 
 `lifecycleGenerationAtRequest` と `lifecycleGenerationAtFinish` は、切り替えが domain reload をまたいだ場合に異なり、Unity がその場で完了した場合は一致します。どちらも起こります。ビルドターゲットグループ**内**の切り替え(たとえば `StandaloneWindows64` から `StandaloneWindows`)はリロードを必要としないことが多く、グループ間の切り替えは必要とします。
 

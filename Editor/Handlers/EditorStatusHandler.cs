@@ -25,9 +25,11 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append(",\"testRunId\":").Append(RestResponse.FormatNullableString(UnionAirTestRunGate.PublicRunId));
             sb.Append(",\"sessionId\":").Append(RestResponse.FormatNullableString(UnionAirSession.SessionId));
             sb.Append($",\"lifecycleGeneration\":{UnionAirSession.Generation.ToString(CultureInfo.InvariantCulture)}");
-            // A queued or running build settles nothing: it is about to take the main thread for a
-            // minute or more, and dependent calls made now would be answered only after it ends.
-            var buildActive = BuildService.IsBusy;
+            // A queued or running build or target switch settles nothing: each is about to take
+            // the main thread for a minute or more, and dependent calls made now would be answered
+            // only after it ends. Leaving the switch out let a client see settled: true alongside
+            // activeActivity naming buildTargetSwitch, which contradicts itself.
+            var buildActive = BuildService.IsBusy || BuildTargetSwitchService.IsBusy;
             sb.Append($",\"settled\":{RestResponse.FormatBool(!isCompiling && !isUpdating && !UnionAirCompileGate.IsActive && !buildActive)}");
             sb.Append($",\"hasCompileErrors\":{RestResponse.FormatBool(EditorUtility.scriptCompilationFailed)}");
 
