@@ -244,6 +244,8 @@ Enum values are matched case-insensitively. An unknown value returns `400` **lis
 
 Every value is validated first. A request naming one bad enum value changes nothing at all — the only partial-failure outcome that needs no explanation.
 
+That includes types. A field that is present but is not the kind of value it should be — `"development": "true"` rather than `true` — returns `400` naming the field. Ignoring it would break the acknowledgement rule below: the caller set something and would get no outcome for it.
+
 ### Partial failure is reported, never rolled back
 
 Past validation, a change can still fail if Unity refuses it. When that happens the earlier changes are **not** undone: undoing them could fail too, leaving a third state matching neither what was asked for nor what was there. Instead:
@@ -330,7 +332,7 @@ The list is a **replacement**, not a patch. Order decides the build index every 
 }
 ```
 
-Each element is either a scene path string — enabled by default — or an object with `path` and an optional `enabled`. `scenes` is required; an empty array clears the list, which is a legitimate thing to ask for. A build with no scenes is rejected later by `POST /api/builds`, where the message can say why.
+Each element is either a scene path string — enabled by default — or an object with `path` and an optional `enabled`. A present `enabled` that is not a boolean returns `400`; defaulting it to `true` would ship a scene the caller asked to exclude. `scenes` is required; an empty array clears the list, which is a legitimate thing to ask for. A build with no scenes is rejected later by `POST /api/builds`, where the message can say why.
 
 Every path must end in `.unity`, must not repeat (Unity assigns one build index per scene), and must name an **imported** asset. The AssetDatabase check matters: Unity accepts a build settings entry pointing at nothing and only fails at build time.
 
