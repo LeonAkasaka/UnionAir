@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -58,6 +59,48 @@ namespace LeonAkasaka.UnionAir.Editor
             UnionAirActivity.AssetUpdate |
             UnionAirActivity.Build |
             UnionAirActivity.BuildTargetSwitch;
+
+        /// <summary>
+        /// Whether a declared activity has no live record behind it and must be released.
+        /// </summary>
+        /// <param name="declared">Whether the activity flag is set.</param>
+        /// <param name="declaredId">Record id the flag names; may be empty.</param>
+        /// <param name="recordId">Id of the record the owning service restored, or <c>null</c> when it restored none.</param>
+        /// <param name="recordIsActive">Whether that record is still in a non-terminal state.</param>
+        /// <remarks>
+        /// <para>
+        /// Shared by every service that owns an activity, because each had written this predicate
+        /// by hand and the three had already drifted apart — one omitted the terminal-state test
+        /// and one inverted it. Recovery code is the wrong place for a condition that has to be
+        /// re-derived per caller.
+        /// </para>
+        /// <para>
+        /// A <b>terminal</b> record does not own a live activity. The flag is released last, after
+        /// the record reaches its terminal state, so a terminal record paired with a flag that is
+        /// still set means the release did not happen and nothing else will do it. Accepting such
+        /// a pair as legitimate is what leaves the Editor reporting itself busy for the rest of the
+        /// session.
+        /// </para>
+        /// <para>
+        /// Written to depend on nothing but its arguments. A check that is only correct because of
+        /// what some earlier method guarantees stops being correct the moment that method changes,
+        /// and this one exists precisely to catch states nobody anticipated.
+        /// </para>
+        /// </remarks>
+        internal static bool IsDebris(bool declared, string declaredId, string recordId, bool recordIsActive)
+        {
+            if (!declared)
+                return false;
+
+            // No record was restored for it at all.
+            if (string.IsNullOrEmpty(recordId))
+                return true;
+
+            if (!recordIsActive)
+                return true;
+
+            return !string.Equals(recordId, declaredId ?? "", StringComparison.Ordinal);
+        }
 
         /// <summary>
         /// Returns the activity that should be reported as what the Editor is busy with.

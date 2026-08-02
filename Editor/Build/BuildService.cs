@@ -68,11 +68,14 @@ namespace LeonAkasaka.UnionAir.Editor
 
             // The mirror case: an activity with no live record behind it. Nothing else would ever
             // close it, and the project would report itself busy for the rest of the session.
-            if (UnionAirActivityCoordinator.IsDeclared(UnionAirActivity.Build) &&
-                (_current == null || _current.id != UnionAirActivityCoordinator.IdOf(UnionAirActivity.Build)))
+            if (UnionAirActivityDecision.IsDebris(
+                    UnionAirActivityCoordinator.IsDeclared(UnionAirActivity.Build),
+                    UnionAirActivityCoordinator.IdOf(UnionAirActivity.Build),
+                    _current == null ? null : _current.id,
+                    _current != null && _current.IsActive))
             {
                 UnionAirActivityCoordinator.ClearDebris(
-                    UnionAirActivity.Build, "no build record was restored for it.");
+                    UnionAirActivity.Build, "no live build record was restored for it.");
             }
         }
 
@@ -317,6 +320,11 @@ namespace LeonAkasaka.UnionAir.Editor
                 BuildArtifactStore.OutputFileName(PlayerSettings.productName, EditorUserBuildSettings.activeBuildTarget)));
             SaveCurrent();
 
+            // Everything from here to Commit runs inside try/finally, so the record always reaches
+            // a terminal state and the activity is always released. An exception escaping this
+            // method would leave the flag set with nothing to clear it until the next domain
+            // reload — and a build does not cause one — which is exactly the failure the rest of
+            // this recovery work exists to prevent.
             try
             {
                 var options = new BuildPlayerOptions
@@ -349,17 +357,40 @@ namespace LeonAkasaka.UnionAir.Editor
                 record.result = "failed";
                 record.error = "The player build threw: " + ex.Message;
             }
+            finally
+            {
+                TryRestoreSceneBaselines(sceneBaselines);
 
-            LoadedSceneDiskChangeGuard.RestoreUnchangedBaselines(sceneBaselines);
+                // The compile record the build's own player compilation produced, attributed to
+                // this build rather than adopted as an unrelated cycle.
+                var compile = CompileService.Current;
+                if (compile != null && compile.buildId == record.id)
+                    record.compileId = compile.id;
 
-            // The compile record the build's own player compilation produced, attributed to this
-            // build rather than adopted as an unrelated cycle.
-            var compile = CompileService.Current;
-            if (compile != null && compile.buildId == record.id)
-                record.compileId = compile.id;
+                if (record.IsActive)
+                {
+                    record.state = "failed";
+                    record.result = "failed";
+                    if (string.IsNullOrEmpty(record.error))
+                        record.error = "The build did not report a result.";
+                }
 
-            record.outputBytes = BuildArtifactStore.DirectoryBytes(record.id);
-            Commit(record);
+                record.outputBytes = BuildArtifactStore.DirectoryBytes(record.id);
+                Commit(record);
+            }
+        }
+
+        private static void TryRestoreSceneBaselines(
+            IReadOnlyList<LoadedSceneDiskSnapshot> baselines)
+        {
+            try { LoadedSceneDiskChangeGuard.RestoreUnchangedBaselines(baselines); }
+            catch (Exception ex)
+            {
+                // Never allowed to prevent the record from being committed: an unrestored scene
+                // baseline costs one spurious 409 on the next refresh, while a stranded build
+                // activity costs the rest of the Editor session.
+                Debug.LogWarning("[UnionAir] Could not restore loaded scene baselines after the build: " + ex.Message);
+            }
         }
 
         private static BuildOptions ResolveBuildOptions(BuildRecord record)

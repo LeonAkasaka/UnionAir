@@ -77,11 +77,14 @@ namespace LeonAkasaka.UnionAir.Editor
             // The mirror case: a gate with no live record behind it, which nothing would ever
             // close. Following InputReplayService.Initialize, it is treated as debris rather than
             // trusted, because trusting it rejects every later compilation for the session.
-            if (UnionAirCompileGate.IsActive &&
-                (_current == null || !_current.IsActive || _current.id != UnionAirCompileGate.Id))
+            if (UnionAirActivityDecision.IsDebris(
+                    UnionAirCompileGate.IsActive,
+                    UnionAirCompileGate.Id,
+                    _current == null ? null : _current.id,
+                    _current != null && _current.IsActive))
             {
                 UnionAirActivityCoordinator.ClearDebris(
-                    UnionAirActivity.Compile, "no compile record was restored for it.");
+                    UnionAirActivity.Compile, "no live compile record was restored for it.");
             }
         }
 
