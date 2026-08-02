@@ -15,12 +15,14 @@ This page is not an endpoint group. It describes the single vocabulary UnionAir 
 | `build` | A player build is queued or running | The build record |
 | `testRun` | A Unity Test Framework run is active | The run record, for runs UnionAir started |
 | `playMode` | The Editor is in Play mode, or entering or leaving it | Nothing; observed from the Editor |
-| `compile` | A script compilation is queued or running | The compile record, when UnionAir is tracking one |
+| `compile` | A script compilation is queued or running | The compile record, when UnionAir is tracking one; otherwise nothing |
 | `assetUpdate` | The Editor is importing or refreshing assets | Nothing; observed from the Editor |
 
 The order above is the **priority order**. When more than one is running, UnionAir reports and blames the one nearest the top. That is deliberate: a build runs its own compilation, and a test run drives Play mode, so blaming the inner activity would tell a client to wait for the wrong thing and to retry far too early.
 
-Activities come from two places. `build`, `buildTargetSwitch`, `testRun`, and `compile` are **declared**: a UnionAir service starts them, or adopts one an external tool started, and their identity survives a domain reload. `playMode` and `assetUpdate` are **observed** from `EditorApplication` at request time — Unity already tracks them, and a second copy could only be wrong. An observed activity reports `source: null` and `id: null`, because there is nothing to name.
+Activities come from two places. `build`, `buildTargetSwitch`, and `testRun` are **declared**: a UnionAir service starts them, or adopts one an external tool started, and their identity survives a domain reload. `playMode` and `assetUpdate` are **observed** from `EditorApplication` at request time — Unity already tracks them, and a second copy could only be wrong. An observed activity reports `source: null` and `id: null`, because there is nothing to name.
+
+`compile` is **both**. It is declared while UnionAir tracks a cycle, and observed from `EditorApplication.isCompiling` otherwise — during the moment between Unity starting a cycle and UnionAir adopting it, and again in the tail after a cycle has been recorded but before the domain reload begins. In those windows it reports `source: null` and `id: null` like an observed activity, because there is genuinely no record to point at. `GET /api/compile` is the fallback: it answers with `current` and `latest` regardless.
 
 ---
 
@@ -103,7 +105,18 @@ Everything else — `compile`, `assetUpdate`, `build`, `buildTargetSwitch` — i
 
 ## Surviving domain reloads and crashes
 
-Declared activities keep their identity in Unity's `SessionState`, which survives a domain reload but is cleared when the Editor process restarts. That difference is what makes crash recovery work: a record on disk that still claims to be running, with no activity open, belongs to a process that died, and its owning service finalizes it on the next initialization. This is the pattern the Compile API already used, now shared.
+Declared activities keep their identity in Unity's `SessionState`, which survives a domain reload but is cleared when the Editor process restarts. That difference is what makes crash recovery work, in both directions:
+
+- **A record with no activity** belongs to a process that died. Its owning service finalizes it on the next initialization.
+- **An activity with no record** is debris. Nothing would ever close it — `SessionState` outlives every reload — so the Editor would report itself busy, and reject every endpoint that declared a conflict, for the rest of the session. It is released on the next initialization with a Console warning rather than trusted.
+
+Both directions are checked because either one alone leaves a way to get stuck. This is the pattern `InputReplayService` already used, now shared.
+
+### An operation UnionAir starts does not begin until its record is durable
+
+A request that starts a tracked operation — `POST /api/compile`, `POST /api/builds`, `POST /api/build/target` — persists its record **before** opening the activity, and answers `500` without starting anything when that write fails. The write is retried once immediately, because a virus scanner or the search indexer holding the destination for a moment is the common transient cause and clears by itself; a full disk or an unwritable directory does not, and is reported rather than waited on.
+
+Activity UnionAir merely **adopts** cannot be refused — a compilation an IDE triggered is already running — so it is recorded best-effort. Its terminal path releases the activity regardless of whether any write succeeded.
 
 Practically: a compilation, a test run, or a build interrupted by an Editor crash resolves to `aborted` rather than staying active forever, and a client polling by id learns that instead of waiting.
 

@@ -47,14 +47,15 @@ namespace LeonAkasaka.UnionAir.Editor
             error = null;
             options = defaults;
 
-            options.development = Read(body, "development", defaults.development);
-            options.allowDebugging = Read(body, "allowDebugging", defaults.allowDebugging);
-            options.connectProfiler = Read(body, "connectProfiler", defaults.connectProfiler);
-            options.deepProfiling = Read(body, "deepProfiling", defaults.deepProfiling);
-            options.waitForPlayerConnection =
-                Read(body, "waitForPlayerConnection", defaults.waitForPlayerConnection);
-            options.clean = Read(body, "clean", false);
-            options.strictMode = Read(body, "strictMode", false);
+            if (!Read(body, "development", defaults.development, ref options.development, out error) ||
+                !Read(body, "allowDebugging", defaults.allowDebugging, ref options.allowDebugging, out error) ||
+                !Read(body, "connectProfiler", defaults.connectProfiler, ref options.connectProfiler, out error) ||
+                !Read(body, "deepProfiling", defaults.deepProfiling, ref options.deepProfiling, out error) ||
+                !Read(body, "waitForPlayerConnection", defaults.waitForPlayerConnection,
+                    ref options.waitForPlayerConnection, out error) ||
+                !Read(body, "clean", false, ref options.clean, out error) ||
+                !Read(body, "strictMode", false, ref options.strictMode, out error))
+                return false;
 
             // Unity's own Build Settings window disables all four unless Development Build is
             // checked, and BuildPipeline silently drops them otherwise. Rejecting is better than
@@ -71,10 +72,33 @@ namespace LeonAkasaka.UnionAir.Editor
             return true;
         }
 
-        private static bool Read(string body, string field, bool fallback)
+        /// <summary>
+        /// Reads an optional boolean, rejecting a field that is present but is not one.
+        /// </summary>
+        /// <remarks>
+        /// <c>GetBool</c> returns <c>null</c> both for an absent field and for a value that is not
+        /// a JSON boolean, so treating <c>null</c> as "absent" would let <c>"development": "true"</c>
+        /// fall through to the project default and produce a build the caller did not ask for,
+        /// with nothing in the response saying so.
+        /// </remarks>
+        private static bool Read(string body, string field, bool fallback, ref bool value, out string error)
         {
-            var value = RequestBodyReader.GetBool(body, field);
-            return value ?? fallback;
+            error = null;
+            var parsed = RequestBodyReader.GetBool(body, field);
+            if (parsed.HasValue)
+            {
+                value = parsed.Value;
+                return true;
+            }
+
+            if (RequestBodyReader.HasTopLevelField(body, field))
+            {
+                error = $"Body field '{field}' must be a JSON boolean.";
+                return false;
+            }
+
+            value = fallback;
+            return true;
         }
     }
 }

@@ -84,7 +84,19 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var id = string.IsNullOrEmpty(requestId) ? CompileService.NewId() : requestId;
             var record = CompileService.NewRecord(UnionAirCompileGate.UnionAirSource, id);
-            CompileService.ScheduleStart(record, refresh, clean);
+
+            // Nothing is started unless the record is durable. The response below promises an id
+            // to poll, and a compilation ends in a domain reload that discards the in-memory copy,
+            // so a record that never reached disk would leave that promise unkeepable.
+            if (!CompileService.ScheduleStart(record, refresh, clean))
+            {
+                RestResponse.SendError(
+                    response,
+                    "The compile record could not be written to Library/UnionAir/Compile, so no compilation was started. " +
+                    "The Unity Console carries the underlying file error. Retry once the cause is cleared.",
+                    500);
+                return;
+            }
 
             var sb = new StringBuilder();
             sb.Append("{");

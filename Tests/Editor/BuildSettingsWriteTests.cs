@@ -101,6 +101,32 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void TryParseSettings_RejectsAPresentFlagThatIsNotABoolean()
+        {
+            // Dropping it silently would contradict both promises this endpoint makes: that every
+            // value is validated before anything is written, and that a caller gets an outcome for
+            // each setting it named.
+            var error = ParseError("{\"development\":\"true\"}");
+            StringAssert.Contains("'development'", error);
+            StringAssert.Contains("boolean", error);
+
+            StringAssert.Contains(
+                "'allowDebugging'",
+                ParseError("{\"development\":true,\"allowDebugging\":\"false\"}"));
+        }
+
+        [Test]
+        public void TryParseScenes_RejectsANonBooleanEnabled()
+        {
+            // Defaulting to true would ship a scene the caller asked to exclude.
+            System.Collections.Generic.List<BuildSceneEntry> scenes;
+            string error;
+            Assert.IsFalse(BuildSettingsWriteParser.TryParseScenes(
+                "{\"scenes\":[{\"path\":\"Assets/A.unity\",\"enabled\":\"no\"}]}", out scenes, out error));
+            StringAssert.Contains("'enabled'", error);
+        }
+
+        [Test]
         public void TriggersCompilation_OnlyForSettingsTheCompilerReads()
         {
             Assert.IsTrue(Parse("{\"addDefineSymbols\":[\"A\"]}").TriggersCompilation);

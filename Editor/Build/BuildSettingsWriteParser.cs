@@ -108,11 +108,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            ReadFlag(body, "development", ref plan.HasDevelopment, ref plan.Development);
-            ReadFlag(body, "allowDebugging", ref plan.HasAllowDebugging, ref plan.AllowDebugging);
-            ReadFlag(body, "connectProfiler", ref plan.HasConnectProfiler, ref plan.ConnectProfiler);
-            ReadFlag(body, "buildWithDeepProfilingSupport", ref plan.HasDeepProfiling, ref plan.DeepProfiling);
-            ReadFlag(body, "waitForManagedDebugger", ref plan.HasWaitForManagedDebugger, ref plan.WaitForManagedDebugger);
+            if (!ReadFlag(body, "development", ref plan.HasDevelopment, ref plan.Development, out error) ||
+                !ReadFlag(body, "allowDebugging", ref plan.HasAllowDebugging, ref plan.AllowDebugging, out error) ||
+                !ReadFlag(body, "connectProfiler", ref plan.HasConnectProfiler, ref plan.ConnectProfiler, out error) ||
+                !ReadFlag(body, "buildWithDeepProfilingSupport", ref plan.HasDeepProfiling, ref plan.DeepProfiling, out error) ||
+                !ReadFlag(body, "waitForManagedDebugger", ref plan.HasWaitForManagedDebugger,
+                    ref plan.WaitForManagedDebugger, out error))
+                return false;
 
             if (plan.IsEmpty)
             {
@@ -188,8 +190,17 @@ namespace LeonAkasaka.UnionAir.Editor
                     return false;
                 }
 
-                var enabled = RequestBodyReader.GetBool(element, "enabled") ?? true;
-                scenes.Add(new BuildSceneEntry { Path = path, Enabled = enabled });
+                // Same rule as the settings flags: a present 'enabled' that is not a boolean is
+                // rejected rather than defaulting to true, which would ship a scene the caller
+                // had asked to exclude.
+                var enabled = RequestBodyReader.GetBool(element, "enabled");
+                if (!enabled.HasValue && RequestBodyReader.HasTopLevelField(element, "enabled"))
+                {
+                    error = $"Element {i} of 'scenes' has an 'enabled' field that is not a JSON boolean.";
+                    return false;
+                }
+
+                scenes.Add(new BuildSceneEntry { Path = path, Enabled = enabled ?? true });
             }
 
             return true;
@@ -285,12 +296,32 @@ namespace LeonAkasaka.UnionAir.Editor
             return true;
         }
 
-        private static void ReadFlag(string body, string field, ref bool has, ref bool value)
+        /// <summary>
+        /// Reads an optional boolean, rejecting a field that is present but is not one.
+        /// </summary>
+        /// <remarks>
+        /// <c>GetBool</c> returns <c>null</c> both for an absent field and for a value that is not
+        /// a JSON boolean. Treating <c>null</c> as "absent" would drop a malformed field silently,
+        /// which contradicts two things this endpoint promises: that every value is validated
+        /// before anything is written, and that a caller always gets an outcome for each setting
+        /// it named.
+        /// </remarks>
+        private static bool ReadFlag(string body, string field, ref bool has, ref bool value, out string error)
         {
+            error = null;
             var parsed = RequestBodyReader.GetBool(body, field);
-            if (!parsed.HasValue) return;
-            has = true;
-            value = parsed.Value;
+            if (parsed.HasValue)
+            {
+                has = true;
+                value = parsed.Value;
+                return true;
+            }
+
+            if (!RequestBodyReader.HasTopLevelField(body, field))
+                return true;
+
+            error = $"Body field '{field}' must be a JSON boolean.";
+            return false;
         }
     }
 }

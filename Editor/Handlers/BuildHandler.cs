@@ -83,7 +83,18 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var id = string.IsNullOrEmpty(requestId) ? BuildService.NewId() : requestId;
             var record = BuildService.NewRecord(id, options, scenes);
-            BuildService.ScheduleStart(record);
+
+            // Nothing is started unless the record is durable. Nothing is served while the build
+            // runs, so the id below is the caller's only handle on a minute of work.
+            if (!BuildService.ScheduleStart(record))
+            {
+                RestResponse.SendError(
+                    response,
+                    "The build record could not be written to Library/UnionAir/Builds, so no build was started. " +
+                    "The Unity Console carries the underlying file error. Retry once the cause is cleared.",
+                    500);
+                return;
+            }
 
             var sb = new StringBuilder();
             sb.Append("{");
@@ -168,6 +179,22 @@ namespace LeonAkasaka.UnionAir.Editor
             string id;
             if (!TryGetId(context, out id))
                 return;
+
+            var existing = BuildService.Find(id);
+            if (existing == null)
+            {
+                RestResponse.SendNotFound(context.Response, $"Build record '{id}' was not found.");
+                return;
+            }
+
+            // Deleting the record a queued build is waiting for would strand its activity: the
+            // deferred start finds nothing to run and never commits, so nothing releases the
+            // build and every conflicting endpoint stays blocked for the session.
+            if (existing.IsActive)
+            {
+                RestResponse.Send(context.Response, ActiveBuildJson(), 409);
+                return;
+            }
 
             var bytes = BuildArtifactStore.DirectoryBytes(id);
             if (!BuildService.Delete(id))

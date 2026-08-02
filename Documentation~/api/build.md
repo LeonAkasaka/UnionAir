@@ -244,6 +244,8 @@ Enum values are matched case-insensitively. An unknown value returns `400` **lis
 
 Every value is validated first. A request naming one bad enum value changes nothing at all — the only partial-failure outcome that needs no explanation.
 
+That includes types. A field that is present but is not the kind of value it should be — `"development": "true"` rather than `true` — returns `400` naming the field. Ignoring it would break the acknowledgement rule below: the caller set something and would get no outcome for it.
+
 ### Partial failure is reported, never rolled back
 
 Past validation, a change can still fail if Unity refuses it. When that happens the earlier changes are **not** undone: undoing them could fail too, leaving a third state matching neither what was asked for nor what was there. Instead:
@@ -330,7 +332,7 @@ The list is a **replacement**, not a patch. Order decides the build index every 
 }
 ```
 
-Each element is either a scene path string — enabled by default — or an object with `path` and an optional `enabled`. `scenes` is required; an empty array clears the list, which is a legitimate thing to ask for. A build with no scenes is rejected later by `POST /api/builds`, where the message can say why.
+Each element is either a scene path string — enabled by default — or an object with `path` and an optional `enabled`. A present `enabled` that is not a boolean returns `400`; defaulting it to `true` would ship a scene the caller asked to exclude. `scenes` is required; an empty array clears the list, which is a legitimate thing to ask for. A build with no scenes is rejected later by `POST /api/builds`, where the message can say why.
 
 Every path must end in `.unity`, must not repeat (Unity assigns one build index per scene), and must name an **imported** asset. The AssetDatabase check matters: Unity accepts a build settings entry pointing at nothing and only fails at build time.
 
@@ -449,7 +451,9 @@ This is a different check from the [loaded-scene external-change guard](editor.m
 
 `409` while a compilation, an asset import, or a build target switch is active, carrying `activeActivity`. See [Editor Activities](activities.md).
 
-`400` when no enabled scenes are configured in Build Settings, when `requestId` is malformed, or when a debug option was requested without `development`.
+`400` when no enabled scenes are configured in Build Settings, when `requestId` is malformed, when a debug option was requested without `development`, or when an option is present but is not a JSON boolean. A present-but-wrong-typed option is rejected rather than ignored: falling back to the project default would produce a build the caller did not ask for with nothing in the response saying so.
+
+`500` when the build record could not be written, in which case **no build was started**. Nothing is served while a build runs, so the id in the `202` is the caller's only handle; starting a minute of work whose result could not be reported would be worse than refusing it. The write is retried once immediately before the request fails.
 
 ```bash
 curl -X POST http://localhost:8765/api/builds \
@@ -580,6 +584,8 @@ Deletes a build record and its artifact directory.
 ```
 
 Returns `404` for an id that is not retained. `outputAvailable: true` in the response means the directory could not be fully removed — normally because a file in it is open.
+
+Returns `409` with an `activeBuild` object for a build that is still queued or running. Deleting the record a queued build is waiting for would leave its deferred start with nothing to run, so nothing would release the build activity and every conflicting endpoint would stay blocked for the rest of the Editor session. Wait for the build to reach a terminal state, then delete it.
 
 ---
 

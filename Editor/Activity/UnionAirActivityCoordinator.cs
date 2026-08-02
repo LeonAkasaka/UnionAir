@@ -81,6 +81,36 @@ namespace LeonAkasaka.UnionAir.Editor
             SessionState.EraseString(IdKey(activity));
         }
 
+        /// <summary>
+        /// Clears an activity regardless of who owns it, for debris no record backs any more.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The mirror image of the crash net. That one finds a record claiming to run with no
+        /// activity open; this one finds an activity open with no live record behind it. Nothing
+        /// else would ever close it — <see cref="SessionState"/> survives every domain reload and
+        /// only dies with the process — so the Editor would report itself busy, and reject every
+        /// endpoint that declared a conflict, for the rest of the session.
+        /// </para>
+        /// <para>
+        /// Unlike <see cref="End"/> this does not check ownership, because there is by definition
+        /// no owner left to match against. Callers must establish that first.
+        /// </para>
+        /// </remarks>
+        internal static void ClearDebris(UnionAirActivity activity, string reason)
+        {
+            if (!IsDeclaredActive(activity))
+                return;
+
+            SessionState.EraseBool(ActiveKey(activity));
+            SessionState.EraseString(SourceKey(activity));
+            SessionState.EraseString(IdKey(activity));
+
+            UnityEngine.Debug.LogWarning(
+                "[UnionAir] Released a stale " + UnionAirActivityNames.Name(activity) +
+                " activity with no record behind it: " + reason);
+        }
+
         /// <summary>Whether an activity is currently running, declared or observed.</summary>
         internal static bool IsActive(UnionAirActivity activity)
         {
