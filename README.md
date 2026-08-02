@@ -19,7 +19,7 @@ An endpoint earns its place here when going through the Editor is materially bet
 - **State that exists only inside the Editor.** Play mode, selection, the Console, compilation results, profiler samples, the loaded scene list. There is no file to read.
 - **Operations defined by Unity's own semantics.** Prefab apply/revert, supported `SerializedObject` writes to project-defined ScriptableObjects, animation curves that must resolve a Sprite sub-asset rather than its backing Texture2D. Expressing these as YAML edits means reimplementing Unity's serializer.
 - **Feedback that closes a loop.** Compilation diagnostics survive the domain reload they trigger, so a write-compile-fix cycle can terminate. See [The Compile-and-Fix Loop](Documentation~/api/compile.md#the-compile-and-fix-loop).
-- **Undo integration where Unity offers it.** Scene edits — creating, updating, and deleting GameObjects and components — are registered with `Undo`, so a human at the Editor can reverse them with Ctrl+Z. Asset writes such as materials, animation clips, importer settings, and ScriptableObjects are not.
+- **Undo integration where Unity offers it.** Scene edits — creating, updating, and deleting GameObjects and components — are registered with `Undo`, so a human at the Editor can reverse them with Ctrl+Z. Asset writes do not uniformly support Undo and should not be assumed to be reversible.
 
 Meeting one of these is necessary, not sufficient. That a Unity Editor API exists is not itself a reason to expose it. An endpoint also has to answer a real client need with a contract worth depending on — one that keeps its meaning across Unity versions and fits the rest of the API — rather than being added because the underlying method was there to wrap.
 
@@ -113,7 +113,7 @@ Pin the tag. `main` is kept releasable but runs ahead of it, and a UPM Git URL t
 
 > Compilation results are structured, with `severity`, `code`, project-relative `file`, `line`, and `column` per diagnostic, and survive the domain reload that a successful compilation triggers. Compilations started from an IDE are recorded too. See **[The Compile-and-Fix Loop](Documentation~/api/compile.md#the-compile-and-fix-loop)**.
 > Unity Console logs are retained across domain reloads and support an incremental `since` cursor.
-> Scene edits made in Edit mode are registered with Undo and can be reversed in the Unity Editor (Ctrl+Z); asset writes are not.
+> Scene edits made in Edit mode are registered with Undo and can be reversed in the Unity Editor (Ctrl+Z). Asset writes do not uniformly support Undo and should not be assumed to be reversible.
 > Scene GameObjects and Components include `globalObjectId` values in read responses and can be targeted with typed object references in write requests.
 > Write APIs declare Play Mode safety in `GET /api/help`; persistent scene/asset changes are blocked during Play Mode, while selected scene-object changes require both the Editor setting and `allowWhilePlaying=true`.
 > See **[API Reference](Documentation~/api-reference.md)** for the full endpoint list and request/response details.

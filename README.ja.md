@@ -21,7 +21,7 @@ Editor を経由することがファイル編集より明確に優れている�
 - **Editor の内側にしか存在しない状態。** Play Mode、選択、Console、コンパイル結果、プロファイラのサンプル、ロード済みシーン一覧。読むべきファイルが存在しません。
 - **Unity 自身のセマンティクスで定義された操作。** Prefab の apply/revert、プロジェクト定義の ScriptableObject に対する対応済みの `SerializedObject` 書き込み、Texture2D ではなく Sprite サブアセットを解決しなければならないアニメーションカーブ。これらを YAML 編集として表現することは、Unity のシリアライザを再実装することを意味します。
 - **ループを終了させるためのフィードバック。** コンパイル診断は、それ自身が引き起こすドメインリロードを越えて保持されるため、write-compile-fix サイクルを終了させられます。[コンパイルと修正のループ](Documentation~/api/compile.ja.md#コンパイルと修正のループ)を参照してください。
-- **Unity が提供する範囲での Undo 統合。** シーン編集(GameObject とコンポーネントの作成・更新・削除)は `Undo` に登録されるため、Editor の前にいる人間が Ctrl+Z で取り消せます。Material、AnimationClip、インポーター設定、ScriptableObject などのアセット書き込みは対象外です。
+- **Unity が提供する範囲での Undo 統合。** シーン編集(GameObject とコンポーネントの作成・更新・削除)は `Undo` に登録されるため、Editor の前にいる人間が Ctrl+Z で取り消せます。アセット書き込みの Undo 対応は一様ではなく、可逆であることを前提にしないでください。
 
 これらのいずれかを満たすことは必要条件であって、十分条件ではありません。Unity Editor API が存在すること自体は、それを公開する理由になりません。エンドポイントはさらに、実際のクライアントの必要に応え、依存するに足る契約 — Unity のバージョンを越えて意味を保ち、API 全体と整合する契約 — を提供しなければなりません。ラップできるメソッドがそこにあった、というだけで追加されるべきではありません。
 
@@ -115,7 +115,7 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 
 > コンパイル結果は構造化されており、診断ごとに `severity`、`code`、プロジェクト相対の `file`、`line`、`column` を持ち、コンパイル成功時の domain reload をまたいで保持されます。IDE から開始されたコンパイルも記録されます。**[コンパイルと修正のループ](Documentation~/api/compile.ja.md#コンパイルと修正のループ)** を参照してください。
 > Unity Console のログは domain reload をまたいで保持され、増分取得用の `since` カーソルに対応しています。
-> Edit モードでのシーン編集は Undo に登録され、Unity Editor 上で取り消せます(Ctrl+Z)。アセット書き込みは対象外です。
+> Edit モードでのシーン編集は Undo に登録され、Unity Editor 上で取り消せます(Ctrl+Z)。アセット書き込みの Undo 対応は一様ではないため、可逆であることを前提にしないでください。
 > シーン上の GameObject と Component は読み取りレスポンスに `globalObjectId` を含み、書き込みリクエストでは型付きオブジェクト参照で指定できます。
 > 書き込み API は `GET /api/help` で Play モードの安全性を宣言します。永続的なシーン/アセット変更は Play モード中はブロックされ、一部のシーンオブジェクト変更は Editor 設定と `allowWhilePlaying=true` の両方が必要です。
 > エンドポイントの全一覧とリクエスト/レスポンスの詳細は **[API リファレンス](Documentation~/api-reference.ja.md)** を参照してください。

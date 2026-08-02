@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Added a Design Philosophy section to `README.md` stating why UnionAir mediates Editor operations rather than file access, what qualifies an endpoint, and what is deliberately left to direct file operations. `AGENTS.md` and `CONTRIBUTING.md` now refer to it as the criterion for adding an endpoint and for judging feature requests.
-- Corrected the Undo note in `README.md`: scene edits are registered with `Undo`, while asset writes such as materials, animation clips, importer settings, and ScriptableObjects are not. The previous wording claimed Undo support for all Edit mode writes. The behavior is unchanged; only the documentation was wrong.
+- Corrected the Undo note in `README.md`: scene edits are registered with `Undo`, while asset writes do not uniformly support it and should not be assumed to be reversible. The previous wording claimed Undo support for all Edit mode writes. The behavior is unchanged; only the documentation was wrong.
 
 ### Fixed
 
