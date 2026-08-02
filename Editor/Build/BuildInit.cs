@@ -17,6 +17,10 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             BuildService.Initialize();
 
+            // Guards the window between the 202 and the deferred start; see BuildService.Update.
+            EditorApplication.update -= BuildService.Update;
+            EditorApplication.update += BuildService.Update;
+
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             EditorApplication.quitting -= OnEditorQuitting;

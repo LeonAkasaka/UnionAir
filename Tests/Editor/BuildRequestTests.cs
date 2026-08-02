@@ -58,6 +58,35 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void TryParse_RejectsAPresentFieldThatIsNotABoolean()
+        {
+            // GetBool cannot distinguish absence from a wrong type on its own, so a string value
+            // would otherwise fall through to the project default and produce a build the caller
+            // did not ask for, with nothing in the response saying so.
+            BuildRequestOptions options;
+            string error;
+            Assert.IsFalse(BuildRequestParser.TryParse(
+                "{\"development\":\"true\"}", Defaults(), out options, out error));
+            StringAssert.Contains("'development'", error);
+            StringAssert.Contains("boolean", error);
+
+            Assert.IsFalse(BuildRequestParser.TryParse(
+                "{\"development\":true,\"allowDebugging\":\"false\"}", Defaults(), out options, out error));
+            StringAssert.Contains("'allowDebugging'", error);
+        }
+
+        [Test]
+        public void TryParse_StillAcceptsAnAbsentField()
+        {
+            BuildRequestOptions options;
+            string error;
+            Assert.IsTrue(BuildRequestParser.TryParse(
+                "{\"development\":true}", Defaults(), out options, out error), error);
+            Assert.IsTrue(options.development);
+            Assert.IsFalse(options.allowDebugging);
+        }
+
+        [Test]
         public void TryParse_RejectsDebugOptionsWithoutADevelopmentBuild()
         {
             // BuildPipeline drops them silently, which would produce a build that is quietly not

@@ -449,7 +449,9 @@ This is a different check from the [loaded-scene external-change guard](editor.m
 
 `409` while a compilation, an asset import, or a build target switch is active, carrying `activeActivity`. See [Editor Activities](activities.md).
 
-`400` when no enabled scenes are configured in Build Settings, when `requestId` is malformed, or when a debug option was requested without `development`.
+`400` when no enabled scenes are configured in Build Settings, when `requestId` is malformed, when a debug option was requested without `development`, or when an option is present but is not a JSON boolean. A present-but-wrong-typed option is rejected rather than ignored: falling back to the project default would produce a build the caller did not ask for with nothing in the response saying so.
+
+`500` when the build record could not be written, in which case **no build was started**. Nothing is served while a build runs, so the id in the `202` is the caller's only handle; starting a minute of work whose result could not be reported would be worse than refusing it. The write is retried once immediately before the request fails.
 
 ```bash
 curl -X POST http://localhost:8765/api/builds \
@@ -580,6 +582,8 @@ Deletes a build record and its artifact directory.
 ```
 
 Returns `404` for an id that is not retained. `outputAvailable: true` in the response means the directory could not be fully removed — normally because a file in it is open.
+
+Returns `409` with an `activeBuild` object for a build that is still queued or running. Deleting the record a queued build is waiting for would leave its deferred start with nothing to run, so nothing would release the build activity and every conflicting endpoint would stay blocked for the rest of the Editor session. Wait for the build to reach a terminal state, then delete it.
 
 ---
 

@@ -73,6 +73,16 @@ namespace LeonAkasaka.UnionAir.Editor
                 Abort(_current, "The Unity Editor domain was reloaded or restarted during compilation.");
                 SaveCurrentNow();
             }
+
+            // The mirror case: a gate with no live record behind it, which nothing would ever
+            // close. Following InputReplayService.Initialize, it is treated as debris rather than
+            // trusted, because trusting it rejects every later compilation for the session.
+            if (UnionAirCompileGate.IsActive &&
+                (_current == null || !_current.IsActive || _current.id != UnionAirCompileGate.Id))
+            {
+                UnionAirActivityCoordinator.ClearDebris(
+                    UnionAirActivity.Compile, "no compile record was restored for it.");
+            }
         }
 
         internal static CompileRecord Current => _current;
@@ -328,10 +338,22 @@ namespace LeonAkasaka.UnionAir.Editor
             };
         }
 
-        internal static void SetCurrent(CompileRecord record)
+        /// <summary>
+        /// Installs a record as the current one, reporting whether it reached disk.
+        /// </summary>
+        /// <remarks>
+        /// The previous record is restored on failure, so a caller that refuses to proceed leaves
+        /// the service exactly as it found it.
+        /// </remarks>
+        internal static bool SetCurrent(CompileRecord record)
         {
+            var previous = _current;
             _current = record;
-            SaveCurrentNow();
+            if (SaveCurrentNow())
+                return true;
+
+            _current = previous;
+            return false;
         }
 
         /// <summary>
@@ -340,16 +362,28 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <param name="record">Record created for this request.</param>
         /// <param name="refresh">Whether to import pending asset changes first.</param>
         /// <param name="clean">Whether to clear the build cache and rebuild everything.</param>
+        /// <returns><c>false</c> when the record could not be persisted and nothing was started.</returns>
         /// <remarks>
+        /// <para>
         /// The record is persisted and the response is sent before any compilation work begins.
         /// Refreshing and compiling block the Unity main thread and can end in a domain reload,
         /// which would drop the connection before the caller learned the id it needs to poll.
+        /// </para>
+        /// <para>
+        /// The gate is opened only once the record is on disk, matching
+        /// <c>InputReplayService.Arm</c>. Opening it for a record that was never written leaves a
+        /// liveness bit with nothing behind it: after the reload there is no record to restore and
+        /// nothing to close the gate. <see cref="Initialize"/> now recovers from that, but not
+        /// starting work whose result cannot be reported is the better answer.
+        /// </para>
         /// </remarks>
-        internal static void ScheduleStart(CompileRecord record, bool refresh, bool clean)
+        internal static bool ScheduleStart(CompileRecord record, bool refresh, bool clean)
         {
             _startDispatched = false;
             _startRequestedAt = EditorApplication.timeSinceStartup;
-            SetCurrent(record);
+            if (!SetCurrent(record))
+                return false;
+
             UnionAirCompileGate.Begin(UnionAirCompileGate.UnionAirSource, record.id);
 
             var id = record.id;
@@ -364,6 +398,7 @@ namespace LeonAkasaka.UnionAir.Editor
             // in the background, which left the request queued indefinitely. update is the same
             // pump that already serves HTTP requests, so it ticks regardless of focus.
             EditorApplication.update += pending;
+            return true;
         }
 
         private static void RunStart(string id, bool refresh, bool clean)
@@ -518,12 +553,17 @@ namespace LeonAkasaka.UnionAir.Editor
             SaveCurrentNow();
         }
 
-        private static void SaveCurrentNow()
+        private static bool SaveCurrentNow()
         {
-            if (_current == null) return;
-            TryWrite(CurrentPath, _current, "current compile record");
+            if (_current == null) return false;
+            if (!TryWrite(CurrentPath, _current, "current compile record"))
+                return false;
+
+            // Cleared only on success, so a write that failed is retried by the next flush rather
+            // than silently forgotten.
             _currentDirty = false;
             _nextCurrentFlushAt = 0;
+            return true;
         }
 
         private static void SaveRecord(CompileRecord record)
@@ -533,19 +573,21 @@ namespace LeonAkasaka.UnionAir.Editor
             TryWrite(path, record, "compile record");
         }
 
-        private static void TryWrite(string path, CompileRecord record, string what)
+        private static bool TryWrite(string path, CompileRecord record, string what)
         {
-            try
+            string error;
+            if (ProfilingArtifactStore.TryWriteAtomicJson(path, JsonUtility.ToJson(record), out error))
             {
-                ProfilingArtifactStore.WriteAtomicJson(path, JsonUtility.ToJson(record));
                 _flushErrorLogged = false;
+                return true;
             }
-            catch (Exception ex)
+
+            if (!_flushErrorLogged)
             {
-                if (_flushErrorLogged) return;
                 _flushErrorLogged = true;
-                Debug.LogWarning($"[UnionAir] Could not write the {what}; UnionAir will retry: {ex.Message}");
+                Debug.LogWarning($"[UnionAir] Could not write the {what}; UnionAir will retry: {error}");
             }
+            return false;
         }
 
         internal static bool TryGetRecordPath(string id, out string path)
