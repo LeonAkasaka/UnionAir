@@ -17,6 +17,8 @@ UnionAir is currently in an early design phase, and its architecture and API spe
 - Pull requests are currently accepted only for changes agreed on with the maintainer or for Issues explicitly marked as open for contribution.
 - Unsolicited pull requests may be closed without detailed review because they can conflict with planned changes that are not yet documented.
 
+Feature requests are judged against [Design Philosophy](README.md#design-philosophy). A proposal whose job direct file editing already does correctly is out of scope, and so is one that exists only to wrap a Unity Editor API — however convenient an endpoint for it would be.
+
 ## Development Conventions
 
 All development conventions live in [AGENTS.md](AGENTS.md) and apply to human and AI contributors alike. In short:

@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added `GET /api/compile/records` to enumerate retained terminal compilation summaries in deterministic newest-first order, with bounded offset/limit pagination and target, source, and state filters.
 
+### Changed
+
+- Added a Design Philosophy section to `README.md` stating why UnionAir mediates Editor operations rather than file access, what qualifies an endpoint, and what is deliberately left to direct file operations. `AGENTS.md` and `CONTRIBUTING.md` now refer to it as the criterion for adding an endpoint and for judging feature requests.
+- Corrected the Undo note in `README.md`: scene edits are registered with `Undo`, while asset writes do not uniformly support it and should not be assumed to be reversible. The previous wording claimed Undo support for all Edit mode writes. The behavior is unchanged; only the documentation was wrong.
+
 ### Fixed
 
 - Classified Unity 6 Bee Player compilation outputs under `Library/Bee/PlayerScriptAssemblies` as `player`, while preserving conservative handling of mixed and unrelated output directories.

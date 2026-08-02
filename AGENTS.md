@@ -43,6 +43,7 @@ Update `README.md` only for overview-level changes (e.g., a new capability being
 
 ## Coding Conventions
 
+- Before adding an endpoint, check it against [Design Philosophy](README.md#design-philosophy). Route work through the Editor when the alternative is the client reimplementing Unity's rules, or when the Editor holds state no file exposes — and only when the route can offer a contract worth depending on. A wrapper added because a Unity method exists, rather than because a client needs it, does not qualify. If direct file editing would already be correct, leave it to the client.
 - **Namespace**: `LeonAkasaka.UnionAir.Editor`
 - **Assembly**: `Editor/com.leonakasaka.unionair.editor.asmdef` (Editor-only, no external references)
 - Add new built-in endpoints as controller methods in `Editor/Controllers/`; keep reusable implementation helpers in `Editor/Handlers/` or `Editor/Utils/`
