@@ -25,7 +25,12 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append(",\"testRunId\":").Append(RestResponse.FormatNullableString(UnionAirTestRunGate.PublicRunId));
             sb.Append(",\"sessionId\":").Append(RestResponse.FormatNullableString(UnionAirSession.SessionId));
             sb.Append($",\"lifecycleGeneration\":{UnionAirSession.Generation.ToString(CultureInfo.InvariantCulture)}");
-            sb.Append($",\"settled\":{RestResponse.FormatBool(!isCompiling && !isUpdating && !UnionAirCompileGate.IsActive)}");
+            // A queued or running build or target switch settles nothing: each is about to take
+            // the main thread for a minute or more, and dependent calls made now would be answered
+            // only after it ends. Leaving the switch out let a client see settled: true alongside
+            // activeActivity naming buildTargetSwitch, which contradicts itself.
+            var buildActive = BuildService.IsBusy || BuildTargetSwitchService.IsBusy;
+            sb.Append($",\"settled\":{RestResponse.FormatBool(!isCompiling && !isUpdating && !UnionAirCompileGate.IsActive && !buildActive)}");
             sb.Append($",\"hasCompileErrors\":{RestResponse.FormatBool(EditorUtility.scriptCompilationFailed)}");
 
             var compile = CompileService.Current;
@@ -36,6 +41,18 @@ namespace LeonAkasaka.UnionAir.Editor
               .Append(RestResponse.FormatNullableString(compileActive ? compile.id : null));
             sb.Append(",\"compileSource\":")
               .Append(RestResponse.FormatNullableString(compileActive ? compile.source : null));
+
+            var build = BuildService.Current;
+            var buildRecordActive = build != null && build.IsActive;
+            sb.Append(",\"buildState\":")
+              .Append(RestResponse.FormatNullableString(buildRecordActive ? build.state : null));
+            sb.Append(",\"buildId\":")
+              .Append(RestResponse.FormatNullableString(buildRecordActive ? build.id : null));
+
+            // One field naming what the Editor is busy with, so a client does not have to infer it
+            // from isCompiling, isUpdating, isPlaying, and isTestRunning and get the priority wrong.
+            sb.Append(",\"activeActivity\":");
+            UnionAirActivityDecision.AppendActivity(sb, UnionAirActivityCoordinator.Current());
             sb.Append("}");
             RestResponse.Send(response, sb.ToString());
         }

@@ -93,9 +93,9 @@ namespace LeonAkasaka.UnionAir.Editor
                 error = "Query parameter 'target' must be 'editor', 'player', or 'other'.";
                 return false;
             }
-            if (!TryNormalize(values["source"], new string[] { "unionAir", "external" }, out query.source))
+            if (!TryNormalize(values["source"], new string[] { "unionAir", "external", "build" }, out query.source))
             {
-                error = "Query parameter 'source' must be 'unionAir' or 'external'.";
+                error = "Query parameter 'source' must be 'unionAir', 'external', or 'build'.";
                 return false;
             }
             if (!TryNormalize(values["state"], new string[] { "completed", "aborted" }, out query.state))

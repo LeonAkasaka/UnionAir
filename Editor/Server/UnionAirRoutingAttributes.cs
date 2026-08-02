@@ -64,7 +64,17 @@ namespace LeonAkasaka.UnionAir.Editor
         EditorState = 1 << 5,
 
         /// <summary>The endpoint may enable profiling or capture diagnostic artifacts containing project data.</summary>
-        Profiling = 1 << 6
+        Profiling = 1 << 6,
+
+        /// <summary>
+        /// The endpoint may produce executable output, such as a player build written outside the
+        /// Unity project's asset folders.
+        /// </summary>
+        /// <remarks>
+        /// Distinct from <see cref="AssetUpdate"/>: the artifact is a runnable program rather than a
+        /// project file, and it is not written through the AssetDatabase.
+        /// </remarks>
+        ExecutableOutput = 1 << 7
     }
 
     /// <summary>
@@ -119,6 +129,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         /// <summary>Built-in endpoints that capture performance and memory diagnostics.</summary>
         public const string Profiling = "profiling";
+
+        /// <summary>Built-in endpoints that report build configuration and produce player builds.</summary>
+        public const string Build = "build";
 
         /// <summary>Default category identifier for custom endpoints when no more specific category is supplied.</summary>
         public const string Custom = "custom";
@@ -199,6 +212,17 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Whether this category is enabled before users make an explicit override.
         /// </summary>
         public bool EnabledByDefault { get; set; }
+
+        /// <summary>
+        /// Editor activities during which endpoints in this category are rejected, unless an
+        /// endpoint overrides it with <see cref="UnionAirEndpointAttribute.UseActivityOverride"/>.
+        /// </summary>
+        /// <remarks>
+        /// Declared per category because the conflict is usually a property of what the category
+        /// does — scene and asset writes race a player build reading the project from disk — rather
+        /// than of an individual route.
+        /// </remarks>
+        public UnionAirActivity BlockedDuring { get; set; } = UnionAirActivity.None;
     }
 
     /// <summary>
@@ -250,6 +274,23 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Whether this endpoint can be called while a Unity Test Framework run is active.
         /// </summary>
         public UnionAirTestRunPolicy TestRunPolicy { get; set; } = UnionAirTestRunPolicy.Blocked;
+
+        /// <summary>
+        /// Editor activities during which this endpoint is rejected, added to whatever its category
+        /// declares.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="UnionAirActivity.PlayMode"/> and <see cref="UnionAirActivity.TestRun"/> are
+        /// still controlled by <see cref="PlayModePolicy"/> and <see cref="TestRunPolicy"/>, which
+        /// have request-level behavior no activity mask expresses. They are folded into the value
+        /// reported by <c>GET /api/help</c> so a client sees one list.
+        /// </remarks>
+        public UnionAirActivity BlockedDuring { get; set; } = UnionAirActivity.None;
+
+        /// <summary>
+        /// Whether <see cref="BlockedDuring"/> replaces the category value instead of adding to it.
+        /// </summary>
+        public bool UseActivityOverride { get; set; }
 
         /// <summary>
         /// Optional endpoint-specific risk metadata used when it differs from the category risk.

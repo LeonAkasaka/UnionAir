@@ -33,6 +33,7 @@ JSON レスポンス内の文字列フィールドは制御文字を含め一貫
 | Editor Actions | `editorActions` | 無効 |
 | Test Runner | `testRunner` | 無効。Unity Test Framework 導入時のみ表示 |
 | Profiling | `profiling` | 無効 |
+| Build | `build` | 無効 |
 | Custom | `custom` | カスタムカテゴリごと |
 
 ---
@@ -96,6 +97,16 @@ Unity Test Framework のテスト発見、非同期実行、監視、キャン�
 ProfilerRecorder metric、NDJSON sample、Profiler raw capture、Memory Profiler snapshot、Test Runner連携:
 
 `GET /api/profiling/metrics` · `POST|GET /api/profiling/sessions` · `GET|DELETE /api/profiling/sessions/{id}` · `POST .../{id}/stop` · `GET .../{id}/samples.ndjson` · `GET .../{id}/profile.raw` · `POST|GET /api/memory-snapshots` · `GET|DELETE /api/memory-snapshots/{id}` · `GET .../{id}/snapshot`
+
+### [Editor アクティビティ](api/activities.ja.md)
+
+「Editor が X で処理中である」ことを表す共通語彙。アクティビティの一覧、`409` がそれをどう報告するか、`blockedDuring` の意味。
+
+### [Build](api/build.ja.md)
+
+ビルド構成、プラットフォームモジュールの導入状況、設定の永続的変更、ビルドターゲットの切り替え、プレイヤービルド:
+
+`GET|PATCH /api/build/settings` · `GET /api/build/targets` · `POST /api/build/scenes` · `POST|GET /api/build/target` · `GET /api/build/target/{id}` · `POST /api/builds` · `GET /api/builds` · `GET /api/builds/{id}` · `DELETE /api/builds/{id}`
 
 ---
 

@@ -77,6 +77,9 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (!CanCallInCurrentPlayModeState(descriptor, request, response))
                     return true;
 
+                if (!CanCallDuringCurrentActivity(descriptor, response))
+                    return true;
+
                 var routeContext = new UnionAirRequestContext(request, response, routeValues, descriptor);
                 try
                 {
@@ -109,6 +112,15 @@ namespace LeonAkasaka.UnionAir.Editor
             return true;
         }
 
+        /// <summary>
+        /// Rejects an endpoint that declared it cannot run while a test run is active.
+        /// </summary>
+        /// <remarks>
+        /// Evaluated before the category check, which is why it is a stage of its own rather than
+        /// part of <see cref="CanCallDuringCurrentActivity"/>: a blocked endpoint in a disabled
+        /// category answers <c>409</c> with the run that owns the Editor, not <c>403</c>. That
+        /// ordering is documented behavior.
+        /// </remarks>
         private static bool CanCallDuringTestRun(
             UnionAirEndpointDescriptor descriptor,
             HttpListenerResponse response)
@@ -117,11 +129,42 @@ namespace LeonAkasaka.UnionAir.Editor
                 descriptor.TestRunPolicy == UnionAirTestRunPolicy.Allowed)
                 return true;
 
-            var source = RestResponse.FormatNullableString(UnionAirTestRunGate.PublicSource);
-            var id = RestResponse.FormatNullableString(UnionAirTestRunGate.PublicRunId);
+            var blocking = new UnionAirActivityRecord(
+                UnionAirActivity.TestRun,
+                UnionAirTestRunGate.PublicSource,
+                UnionAirTestRunGate.PublicRunId);
+
             RestResponse.Send(response,
-                $"{{\"error\":\"This endpoint cannot be used while a Unity Test Framework run is active.\",\"activeTestRun\":{{\"source\":{source},\"id\":{id}}}}}",
+                UnionAirActivityDecision.RejectionJson(
+                    blocking,
+                    "This endpoint cannot be used while a Unity Test Framework run is active."),
                 409);
+            return false;
+        }
+
+        /// <summary>
+        /// Rejects an endpoint while the Editor is busy with an activity it declared it cannot
+        /// overlap with.
+        /// </summary>
+        /// <remarks>
+        /// Play mode and test runs are excluded from this stage and enforced by their own, because
+        /// each has behavior a mask cannot express: Play mode supports a per-request opt-in, and
+        /// the test-run gate runs ahead of the category check. Both are still reported in the
+        /// endpoint's <c>blockedDuring</c> metadata, so a client sees one list.
+        /// </remarks>
+        private static bool CanCallDuringCurrentActivity(
+            UnionAirEndpointDescriptor descriptor,
+            HttpListenerResponse response)
+        {
+            var blockedDuring = descriptor.DeclaredBlockedDuring & UnionAirActivityDecision.RouterMask;
+            if (blockedDuring == UnionAirActivity.None)
+                return true;
+
+            var blocking = UnionAirActivityCoordinator.Blocking(blockedDuring);
+            if (!blocking.IsActive)
+                return true;
+
+            RestResponse.Send(response, UnionAirActivityDecision.RejectionJson(blocking), 409);
             return false;
         }
 

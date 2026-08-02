@@ -206,6 +206,92 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
+        /// Captures the current baseline for every loaded scene.
+        /// </summary>
+        /// <remarks>
+        /// Used around an operation that closes and reopens scenes internally without changing
+        /// them on disk. A player build is one: <c>BuildPipeline.BuildPlayer</c> raises
+        /// <c>sceneClosed</c> for the loaded scene and does not raise a matching
+        /// <c>sceneOpened</c>, so the baseline is dropped and every later refresh reports the scene
+        /// as <c>untracked</c> until someone saves or reopens it by hand. That would break the
+        /// build-then-compile loop for no real reason.
+        /// </remarks>
+        internal static List<LoadedSceneDiskSnapshot> CaptureLoadedSceneBaselines()
+        {
+            EnsureInitialized();
+
+            var captured = new List<LoadedSceneDiskSnapshot>();
+            for (var i = 0; i < SceneManager.sceneCount; i++)
+            {
+                var scene = SceneManager.GetSceneAt(i);
+                if (!scene.isLoaded || string.IsNullOrEmpty(scene.path))
+                    continue;
+
+                var snapshot = FindSnapshot(scene.path);
+                if (snapshot == null)
+                    continue;
+
+                captured.Add(new LoadedSceneDiskSnapshot
+                {
+                    path = snapshot.path,
+                    hash = snapshot.hash,
+                });
+            }
+            return captured;
+        }
+
+        /// <summary>
+        /// Restores captured baselines for scenes whose file is byte-identical to what it was.
+        /// </summary>
+        /// <param name="captured">Baselines from <see cref="CaptureLoadedSceneBaselines"/>.</param>
+        /// <remarks>
+        /// The hash comparison is what makes this safe rather than a blanket re-baseline. A scene
+        /// someone changed on disk while the operation ran still fails the comparison, stays
+        /// untracked, and still trips the guard — which is the case the guard exists for.
+        /// </remarks>
+        internal static void RestoreUnchangedBaselines(IReadOnlyList<LoadedSceneDiskSnapshot> captured)
+        {
+            EnsureInitialized();
+            if (captured == null || captured.Count == 0)
+                return;
+
+            var changed = false;
+            for (var i = 0; i < captured.Count; i++)
+            {
+                var entry = captured[i];
+                if (entry == null || string.IsNullOrEmpty(entry.path))
+                    continue;
+                if (FindSnapshot(entry.path) != null)
+                    continue;
+                if (!IsSceneLoaded(entry.path))
+                    continue;
+                if (!TryComputeHash(entry.path, out var hash, out _))
+                    continue;
+                if (!string.Equals(hash, entry.hash, StringComparison.Ordinal))
+                    continue;
+
+                _state.scenes.Add(new LoadedSceneDiskSnapshot { path = entry.path, hash = hash });
+                RecordSceneWarnings.Remove(entry.path);
+                changed = true;
+            }
+
+            if (changed)
+                Persist();
+        }
+
+        private static bool IsSceneLoaded(string path)
+        {
+            for (var i = 0; i < SceneManager.sceneCount; i++)
+            {
+                var scene = SceneManager.GetSceneAt(i);
+                if (scene.isLoaded &&
+                    string.Equals(scene.path, path, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Re-baselines only scenes affected by a known-safe AssetDatabase move.
         /// This also covers a folder move without masking conflicts in unrelated scenes.
         /// </summary>

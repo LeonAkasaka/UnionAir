@@ -110,6 +110,7 @@ Pin the tag. `main` is kept releasable but runs ahead of it, and a UPM Git URL t
 | **Editor Actions** | Selection, object ping, asset open, and Unity Editor menu item execution | Disabled by default |
 | **Test Runner** | Discover, execute, monitor, cancel, and download results for EditMode and PlayMode tests | Disabled by default; available when Unity Test Framework 1.4.0+ is installed |
 | **Profiling** | ProfilerRecorder metrics, NDJSON samples, Profiler raw captures, and memory snapshots | Disabled by default |
+| **Build** | Build configuration read and write, installed platform modules, build target switching, and in-process player builds with persisted reports | Disabled by default |
 
 > Compilation results are structured, with `severity`, `code`, project-relative `file`, `line`, and `column` per diagnostic, and survive the domain reload that a successful compilation triggers. Compilations started from an IDE are recorded too. See **[The Compile-and-Fix Loop](Documentation~/api/compile.md#the-compile-and-fix-loop)**.
 > Unity Console logs are retained across domain reloads and support an incremental `since` cursor.
@@ -126,7 +127,8 @@ Read this before enabling any write category:
 - There is **no authentication**. Any process running on the same machine can call every enabled endpoint.
 - Requests carrying an `Origin` header are rejected before routing, and responses do not opt into CORS. Browser `fetch` and XMLHttpRequest clients are therefore unsupported by default; local CLI and integration clients that omit `Origin` continue to work.
 - Requests with a non-empty body must use `Content-Type: application/json`. Empty POST requests remain valid without a content type.
-- Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, Editor Actions, Test Runner, and Profiling categories are opt-in; enabling them exposes state-changing operations and diagnostic artifacts — including arbitrary project test code, heap snapshots, Unity Editor menu execution, and asset deletion — to any local process. Enable them only when every local client is trusted.
+- Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, Editor Actions, Test Runner, Profiling, and Build categories are opt-in; enabling them exposes state-changing operations and diagnostic artifacts — including arbitrary project test code, heap snapshots, Unity Editor menu execution, and asset deletion — to any local process. Enable them only when every local client is trusted.
+- The **Build** category carries the `executableOutput` and `assetUpdate` risks. Enabling it lets any local process change build settings that are written to `ProjectSettings/` and shared with everyone who works on the project, and start a player build, which runs the project's build scripts and writes a runnable program to `Builds/UnionAir/` in the project directory. A build also occupies the Unity main thread for a minute or more, during which UnionAir answers nothing at all.
 - Category enablement is **not per-project**. It lives in `EditorPrefs`, which Unity scopes to the user account and Editor version, so a category enabled for one project stays enabled for every project opened with the same Editor.
 
 ## Quick Example

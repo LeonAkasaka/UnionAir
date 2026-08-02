@@ -15,7 +15,8 @@ namespace LeonAkasaka.UnionAir.Editor
             UnionAirRouteSource source,
             UnionAirEndpointRisk risk,
             bool canDisable,
-            bool enabledByDefault)
+            bool enabledByDefault,
+            UnionAirActivity blockedDuring = UnionAirActivity.None)
         {
             Id = id;
             DisplayName = string.IsNullOrEmpty(displayName) ? id : displayName;
@@ -23,6 +24,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Risk = risk;
             CanDisable = canDisable;
             EnabledByDefault = enabledByDefault;
+            BlockedDuring = blockedDuring;
             Key = source + ":" + id;
         }
 
@@ -55,6 +57,11 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Whether this category is enabled before user overrides are applied.
         /// </summary>
         public bool EnabledByDefault { get; }
+
+        /// <summary>
+        /// Editor activities during which endpoints in this category are rejected by default.
+        /// </summary>
+        public UnionAirActivity BlockedDuring { get; }
 
         /// <summary>
         /// Stable persistence key used for storing category enablement overrides.

@@ -23,6 +23,8 @@ namespace LeonAkasaka.UnionAir.Editor
             UnionAirCategoryDefinition categoryDefinition,
             UnionAirPlayModePolicy playModePolicy,
             UnionAirTestRunPolicy testRunPolicy,
+            UnionAirActivity blockedDuring,
+            bool useActivityOverride,
             bool useRiskOverride,
             UnionAirEndpointRisk riskOverride,
             string summary,
@@ -46,6 +48,9 @@ namespace LeonAkasaka.UnionAir.Editor
             CategoryDefinition = categoryDefinition;
             PlayModePolicy = playModePolicy;
             TestRunPolicy = testRunPolicy;
+            DeclaredBlockedDuring = useActivityOverride
+                ? blockedDuring
+                : blockedDuring | (categoryDefinition?.BlockedDuring ?? UnionAirActivity.None);
             UseRiskOverride = useRiskOverride;
             RiskOverride = riskOverride;
             Summary = summary;
@@ -124,6 +129,30 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Whether this endpoint may be called while a Unity Test Framework run is active.
         /// </summary>
         public UnionAirTestRunPolicy TestRunPolicy { get; }
+
+        /// <summary>
+        /// Activities declared through category and endpoint metadata, before the Play mode and
+        /// test-run policies are folded in.
+        /// </summary>
+        /// <remarks>
+        /// This is what the generic activity gate enforces. Play mode and test runs are enforced by
+        /// their own pipeline stages, which have request-level behavior — an opt-in flag and an
+        /// ordering ahead of the category check — that a mask cannot express.
+        /// </remarks>
+        internal UnionAirActivity DeclaredBlockedDuring { get; }
+
+        /// <summary>
+        /// Every activity during which this endpoint is rejected, including the ones enforced by
+        /// <see cref="PlayModePolicy"/> and <see cref="TestRunPolicy"/>.
+        /// </summary>
+        /// <remarks>
+        /// Reported by <c>GET /api/help</c> as <c>blockedDuring</c> so a client reads one list
+        /// rather than reconstructing it from three fields.
+        /// </remarks>
+        public UnionAirActivity BlockedDuring =>
+            DeclaredBlockedDuring |
+            (TestRunPolicy == UnionAirTestRunPolicy.Blocked ? UnionAirActivity.TestRun : UnionAirActivity.None) |
+            (PlayModePolicy == UnionAirPlayModePolicy.Blocked ? UnionAirActivity.PlayMode : UnionAirActivity.None);
 
         /// <summary>
         /// Short help text for the endpoint.

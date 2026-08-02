@@ -31,6 +31,43 @@ namespace LeonAkasaka.UnionAir.Editor
             else File.Move(temp, path);
         }
 
+        /// <summary>
+        /// Writes a record atomically and reports whether it reached disk.
+        /// </summary>
+        /// <param name="path">Destination path.</param>
+        /// <param name="json">Serialized record.</param>
+        /// <param name="error">Message from the last failed attempt, or <c>null</c> on success.</param>
+        /// <returns><c>true</c> when the record is durable.</returns>
+        /// <remarks>
+        /// Used where a caller must not proceed unless the record survives — a liveness flag opened
+        /// for a record that was never written has nothing left to close it after a domain reload.
+        /// <para>
+        /// Retried once, immediately. On Windows <c>File.Replace</c> fails transiently when a
+        /// virus scanner or the search indexer holds the destination for the moment it takes to
+        /// swap, and a second attempt normally succeeds. Further attempts would only delay
+        /// reporting the failures that do not clear on their own — a full disk, a read-only
+        /// directory, a path the Editor cannot write.
+        /// </para>
+        /// </remarks>
+        internal static bool TryWriteAtomicJson(string path, string json, out string error)
+        {
+            error = null;
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                try
+                {
+                    WriteAtomicJson(path, json);
+                    error = null;
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    error = ex.Message;
+                }
+            }
+            return false;
+        }
+
         internal static string Sha256(string path)
         {
             using (var stream = File.OpenRead(path))

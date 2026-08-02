@@ -27,7 +27,13 @@ Unity Editor の実行状態を返します。
   "sessionId": "f40cbf3fc3224a97b5b7ac7aa3b1ea38",
   "lifecycleGeneration": 3,
   "settled": true,
-  "hasCompileErrors": false
+  "hasCompileErrors": false,
+  "compileState": null,
+  "compileId": null,
+  "compileSource": null,
+  "buildState": null,
+  "buildId": null,
+  "activeActivity": null
 }
 ```
 
@@ -43,8 +49,13 @@ Unity Editor の実行状態を返します。
 | `testRunId` | string \| null | UnionAir run ID。外部 run とアイドル時は `null` |
 | `sessionId` | string | Editor プロセスごとに再生成される識別子 |
 | `lifecycleGeneration` | number | 現在の Editor プロセスにおける assembly domain のカウンタ。1 から開始 |
-| `settled` | bool | コンパイル中でもアセット更新中でもないかどうか |
+| `settled` | bool | コンパイル中でもアセット更新中でもプレイヤービルド中でもビルドターゲット切り替え中でもないかどうか |
 | `hasCompileErrors` | bool | `EditorUtility.scriptCompilationFailed` に基づくヒント |
+| `compileState` | string \| null | 実行中のコンパイルの `queued` / `running`。それ以外は `null` |
+| `compileId` / `compileSource` | string \| null | 実行中のコンパイルの識別情報 |
+| `buildState` | string \| null | 実行中のプレイヤービルドの `queued` / `running`。それ以外は `null` |
+| `buildId` | string \| null | 実行中のビルドの識別子 |
+| `activeActivity` | object \| null | Editor が実行中のアクティビティ。[Editor アクティビティ](activities.ja.md) を参照 |
 
 このエンドポイントはテスト実行中も利用できます。health、help、logs、Test Runner の status/result/cancel 操作以外のエンドポイントは、active run が終了するまで `409` を返します。
 
@@ -55,6 +66,8 @@ assembly domain のリロード中はサーバーが停止するため、その�
 `sessionId` は Editor プロセスが再起動したときにのみ変化し、そのとき `lifecycleGeneration` も 1 にリセットされます。
 
 > `settled` はスナップショットであり、リロードが差し迫っていないことを保証するものではありません。コンパイルが完了して `isCompiling` が false になった直後に、domain reload が始まることがあります。クライアントはどのリクエストでも接続断を許容してリトライすべきであり、`settled` を完了シグナルとして扱ってはいけません。
+>
+> リクエストが `409` を返したときに読むべきフィールドは `activeActivity` です。アクティビティ名・source・所有する id を報告し、拒否応答と同じ優先順位を適用します。そのためクライアントは `isCompiling` / `isUpdating` / `isPlaying` / `isTestRunning` からどれを待てばよいかを推測する必要がありません。[Editor アクティビティ](activities.ja.md) を参照してください。
 >
 > `hasCompileErrors` は Console のログから導出されます。Unity は Console の設定によっては再コンパイル時にログを消去します。確定的な結果ではなくヒントとして扱ってください。
 

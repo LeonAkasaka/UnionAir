@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
-using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -34,19 +33,17 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </summary>
         public void HandleStart(HttpListenerRequest request, HttpListenerResponse response)
         {
-            // PlayModePolicy only covers isPlaying, and recompiling during either transition or an
-            // asset import loses the cycle.
-            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            // PlayModePolicy only covers isPlaying, and recompiling during the transition loses the
+            // cycle. Asked of the coordinator rather than EditorApplication so the rejection names
+            // the same activity every other endpoint would name.
+            if (UnionAirActivityCoordinator.IsActive(UnionAirActivity.PlayMode))
             {
-                RestResponse.SendError(
-                    response, "Compilation cannot be requested while the Unity Editor is entering or in Play mode.", 409);
-                return;
-            }
-
-            if (EditorApplication.isUpdating)
-            {
-                RestResponse.SendError(
-                    response, "Compilation cannot be requested while the Unity Editor is updating assets.", 409);
+                RestResponse.Send(
+                    response,
+                    UnionAirActivityDecision.RejectionJson(
+                        UnionAirActivityCoordinator.Blocking(UnionAirActivity.PlayMode),
+                        "Compilation cannot be requested while the Unity Editor is entering or in Play mode."),
+                    409);
                 return;
             }
 
@@ -87,7 +84,19 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var id = string.IsNullOrEmpty(requestId) ? CompileService.NewId() : requestId;
             var record = CompileService.NewRecord(UnionAirCompileGate.UnionAirSource, id);
-            CompileService.ScheduleStart(record, refresh, clean);
+
+            // Nothing is started unless the record is durable. The response below promises an id
+            // to poll, and a compilation ends in a domain reload that discards the in-memory copy,
+            // so a record that never reached disk would leave that promise unkeepable.
+            if (!CompileService.ScheduleStart(record, refresh, clean))
+            {
+                RestResponse.SendError(
+                    response,
+                    "The compile record could not be written to Library/UnionAir/Compile, so no compilation was started. " +
+                    "The Unity Console carries the underlying file error. Retry once the cause is cleared.",
+                    500);
+                return;
+            }
 
             var sb = new StringBuilder();
             sb.Append("{");
@@ -110,8 +119,12 @@ namespace LeonAkasaka.UnionAir.Editor
             var state = RestResponse.FormatNullableString(
                 current != null && current.IsActive ? current.state : null);
 
-            return "{\"error\":\"A script compilation is already active.\"," +
-                   $"\"activeCompile\":{{\"id\":{id},\"source\":{source},\"state\":{state}}}}}";
+            var sb = new StringBuilder();
+            sb.Append("{\"error\":\"A script compilation is already active.\",\"activeActivity\":");
+            UnionAirActivityDecision.AppendActivity(
+                sb, UnionAirActivityCoordinator.Blocking(UnionAirActivity.Compile));
+            sb.Append($",\"activeCompile\":{{\"id\":{id},\"source\":{source},\"state\":{state}}}}}");
+            return sb.ToString();
         }
 
         private static string ExistingRequestJson(CompileRecord record)
