@@ -191,6 +191,184 @@ curl "http://localhost:8765/api/build/targets?installed=true"
 
 ---
 
+## PATCH /api/build/settings
+
+1 つの named build target について、スクリプティング設定とビルドフラグを変更します。
+
+> Build カテゴリが有効な場合のみ呼び出せます。Play モード、テスト実行、コンパイル、アセットインポート、ビルド、ビルドターゲット切り替えの実行中は拒否されます。
+
+### これらの変更は永続的であり、その永続性は一様ではありません
+
+Git の差分から気づかせるのではなく、API が明示します。変更ごとに `persistence` を報告します:
+
+| `persistence` | ファイル | 影響範囲 |
+|---------------|------|----------------|
+| `project` | `ProjectSettings/ProjectSettings.asset` | プロジェクトに関わる全員。Git 差分として現れます |
+| `project` | `ProjectSettings/EditorBuildSettings.asset` | 同上。ビルドシーン一覧 |
+| `user` | `Library/EditorUserBuildSettings.asset` | このマシンのこのユーザーのみ。共有もコミットもされません |
+
+スクリプティング設定とシーン一覧はプロジェクト全体に及びます。`development` などのビルドフラグはユーザー単位です。この 2 つを同じ「設定」として提示することこそが誤解を招く部分なので、レスポンスは変更ごとに区別します。
+
+### リクエスト
+
+```json
+{
+  "namedBuildTarget": "Standalone",
+  "addDefineSymbols": ["UNIONAIR_SAMPLE"],
+  "development": true
+}
+```
+
+| フィールド | 永続性 | 説明 |
+|-------|-------------|-------------|
+| `namedBuildTarget` | ― | スクリプティング設定の適用対象。既定はアクティブなターゲット |
+| `scriptingBackend` | project | `Mono2x` または `IL2CPP` |
+| `apiCompatibilityLevel` | project | .NET プロファイル |
+| `managedStrippingLevel` | project | ストリッピングレベル |
+| `il2CppCompilerConfiguration` | project | IL2CPP コンパイラ構成 |
+| `defineSymbols` | project | 一覧全体を置き換え |
+| `addDefineSymbols` | project | 既存を保ったままシンボルを追加 |
+| `removeDefineSymbols` | project | 既存を保ったままシンボルを削除 |
+| `development` | user | Development build |
+| `allowDebugging` | user | Script debugging |
+| `connectProfiler` | user | Autoconnect Profiler |
+| `buildWithDeepProfilingSupport` | user | Deep profiling support |
+| `waitForManagedDebugger` | user | マネージドデバッガの待機 |
+
+少なくとも 1 つの設定が必要です。何も変更しないリクエストは、受け付けるフィールドを列挙した `400` を返します。
+
+`defineSymbols` は `addDefineSymbols` / `removeDefineSymbols` と併用できません。両者は同じ一覧に対する異なる意図を表しており、両方を適用すると結果がリクエストの記述にない順序に依存してしまうためです。
+
+各定義シンボルは英字またはアンダースコアで始まり、英数字とアンダースコアのみを含む必要があります。Unity は与えられた値をそのまま保存し、失敗するのは後のコンパイル時であり、そのエラーは設定について一切言及しません。したがって不正なシンボルは、メッセージがそれを名指しできるこの時点で拒否します。保存される文字列はセミコロン区切りに書き直され、カンマや空白が混じって蓄積された一覧が正規化されます。
+
+列挙値の照合は大文字小文字を区別しません。未知の値は、**この Editor で有効な名前を列挙した** `400` を返します。有効な集合はバージョンごとに異なるためです。
+
+### 書き込み前にすべて検証されます
+
+すべての値が先に検証されます。1 つでも不正な列挙値を含むリクエストは、何一つ変更しません。説明を要しない唯一の部分的失敗の形だからです。
+
+### 部分的失敗は報告され、ロールバックはされません
+
+検証を通過した後でも、Unity が拒否すれば変更は失敗しえます。その場合、先に適用された変更は元に戻され**ません**。元に戻す操作自体も失敗しうるため、要求された状態でも元の状態でもない第 3 の状態が残る可能性があるからです。代わりに:
+
+- 変更ごとに `outcome`(`applied` / `unchanged` / `failed`)を報告します。
+- いずれかが失敗した場合はステータス `207`、それ以外は `200` です。
+- `settings` に**結果としての**状態を含めるため、呼び出し側は推測ではなく事実を読み取れます。
+
+all-or-nothing が必要な場合は、1 リクエストにつき 1 変更としてください。
+
+`unchanged` は黙って省略せず報告します。値を設定したのに何の応答も得られない呼び出し側は、no-op とフィールドの取りこぼしを区別できないためです。
+
+### レスポンス
+
+```json
+{
+  "changes": [
+    {
+      "setting": "defineSymbols",
+      "outcome": "applied",
+      "persistence": "project",
+      "file": "ProjectSettings/ProjectSettings.asset",
+      "previous": null,
+      "value": "UNIONAIR_SAMPLE",
+      "error": null
+    },
+    {
+      "setting": "development",
+      "outcome": "applied",
+      "persistence": "user",
+      "file": "Library/EditorUserBuildSettings.asset",
+      "previous": "false",
+      "value": "true",
+      "error": null
+    }
+  ],
+  "persistent": true,
+  "compilationExpected": true,
+  "lifecycleGeneration": 13,
+  "note": "Changes are permanent. ...",
+  "settings": { }
+}
+```
+
+`settings` は `GET /api/build/settings` が返すものと同じオブジェクトで、変更適用後に読み取った値です。
+
+### コンパイルと domain reload
+
+スクリプティングバックエンド・API 互換性レベル・定義シンボルの変更はコンパイルと domain reload を引き起こします。このリクエストがそれを引き起こしたかどうかは `compilationExpected` が報告します。ビルドフラグとストリッピングレベルは引き起こしません。コンパイラがそれらを読まないためです。
+
+レスポンスはリロードが始まる前に書き込まれます。Unity は再コンパイルをその場で実行するのではなく**キューに入れる**ため、リロードと競合せずに設定を適用し実際の結果を報告できます。このエンドポイントが `POST /api/compile` のように遅延実行せず同期的に適用するのはそのためです。
+
+その後、当該サイクルは Compile API から観測できます。UnionAir ではなく Unity が開始したものであるため `source: "external"` として記録されます:
+
+```
+1. PATCH /api/build/settings   -> 200 { compilationExpected: true, lifecycleGeneration: 13 }
+2. 接続断を許容しつつ GET /api/editor/status をポーリング
+3. lifecycleGeneration > 13 かつ settled == true -> リロード完了
+4. GET /api/compile            -> その変更が引き起こしたサイクル
+```
+
+```bash
+curl -X PATCH http://localhost:8765/api/build/settings \
+  -H "Content-Type: application/json" \
+  -d '{"addDefineSymbols":["UNIONAIR_SAMPLE"]}'
+```
+
+---
+
+## POST /api/build/scenes
+
+ビルドシーン一覧を置き換えます。
+
+この一覧はパッチではなく**置換**です。順序が有効な各シーンのビルドインデックスを決めるため、部分更新は所属だけでなく位置についても意図を表現する必要があり、その簡略記法はどう定めても推測になります。
+
+### リクエスト
+
+```json
+{
+  "scenes": [
+    { "path": "Assets/Scenes/SampleScene.unity", "enabled": true },
+    "Assets/Scenes/Menu.unity"
+  ]
+}
+```
+
+各要素はシーンパスの文字列(既定で有効)か、`path` と任意の `enabled` を持つオブジェクトです。`scenes` は必須で、空配列は一覧を消去します。これは正当な要求です。シーンが 1 つもないビルドは、理由を説明できる `POST /api/builds` の側で拒否されます。
+
+すべてのパスは `.unity` で終わり、重複せず(Unity はシーンごとに 1 つのビルドインデックスを割り当てます)、**インポート済み**のアセットを指す必要があります。AssetDatabase の確認は重要です。Unity は存在しないものを指すビルド設定エントリを受け付け、ビルド時に初めて失敗するからです。
+
+### レスポンス
+
+`PATCH /api/build/settings` と同じ形式で、`scenes` の変更が 1 件含まれます。`previous` と `value` は各パスを有効なら `+`、無効なら `-` 付きで列挙するため、差分が一目で読めます:
+
+```json
+{
+  "changes": [
+    {
+      "setting": "scenes",
+      "outcome": "applied",
+      "persistence": "project",
+      "file": "ProjectSettings/EditorBuildSettings.asset",
+      "previous": "Assets/Scenes/SampleScene.unity+",
+      "value": "Assets/Scenes/SampleScene.unity+;Assets/Scenes/Menu.unity+",
+      "error": null
+    }
+  ],
+  "persistent": true,
+  "compilationExpected": false,
+  "lifecycleGeneration": 13,
+  "settings": { }
+}
+```
+
+```bash
+curl -X POST http://localhost:8765/api/build/scenes \
+  -H "Content-Type: application/json" \
+  -d '{"scenes":["Assets/Scenes/SampleScene.unity"]}'
+```
+
+---
+
 ## POST /api/builds
 
 **アクティブな**ビルドターゲットに対してプレイヤービルドを要求し、ポーリング対象の id とともに `202` を返します。

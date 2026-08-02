@@ -264,7 +264,9 @@ namespace LeonAkasaka.UnionAir.Editor
                     UnionAirEndpointCategories.Build,
                     "Build",
                     UnionAirRouteSource.Builtin,
-                    UnionAirEndpointRisk.ExecutableOutput,
+                    // AssetUpdate as well as ExecutableOutput: build settings writes change
+                    // ProjectSettings files that every user of the project shares.
+                    UnionAirEndpointRisk.ExecutableOutput | UnionAirEndpointRisk.AssetUpdate,
                     true,
                     false)
             };

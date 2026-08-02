@@ -188,6 +188,184 @@ curl "http://localhost:8765/api/build/targets?installed=true"
 
 ---
 
+## PATCH /api/build/settings
+
+Changes scripting settings and build flags for one named build target.
+
+> Requires the Build category to be enabled. Rejected during Play mode, a test run, a compilation, an asset import, a build, and a build target switch.
+
+### These changes are permanent, and not all in the same way
+
+The API says so explicitly rather than leaving it to be discovered from a Git diff. Each change reports its own `persistence`:
+
+| `persistence` | File | Who it affects |
+|---------------|------|----------------|
+| `project` | `ProjectSettings/ProjectSettings.asset` | Everyone who works on the project; appears as a Git diff |
+| `project` | `ProjectSettings/EditorBuildSettings.asset` | Same, for the build scene list |
+| `user` | `Library/EditorUserBuildSettings.asset` | Only this machine and user; not shared, not committed |
+
+Scripting settings and the scene list are project-wide. Build flags such as `development` are per-user. Presenting the two as one kind of "setting" would be the misleading part, so the response distinguishes them per change.
+
+### Request
+
+```json
+{
+  "namedBuildTarget": "Standalone",
+  "addDefineSymbols": ["UNIONAIR_SAMPLE"],
+  "development": true
+}
+```
+
+| Field | Persistence | Description |
+|-------|-------------|-------------|
+| `namedBuildTarget` | ― | Target the scripting settings apply to; defaults to the active one |
+| `scriptingBackend` | project | `Mono2x` or `IL2CPP` |
+| `apiCompatibilityLevel` | project | .NET profile |
+| `managedStrippingLevel` | project | Stripping level |
+| `il2CppCompilerConfiguration` | project | IL2CPP compiler configuration |
+| `defineSymbols` | project | Replaces the whole list |
+| `addDefineSymbols` | project | Adds symbols, keeping the rest |
+| `removeDefineSymbols` | project | Removes symbols, keeping the rest |
+| `development` | user | Development build |
+| `allowDebugging` | user | Script debugging |
+| `connectProfiler` | user | Autoconnect Profiler |
+| `buildWithDeepProfilingSupport` | user | Deep profiling support |
+| `waitForManagedDebugger` | user | Wait for the managed debugger |
+
+At least one setting is required; a request that changes nothing returns `400` naming the fields it accepts.
+
+`defineSymbols` cannot be combined with `addDefineSymbols` or `removeDefineSymbols`. The two express different intents about the same list, and applying both would make the result depend on an ordering the request never stated.
+
+Each define symbol must start with a letter or underscore and contain only letters, digits, and underscores. Unity stores whatever it is given and fails later, at compile time, with an error that never mentions the setting — so a bad symbol is rejected here, where the message can name it. The stored string is rewritten semicolon-separated, which normalizes a list a project accumulated with stray commas or spaces.
+
+Enum values are matched case-insensitively. An unknown value returns `400` **listing the names valid on this Editor**, because the valid set differs per version.
+
+### Validation happens before any write
+
+Every value is validated first. A request naming one bad enum value changes nothing at all — the only partial-failure outcome that needs no explanation.
+
+### Partial failure is reported, never rolled back
+
+Past validation, a change can still fail if Unity refuses it. When that happens the earlier changes are **not** undone: undoing them could fail too, leaving a third state matching neither what was asked for nor what was there. Instead:
+
+- every change reports its own `outcome`: `applied`, `unchanged`, or `failed`;
+- the status is `207` when any change failed, and `200` otherwise;
+- `settings` carries the **resulting** state, so the caller reads the truth instead of inferring it.
+
+A caller that needs all-or-nothing should issue one change per request.
+
+`unchanged` is reported rather than skipped silently: a caller that set a value and got no acknowledgement cannot tell a no-op apart from a dropped field.
+
+### Response
+
+```json
+{
+  "changes": [
+    {
+      "setting": "defineSymbols",
+      "outcome": "applied",
+      "persistence": "project",
+      "file": "ProjectSettings/ProjectSettings.asset",
+      "previous": null,
+      "value": "UNIONAIR_SAMPLE",
+      "error": null
+    },
+    {
+      "setting": "development",
+      "outcome": "applied",
+      "persistence": "user",
+      "file": "Library/EditorUserBuildSettings.asset",
+      "previous": "false",
+      "value": "true",
+      "error": null
+    }
+  ],
+  "persistent": true,
+  "compilationExpected": true,
+  "lifecycleGeneration": 13,
+  "note": "Changes are permanent. ...",
+  "settings": { }
+}
+```
+
+`settings` is the same object `GET /api/build/settings` returns, read after the changes were applied.
+
+### Compilation and the domain reload
+
+Changing the scripting backend, the API compatibility level, or the define symbols triggers a compilation and a domain reload. `compilationExpected` reports whether this request did. Build flags and the stripping level do not: the compiler does not read them.
+
+The response is written before the reload can begin. Unity **queues** the recompile rather than running it inline, so the settings can be applied and their real outcomes reported without racing the reload — which is why this endpoint applies its changes synchronously rather than deferring them the way `POST /api/compile` must.
+
+Afterwards the cycle is observable through the Compile API. It is recorded with `source: "external"`, because Unity started it rather than UnionAir:
+
+```
+1. PATCH /api/build/settings   -> 200 { compilationExpected: true, lifecycleGeneration: 13 }
+2. Poll GET /api/editor/status, tolerating a dropped connection.
+3. lifecycleGeneration > 13 and settled == true  -> the reload completed.
+4. GET /api/compile            -> the cycle the change triggered.
+```
+
+```bash
+curl -X PATCH http://localhost:8765/api/build/settings \
+  -H "Content-Type: application/json" \
+  -d '{"addDefineSymbols":["UNIONAIR_SAMPLE"]}'
+```
+
+---
+
+## POST /api/build/scenes
+
+Replaces the build scene list.
+
+The list is a **replacement**, not a patch. Order decides the build index every enabled scene gets, so a partial update would have to express intent about position as well as membership, and any shorthand for that would be guessing.
+
+### Request
+
+```json
+{
+  "scenes": [
+    { "path": "Assets/Scenes/SampleScene.unity", "enabled": true },
+    "Assets/Scenes/Menu.unity"
+  ]
+}
+```
+
+Each element is either a scene path string — enabled by default — or an object with `path` and an optional `enabled`. `scenes` is required; an empty array clears the list, which is a legitimate thing to ask for. A build with no scenes is rejected later by `POST /api/builds`, where the message can say why.
+
+Every path must end in `.unity`, must not repeat (Unity assigns one build index per scene), and must name an **imported** asset. The AssetDatabase check matters: Unity accepts a build settings entry pointing at nothing and only fails at build time.
+
+### Response
+
+Same shape as `PATCH /api/build/settings`, with one `scenes` change. `previous` and `value` list each path with `+` for enabled and `-` for disabled, so a diff is readable at a glance:
+
+```json
+{
+  "changes": [
+    {
+      "setting": "scenes",
+      "outcome": "applied",
+      "persistence": "project",
+      "file": "ProjectSettings/EditorBuildSettings.asset",
+      "previous": "Assets/Scenes/SampleScene.unity+",
+      "value": "Assets/Scenes/SampleScene.unity+;Assets/Scenes/Menu.unity+",
+      "error": null
+    }
+  ],
+  "persistent": true,
+  "compilationExpected": false,
+  "lifecycleGeneration": 13,
+  "settings": { }
+}
+```
+
+```bash
+curl -X POST http://localhost:8765/api/build/scenes \
+  -H "Content-Type: application/json" \
+  -d '{"scenes":["Assets/Scenes/SampleScene.unity"]}'
+```
+
+---
+
 ## POST /api/builds
 
 Requests a player build for the **active** build target and returns `202` with the id to poll.

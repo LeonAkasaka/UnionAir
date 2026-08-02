@@ -103,9 +103,9 @@ The shared vocabulary for "the Editor is busy with X": what the activities are, 
 
 ### [Build](api/build.md)
 
-Build configuration, platform module availability, and player builds:
+Build configuration, platform module availability, persistent settings changes, and player builds:
 
-`GET /api/build/settings` · `GET /api/build/targets` · `POST /api/builds` · `GET /api/builds` · `GET /api/builds/{id}` · `DELETE /api/builds/{id}`
+`GET|PATCH /api/build/settings` · `GET /api/build/targets` · `POST /api/build/scenes` · `POST /api/builds` · `GET /api/builds` · `GET /api/builds/{id}` · `DELETE /api/builds/{id}`
 
 ---
 

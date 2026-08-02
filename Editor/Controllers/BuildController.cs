@@ -26,6 +26,30 @@ namespace LeonAkasaka.UnionAir.Editor
             ResponseExample = "{\"activeBuildTarget\":\"StandaloneWindows64\",\"total\":18,\"installedCount\":2,\"installedOnly\":false,\"targets\":[{\"buildTarget\":\"Android\",\"buildTargetGroup\":\"Android\",\"namedBuildTarget\":\"Android\",\"installed\":false,\"isActive\":false},{\"buildTarget\":\"StandaloneWindows64\",\"buildTargetGroup\":\"Standalone\",\"namedBuildTarget\":\"Standalone\",\"installed\":true,\"isActive\":true}]}")]
         private void Targets(UnionAirRequestContext ctx)
             => new BuildSettingsHandler().HandleTargets(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("PATCH", "settings",
+            Category = UnionAirEndpointCategories.Build,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            TestRunPolicy = UnionAirTestRunPolicy.Blocked,
+            BlockedDuring = UnionAirActivity.Compile | UnionAirActivity.AssetUpdate | UnionAirActivity.Build | UnionAirActivity.BuildTargetSwitch,
+            Summary = "Changes scripting settings and build flags for one named build target. Every value is validated before anything is written, so an invalid request changes nothing. Changes are permanent: scripting settings write ProjectSettings/ProjectSettings.asset, which appears as a Git diff and reaches every user of the project, while build flags write the per-user Library/EditorUserBuildSettings.asset. Changing the backend, API level, or define symbols triggers a compilation and a domain reload; the response is written first and the cycle is observable through GET /api/compile. A change that fails is reported, not rolled back, and 'settings' carries the resulting state; the status is 207 when any change failed.",
+            OptionalBody = new string[] { "namedBuildTarget", "scriptingBackend", "apiCompatibilityLevel", "managedStrippingLevel", "il2CppCompilerConfiguration", "defineSymbols", "addDefineSymbols", "removeDefineSymbols", "development", "allowDebugging", "connectProfiler", "buildWithDeepProfilingSupport", "waitForManagedDebugger" },
+            RequestExample = "{\"namedBuildTarget\":\"Standalone\",\"addDefineSymbols\":[\"UNIONAIR_SAMPLE\"],\"development\":true}",
+            ResponseExample = "{\"changes\":[{\"setting\":\"defineSymbols\",\"outcome\":\"applied\",\"persistence\":\"project\",\"file\":\"ProjectSettings/ProjectSettings.asset\",\"previous\":null,\"value\":\"UNIONAIR_SAMPLE\",\"error\":null},{\"setting\":\"development\",\"outcome\":\"applied\",\"persistence\":\"user\",\"file\":\"Library/EditorUserBuildSettings.asset\",\"previous\":\"false\",\"value\":\"true\",\"error\":null}],\"persistent\":true,\"compilationExpected\":true,\"lifecycleGeneration\":12,\"note\":\"Changes are permanent.\",\"settings\":{}}")]
+        private void PatchSettings(UnionAirRequestContext ctx)
+            => new BuildSettingsHandler().HandlePatchSettings(ctx.Request, ctx.Response);
+
+        [UnionAirEndpoint("POST", "scenes",
+            Category = UnionAirEndpointCategories.Build,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            TestRunPolicy = UnionAirTestRunPolicy.Blocked,
+            BlockedDuring = UnionAirActivity.Compile | UnionAirActivity.AssetUpdate | UnionAirActivity.Build | UnionAirActivity.BuildTargetSwitch,
+            Summary = "Replaces the build scene list. 'scenes' is the complete ordered list and each element is either a scene path string or an object with 'path' and optional 'enabled'; order decides the build index every enabled scene gets. Paths are checked against the AssetDatabase before anything is written, because Unity accepts an entry pointing at nothing and only fails at build time. Permanent: writes ProjectSettings/EditorBuildSettings.asset, which appears as a Git diff.",
+            RequiredBody = new string[] { "scenes" },
+            RequestExample = "{\"scenes\":[{\"path\":\"Assets/Scenes/SampleScene.unity\",\"enabled\":true},\"Assets/Scenes/Menu.unity\"]}",
+            ResponseExample = "{\"changes\":[{\"setting\":\"scenes\",\"outcome\":\"applied\",\"persistence\":\"project\",\"file\":\"ProjectSettings/EditorBuildSettings.asset\",\"previous\":\"Assets/Scenes/SampleScene.unity+\",\"value\":\"Assets/Scenes/SampleScene.unity+;Assets/Scenes/Menu.unity+\",\"error\":null}],\"persistent\":true,\"compilationExpected\":false,\"lifecycleGeneration\":12,\"note\":\"Changes are permanent.\",\"settings\":{}}")]
+        private void SetScenes(UnionAirRequestContext ctx)
+            => new BuildSettingsHandler().HandleSetScenes(ctx.Request, ctx.Response);
     }
 
     [UnionAirController("builds")]
