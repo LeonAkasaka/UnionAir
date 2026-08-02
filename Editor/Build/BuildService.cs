@@ -32,11 +32,19 @@ namespace LeonAkasaka.UnionAir.Editor
         private const int MaxReportMessages = 200;
         private const int RetainedRecords = 20;
 
+        /// <summary>
+        /// Grace applied to a queued record before it is treated as never dispatched.
+        /// </summary>
+        /// <remarks>Matches <c>CompileService.QueuedGraceSeconds</c>.</remarks>
+        private const double QueuedGraceSeconds = 30.0;
+
         private static readonly string StorageDirectory = Path.Combine("Library", "UnionAir", "Builds");
         private static readonly string CurrentPath = Path.Combine(StorageDirectory, "current.json");
         private static readonly string RecordsDirectory = Path.Combine(StorageDirectory, "records");
 
         private static BuildRecord _current;
+        private static bool _startDispatched;
+        private static double _startRequestedAt;
 
         internal static BuildRecord Current => _current;
         internal static int RetainedRecordCount => RetainedRecords;
@@ -45,14 +53,26 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             _current = Load(CurrentPath);
 
-            // A record that still claims to be active with no build activity open belongs to a
-            // build whose process died. Nothing else can finalize it: unlike compilation, a build
-            // has no Unity callback that fires when it is interrupted.
-            if (_current != null && _current.IsActive &&
-                !UnionAirActivityCoordinator.IsDeclared(UnionAirActivity.Build))
+            // A build cannot outlive the domain that ran it: BuildPlayer is synchronous, and the
+            // deferred start that a queued record is waiting for lived in the previous domain.
+            // Anything still marked active here therefore belongs to a domain that is gone,
+            // whether the process died or merely reloaded.
+            if (_current != null && _current.IsActive)
             {
-                Abort(_current, "The Unity Editor was closed or reloaded the assembly domain during the build.");
+                Abort(_current,
+                    UnionAirActivityCoordinator.IsDeclared(UnionAirActivity.Build)
+                        ? "The Unity Editor reloaded the assembly domain before the build reported a result."
+                        : "The Unity Editor was closed or restarted during the build.");
                 Commit(_current);
+            }
+
+            // The mirror case: an activity with no live record behind it. Nothing else would ever
+            // close it, and the project would report itself busy for the rest of the session.
+            if (UnionAirActivityCoordinator.IsDeclared(UnionAirActivity.Build) &&
+                (_current == null || _current.id != UnionAirActivityCoordinator.IdOf(UnionAirActivity.Build)))
+            {
+                UnionAirActivityCoordinator.ClearDebris(
+                    UnionAirActivity.Build, "no build record was restored for it.");
             }
         }
 
@@ -129,10 +149,21 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Deletes a retained record and its artifacts.
         /// </summary>
         /// <returns><c>false</c> when the record no longer exists.</returns>
+        /// <summary>
+        /// Deletes a retained record and its artifacts.
+        /// </summary>
+        /// <returns><c>false</c> when the record no longer exists.</returns>
+        /// <remarks>
+        /// An active record is never deleted. Removing the record a queued build is waiting for
+        /// would make its deferred start return without ever committing, so nothing would release
+        /// the build activity and the project would report itself busy for the rest of the
+        /// session. Callers reject the request instead; the guard is repeated here so the
+        /// invariant does not depend on them.
+        /// </remarks>
         internal static bool Delete(string id)
         {
             var record = Find(id);
-            if (record == null) return false;
+            if (record == null || record.IsActive) return false;
 
             BuildArtifactStore.Delete(id);
 
@@ -189,18 +220,35 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Registers a queued record and defers the build itself.
         /// </summary>
+        /// <returns><c>false</c> when the record could not be persisted and nothing was started.</returns>
         /// <remarks>
+        /// <para>
         /// The record is persisted and the response sent before the build starts. The deferred work
         /// runs from <c>EditorApplication.update</c> rather than <c>delayCall</c>, because
         /// <c>delayCall</c> does not run while the Editor is in the background — the normal state
         /// for an agent-driven workflow.
+        /// </para>
+        /// <para>
+        /// The activity is opened only once the record is on disk. A build occupies the Editor for
+        /// a minute or more with nothing served, so the id in the <c>202</c> is the caller's only
+        /// handle; starting work whose result could not be reported is worse than refusing it.
+        /// </para>
         /// </remarks>
-        internal static void ScheduleStart(BuildRecord record)
+        internal static bool ScheduleStart(BuildRecord record)
         {
+            var previous = _current;
             _current = record;
-            SaveCurrent();
+            if (!SaveCurrent())
+            {
+                _current = previous;
+                return false;
+            }
+
             UnionAirActivityCoordinator.Begin(
                 UnionAirActivity.Build, UnionAirActivityCoordinator.UnionAirSource, record.id);
+
+            _startDispatched = false;
+            _startRequestedAt = EditorApplication.timeSinceStartup;
 
             var id = record.id;
             EditorApplication.CallbackFunction pending = null;
@@ -210,10 +258,34 @@ namespace LeonAkasaka.UnionAir.Editor
                 Run(id);
             };
             EditorApplication.update += pending;
+            return true;
+        }
+
+        /// <summary>
+        /// Reaps a queued record whose deferred start never ran.
+        /// </summary>
+        /// <remarks>
+        /// The callback registered by <see cref="ScheduleStart"/> lives in the current assembly
+        /// domain. A reload between the <c>202</c> and the callback — an IDE save and Unity's focus
+        /// refresh are enough — discards it, leaving a record queued forever behind an activity
+        /// that nothing closes. <c>CompileService.Update</c> guards its own queued window the same
+        /// way; the build service had no watchdog at all.
+        /// </remarks>
+        internal static void Update()
+        {
+            if (_current == null || _current.state != "queued" || _startDispatched)
+                return;
+
+            if (EditorApplication.timeSinceStartup - _startRequestedAt < QueuedGraceSeconds)
+                return;
+
+            Abort(_current, "The build was never dispatched by the Unity Editor.");
+            Commit(_current);
         }
 
         private static void Run(string id)
         {
+            _startDispatched = true;
             if (_current == null || _current.id != id || _current.state != "queued")
                 return;
 
@@ -468,10 +540,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
                 out result);
 
-        private static void SaveCurrent()
+        private static bool SaveCurrent()
         {
-            if (_current == null) return;
-            TryWrite(CurrentPath, _current, "current build record");
+            if (_current == null) return false;
+            return TryWrite(CurrentPath, _current, "current build record");
         }
 
         private static void SaveRecord(BuildRecord record)
@@ -481,16 +553,14 @@ namespace LeonAkasaka.UnionAir.Editor
             TryWrite(path, record, "build record");
         }
 
-        private static void TryWrite(string path, BuildRecord record, string what)
+        private static bool TryWrite(string path, BuildRecord record, string what)
         {
-            try
-            {
-                ProfilingArtifactStore.WriteAtomicJson(path, JsonUtility.ToJson(record));
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[UnionAir] Could not write the {what}: {ex.Message}");
-            }
+            string error;
+            if (ProfilingArtifactStore.TryWriteAtomicJson(path, JsonUtility.ToJson(record), out error))
+                return true;
+
+            Debug.LogWarning($"[UnionAir] Could not write the {what}: {error}");
+            return false;
         }
 
         internal static bool TryGetRecordPath(string id, out string path)
