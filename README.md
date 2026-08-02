@@ -7,6 +7,24 @@
 
 UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making it easy to integrate with LLM MCP bridges, development bots, CI tooling, or any HTTP client.
 
+## Design Philosophy
+
+UnionAir assumes its client already has direct access to the project directory. General-purpose file reading and writing is not something this package needs to provide, and it does not try to. What it exposes are operations the Editor itself defines, and the artifacts they produce.
+
+What a client cannot get from the filesystem is the Editor's own behavior. A Unity project's state is not only the files on disk — it is also what the Editor holds after import: GUID resolution, serialized references, the loaded scene graph, the asset database, the domain that scripts live in. Editing a `.unity` or `.asset` file by hand means reproducing the Editor's rules from the outside, and that reproduction is where correctness is lost.
+
+An endpoint earns its place here when going through the Editor is materially better than editing the files:
+
+- **Unity's rules and validation, without reimplementing them.** `POST /api/assets/move` delegates to `AssetDatabase.MoveAsset`, which preserves the asset's GUID and the serialized references that resolve through it — though neither route updates paths a project holds as plain strings. `DELETE /api/assets/{guid}` removes the `.meta` with the asset and refuses when the target is a loaded scene. Careful file operations can reach the same results; getting there means the client carrying Unity's rules itself, and being right about them every time.
+- **State that exists only inside the Editor.** Play mode, selection, the Console, compilation results, profiler samples, the loaded scene list. There is no file to read.
+- **Operations defined by Unity's own semantics.** Prefab apply/revert, supported `SerializedObject` writes to project-defined ScriptableObjects, animation curves that must resolve a Sprite sub-asset rather than its backing Texture2D. Expressing these as YAML edits means reimplementing Unity's serializer.
+- **Feedback that closes a loop.** Compilation diagnostics survive the domain reload they trigger, so a write-compile-fix cycle can terminate. See [The Compile-and-Fix Loop](Documentation~/api/compile.md#the-compile-and-fix-loop).
+- **Undo integration where Unity offers it.** Scene edits — creating, updating, and deleting GameObjects and components — are registered with `Undo`, so a human at the Editor can reverse them with Ctrl+Z. Asset writes such as materials, animation clips, importer settings, and ScriptableObjects are not.
+
+Meeting one of these is necessary, not sufficient. That a Unity Editor API exists is not itself a reason to expose it. An endpoint also has to answer a real client need with a contract worth depending on — one that keeps its meaning across Unity versions and fits the rest of the API — rather than being added because the underlying method was there to wrap.
+
+Work that plain file operations already handle correctly is deliberately out of scope. Editing C# source, reading `manifest.json`, walking the project tree — a client should do those directly. An endpoint for them would only put HTTP between the client and a job it can already do.
+
 ## Requirements
 
 - Unity **2022.3** or later
@@ -95,7 +113,7 @@ Pin the tag. `main` is kept releasable but runs ahead of it, and a UPM Git URL t
 
 > Compilation results are structured, with `severity`, `code`, project-relative `file`, `line`, and `column` per diagnostic, and survive the domain reload that a successful compilation triggers. Compilations started from an IDE are recorded too. See **[The Compile-and-Fix Loop](Documentation~/api/compile.md#the-compile-and-fix-loop)**.
 > Unity Console logs are retained across domain reloads and support an incremental `since` cursor.
-> Edit mode write operations are Undo-able in the Unity Editor (Ctrl+Z).
+> Scene edits made in Edit mode are registered with Undo and can be reversed in the Unity Editor (Ctrl+Z); asset writes are not.
 > Scene GameObjects and Components include `globalObjectId` values in read responses and can be targeted with typed object references in write requests.
 > Write APIs declare Play Mode safety in `GET /api/help`; persistent scene/asset changes are blocked during Play Mode, while selected scene-object changes require both the Editor setting and `allowWhilePlaying=true`.
 > See **[API Reference](Documentation~/api-reference.md)** for the full endpoint list and request/response details.
