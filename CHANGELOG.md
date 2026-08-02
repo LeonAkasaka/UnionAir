@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Requesting the target that is already active returns `200` with `state: "unchanged"` and creates no record.
 - `POST /api/build/target` returns `500` without starting anything when the switch record cannot be written. The record is the only thing that survives the domain reload the switch causes, so a switch begun without one could never report its outcome and would leave an activity nothing closes.
 - A queued switch resolves to `failed` rather than staying queued forever when an unrelated domain reload discards its deferred start.
+- The stale-activity check for a target switch tested the record's active state with the wrong polarity, so a terminal record could be accepted as the owner of a still-set flag. It now uses the shared, tested predicate.
 - A queued or running target switch now makes `GET /api/editor/status` report `settled: false`. It previously reported `settled: true` alongside an `activeActivity` naming `buildTargetSwitch`.
 
 - Added persistent build settings changes. `PATCH /api/build/settings` changes the scripting backend, API compatibility level, stripping level, IL2CPP compiler configuration, define symbols, and build flags for a named build target; `POST /api/build/scenes` replaces the build scene list. This is what makes the original motivation of the umbrella issue achievable — evaluating the effect of a settings change on compilation.

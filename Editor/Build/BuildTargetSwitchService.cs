@@ -58,12 +58,14 @@ namespace LeonAkasaka.UnionAir.Editor
             // The mirror case: an activity with no live record behind it. Reached when the record
             // was never written, or was written and then lost. Nothing else would ever close it,
             // and the project would report itself busy for the rest of the Editor session.
-            if (UnionAirActivityCoordinator.IsDeclared(UnionAirActivity.BuildTargetSwitch) &&
-                (_current == null || _current.IsActive ||
-                 _current.id != UnionAirActivityCoordinator.IdOf(UnionAirActivity.BuildTargetSwitch)))
+            if (UnionAirActivityDecision.IsDebris(
+                    UnionAirActivityCoordinator.IsDeclared(UnionAirActivity.BuildTargetSwitch),
+                    UnionAirActivityCoordinator.IdOf(UnionAirActivity.BuildTargetSwitch),
+                    _current == null ? null : _current.id,
+                    _current != null && _current.IsActive))
             {
                 UnionAirActivityCoordinator.ClearDebris(
-                    UnionAirActivity.BuildTargetSwitch, "no build target switch record was restored for it.");
+                    UnionAirActivity.BuildTargetSwitch, "no live build target switch record was restored for it.");
             }
         }
 
@@ -196,7 +198,21 @@ namespace LeonAkasaka.UnionAir.Editor
             // Reaching here without a reload means Unity completed the switch inline. When a reload
             // does follow, Initialize finalizes the record on the other side instead.
             if (EditorUserBuildSettings.activeBuildTarget == target)
+            {
                 Finish(record, "completed", null);
+                return;
+            }
+
+            // Unity accepted the switch but the active target has not changed yet, which is what a
+            // pending domain reload looks like from here. The record deliberately stays `switching`
+            // so Initialize can reconcile it on the far side. Failing it here instead would report
+            // a switch that is about to succeed as failed, on a path this package cannot currently
+            // verify: only the Standalone modules are installed on the machine it is developed
+            // against, and a switch within one group completes inline without a reload.
+            Debug.Log(
+                "[UnionAir] The switch to " + target + " was accepted but the active target is still " +
+                EditorUserBuildSettings.activeBuildTarget +
+                "; leaving the record switching for the reload to resolve.");
         }
 
         private static void Finish(BuildTargetSwitchRecord record, string state, string error)
