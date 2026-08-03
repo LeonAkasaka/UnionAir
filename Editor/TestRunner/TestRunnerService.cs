@@ -51,8 +51,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (_current != null && _current.IsActive && !OwnsActiveRun())
             {
                 MarkAborted(_current, "Unity Test Framework run state was lost during reload.");
-                if (!string.IsNullOrEmpty(_current.profilingSessionId))
-                    ProfilingService.FinishAttached(_current.id, _current.error);
+                FinishProfiling(_current, _current.error);
                 SaveCurrentNow();
             }
 
@@ -200,6 +199,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <param name="error">Why nothing was started, when this returns <c>false</c>.</param>
         /// <param name="save">Persists the record; defaults to writing it as the current record.</param>
         /// <param name="execute">Dispatches the run and returns the framework's id.</param>
+        /// <param name="bindProfiling">Attaches the profiling session to the run.</param>
         /// <returns><c>false</c> when the run was refused or could not be dispatched.</returns>
         /// <remarks>
         /// <para>
@@ -217,9 +217,9 @@ namespace LeonAkasaka.UnionAir.Editor
         /// rest of the Editor session.
         /// </para>
         /// <para>
-        /// The two delegates are injectable so the paths that cannot be reached from the file
-        /// system - a dispatch that throws after the activity is open - can be exercised, following
-        /// <c>CompileService.TrimRecordFiles</c>.
+        /// The delegates are injectable so the paths that cannot be reached from the file system -
+        /// a dispatch that throws after the activity is open, an attachment that throws before it -
+        /// can be exercised, following <c>CompileService.TrimRecordFiles</c>.
         /// </para>
         /// </remarks>
         internal static bool TryStartRun(
@@ -230,12 +230,14 @@ namespace LeonAkasaka.UnionAir.Editor
             out string runId,
             out string error,
             Func<TestRunRecord, bool> save = null,
-            Func<TestMode, TestRunFilters, string> execute = null)
+            Func<TestMode, TestRunFilters, string> execute = null,
+            Action<string, string> bindProfiling = null)
         {
             runId = "";
             error = "";
             save = save ?? SaveAsCurrent;
             execute = execute ?? ExecuteRun;
+            bindProfiling = bindProfiling ?? ProfilingService.BindToTest;
 
             var previous = _current;
             var record = new TestRunRecord
@@ -248,29 +250,31 @@ namespace LeonAkasaka.UnionAir.Editor
                 profilingSessionId = profilingSessionId
             };
 
+            // Attaching writes the profiling session and fails the way a record write does. It goes
+            // first so both failures leave the same state: nothing written for this run, nothing
+            // dispatched, and the record that was stored before still the stored one. Attaching
+            // after the record was committed would refuse the request while leaving a queued record
+            // on disk that the next domain reload would surface as a run that never existed.
+            if (!string.IsNullOrEmpty(profilingSessionId))
+            {
+                try
+                {
+                    bindProfiling(profilingSessionId, record.id);
+                }
+                catch (Exception ex)
+                {
+                    ProfilingService.DeleteArmed(profilingSessionId);
+                    error = "The profiling session could not be attached, so no run was started: " + ex.Message;
+                    return false;
+                }
+            }
+
             if (!save(record))
             {
                 RestoreCurrent(previous);
                 if (!string.IsNullOrEmpty(profilingSessionId)) ProfilingService.DeleteArmed(profilingSessionId);
                 error = "The test run record could not be written, so no run was started.";
                 return false;
-            }
-
-            // Binding stores the profiling session and fails the same way a record write does.
-            // Still ahead of the dispatch, so the request is refused rather than half applied.
-            if (!string.IsNullOrEmpty(profilingSessionId))
-            {
-                try
-                {
-                    ProfilingService.BindToTest(profilingSessionId, record.id);
-                }
-                catch (Exception ex)
-                {
-                    RestoreCurrent(previous);
-                    ProfilingService.DeleteArmed(profilingSessionId);
-                    error = "The profiling session could not be attached, so no run was started: " + ex.Message;
-                    return false;
-                }
             }
 
             UnionAirTestRunGate.Begin(UnionAirTestRunGate.UnionAirSource, record.id);
@@ -282,16 +286,23 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             catch (Exception ex)
             {
-                // The record owns an open activity from here on, so it is finished rather than
-                // rolled back. Every record that got this far reaches a terminal state through one
-                // path, and that path is what releases the activity.
                 error = "The test run could not be started: " + ex.Message;
-                MarkAborted(record, error);
-                if (!string.IsNullOrEmpty(profilingSessionId))
-                    ProfilingService.FinishAttached(record.id, error);
-                save(record);
-                TestRunCancellationHandle.Clear();
-                UnionAirTestRunGate.End(UnionAirTestRunGate.UnionAirSource, record.id);
+                try
+                {
+                    // The record owns an open activity from here on, so it is finished rather than
+                    // rolled back. Every record that got this far reaches a terminal state through
+                    // one path, and that path is what releases the activity.
+                    MarkAborted(record, error);
+                    FinishProfiling(record, error);
+                    save(record);
+                }
+                finally
+                {
+                    // Unconditional. An activity left open here is closed by nothing, which is the
+                    // failure the whole ordering exists to prevent.
+                    TestRunCancellationHandle.Clear();
+                    UnionAirTestRunGate.End(UnionAirTestRunGate.UnionAirSource, record.id);
+                }
                 return false;
             }
 
@@ -330,6 +341,35 @@ namespace LeonAkasaka.UnionAir.Editor
         private static void RestoreCurrent(TestRunRecord previous) => _current = previous;
 
         private static string NewRunId() => Guid.NewGuid().ToString("D");
+
+        /// <summary>
+        /// Finalizes the profiling session attached to a run, best-effort.
+        /// </summary>
+        /// <param name="record">Run whose session should be finalized; ignored when it has none.</param>
+        /// <param name="abortReason">Reason to record, or <c>null</c> to complete the session normally.</param>
+        /// <remarks>
+        /// Profiling writes artifacts and metadata of its own, on the same disk, through a store
+        /// that throws. Every caller is on a path that still has to release the test-run activity,
+        /// so an exception escaping here would leave that activity open with nothing able to close
+        /// it - the failure this service is ordered to prevent. Losing the profiling session is the
+        /// smaller loss, and it is reported rather than swallowed silently.
+        /// </remarks>
+        private static void FinishProfiling(TestRunRecord record, string abortReason = null)
+        {
+            if (record == null || string.IsNullOrEmpty(record.profilingSessionId))
+                return;
+
+            try
+            {
+                ProfilingService.FinishAttached(record.id, abortReason);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(
+                    "[UnionAir] Could not finalize the profiling session attached to test run " +
+                    record.id + ": " + ex.Message);
+            }
+        }
 
         /// <summary>Puts a record into its aborted terminal state.</summary>
         private static void MarkAborted(TestRunRecord record, string reason)
@@ -429,7 +469,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 catch (Exception ex)
                 {
                     _current.error = "Profiling could not be started: " + ex.Message;
-                    ProfilingService.FinishAttached(_current.id, _current.error);
+                    FinishProfiling(_current, _current.error);
                     SaveCurrentNow();
                 }
             }
@@ -462,44 +502,50 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!OwnsActiveRun())
                 return;
 
-            var cancellationRequested = _current.state == "canceling";
-            _current.state = "completed";
-            _current.result = cancellationRequested ? "canceled" : MapResult(result);
-            _current.finishedAt = result.EndTime.ToUniversalTime().ToString("o");
-            _current.startedAt = result.StartTime.ToUniversalTime().ToString("o");
-            _current.currentTest = "";
-            _current.total = Math.Max(_current.total, result.Test?.TestCaseCount ?? 0);
-            _current.completed = result.PassCount + result.FailCount + result.SkipCount + result.InconclusiveCount;
-            _current.passed = result.PassCount;
-            _current.failed = result.FailCount;
-            _current.skipped = result.SkipCount;
-            _current.inconclusive = result.InconclusiveCount;
-            _current.duration = result.Duration;
-            _current.assertCount = result.AssertCount;
-
-            if (!string.IsNullOrEmpty(_current.profilingSessionId))
-                ProfilingService.FinishAttached(_current.id);
-
             try
             {
-                CommitLatestResult(result);
-            }
-            catch (Exception ex)
-            {
-                RecoverLatestResultTransaction();
-                _latest = Load(LatestPath);
-                _current.resultFileAvailable = false;
-                _current.resultFileSha256 = "";
-                _current.error = "NUnit XML could not be saved: " + ex.Message;
-                Debug.LogError("[UnionAir] " + _current.error);
-            }
+                var cancellationRequested = _current.state == "canceling";
+                _current.state = "completed";
+                _current.result = cancellationRequested ? "canceled" : MapResult(result);
+                _current.finishedAt = result.EndTime.ToUniversalTime().ToString("o");
+                _current.startedAt = result.StartTime.ToUniversalTime().ToString("o");
+                _current.currentTest = "";
+                _current.total = Math.Max(_current.total, result.Test?.TestCaseCount ?? 0);
+                _current.completed = result.PassCount + result.FailCount + result.SkipCount + result.InconclusiveCount;
+                _current.passed = result.PassCount;
+                _current.failed = result.FailCount;
+                _current.skipped = result.SkipCount;
+                _current.inconclusive = result.InconclusiveCount;
+                _current.duration = result.Duration;
+                _current.assertCount = result.AssertCount;
 
-            // The activity is released whether or not the write landed. A terminal record that
-            // could not be stored is reported wrongly after a reload; one whose activity was never
-            // released blocks the rest of the Editor session.
-            SaveCurrentNow();
-            TestRunCancellationHandle.Clear();
-            UnionAirTestRunGate.End(UnionAirTestRunGate.UnionAirSource, _current.id);
+                FinishProfiling(_current);
+
+                try
+                {
+                    CommitLatestResult(result);
+                }
+                catch (Exception ex)
+                {
+                    RecoverLatestResultTransaction();
+                    _latest = Load(LatestPath);
+                    _current.resultFileAvailable = false;
+                    _current.resultFileSha256 = "";
+                    _current.error = "NUnit XML could not be saved: " + ex.Message;
+                    Debug.LogError("[UnionAir] " + _current.error);
+                }
+
+                SaveCurrentNow();
+            }
+            finally
+            {
+                // Unconditional, and whether or not the write landed. A terminal record that could
+                // not be stored is reported wrongly after a reload and recovered by the crash net;
+                // an activity that was never released blocks the rest of the Editor session and is
+                // recovered by nothing.
+                TestRunCancellationHandle.Clear();
+                UnionAirTestRunGate.End(UnionAirTestRunGate.UnionAirSource, _current.id);
+            }
         }
 
         internal static void OnError(string message)
@@ -511,12 +557,17 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             if (!OwnsActiveRun())
                 return;
-            MarkAborted(_current, message ?? "The Unity Test Framework aborted the run.");
-            if (!string.IsNullOrEmpty(_current.profilingSessionId))
-                ProfilingService.FinishAttached(_current.id, _current.error);
-            SaveCurrentNow();
-            TestRunCancellationHandle.Clear();
-            UnionAirTestRunGate.End(UnionAirTestRunGate.UnionAirSource, _current.id);
+            try
+            {
+                MarkAborted(_current, message ?? "The Unity Test Framework aborted the run.");
+                FinishProfiling(_current, _current.error);
+                SaveCurrentNow();
+            }
+            finally
+            {
+                TestRunCancellationHandle.Clear();
+                UnionAirTestRunGate.End(UnionAirTestRunGate.UnionAirSource, _current.id);
+            }
         }
 
         internal static void Update()
@@ -619,8 +670,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 _current != null && _current.IsActive && _current.id == runId)
             {
                 MarkAborted(_current, "Unity Test Framework became idle without delivering a completion callback.");
-                if (!string.IsNullOrEmpty(_current.profilingSessionId))
-                    ProfilingService.FinishAttached(_current.id, _current.error);
+                FinishProfiling(_current, _current.error);
                 if (SaveCurrentNow())
                     Debug.LogWarning("[UnionAir] Recovered a stale UnionAir test-run gate and marked the run aborted.");
                 else
