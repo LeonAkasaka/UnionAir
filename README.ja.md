@@ -7,7 +7,7 @@
 
 > **注記**: 本ドキュメントは [英語版 README](README.md) の翻訳です。内容に乖離がある場合は英語版が優先されます。
 
-UnionAir は Unity Editor の状態をシンプルな **REST API**(HTTP)として公開し、LLM MCP ブリッジ・開発ボット・CI ツールなど、任意の HTTP クライアントから簡単に利用できるようにします。
+UnionAir は Unity Editor の状態をシンプルな **REST API**(HTTP)として公開し、AI アシスタント・開発ボット・CI ツールなど、任意の HTTP クライアントから簡単に利用できるようにします。
 
 ## 設計思想
 
@@ -158,9 +158,9 @@ curl -X POST http://localhost:8765/api/gameobjects \
   -d '{"name":"MyObject","parent":{"type":"hierarchyPath","value":"Canvas"}}'
 ```
 
-## MCP ブリッジ
+## AI 連携
 
-LLM MCP クライアントから利用するには、これらの REST エンドポイントを呼び出す Node.js 製 MCP ブリッジを別途実行してください。Unity パッケージ自体は MCP に依存しません。
+UnionAir は専用の MCP サーバーを提供しておらず、現時点で実装する予定もありません。AI クライアントは `GET /api/help` で利用可能な操作を取得し、REST エンドポイントを直接呼び出せます。別の連携インターフェースが必要な場合は、help API と REST エンドポイントを利用する薄いラッパー、またはスキルなどのクライアント側機能を使用してください。AI 固有の連携機能は Unity パッケージの外部に置く方針です。
 
 ## ドキュメント
 
