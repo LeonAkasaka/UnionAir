@@ -351,23 +351,26 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Profiling writes artifacts and metadata of its own, on the same disk, through a store
         /// that throws. Every caller is on a path that still has to release the test-run activity,
         /// so an exception escaping here would leave that activity open with nothing able to close
-        /// it - the failure this service is ordered to prevent. Losing the profiling session is the
-        /// smaller loss, and it is reported rather than swallowed silently.
+        /// it - the failure this service is ordered to prevent.
+        /// <para>
+        /// Catching is not enough on its own, which is why the profiling session is released by
+        /// <c>ProfilingService.TryFinishAttached</c> rather than here: a session left active would
+        /// refuse every later profiling request and be restored after the next domain reload for a
+        /// test that has already finished. Only the artifacts it was still writing are lost, and
+        /// that is reported rather than swallowed.
+        /// </para>
         /// </remarks>
         private static void FinishProfiling(TestRunRecord record, string abortReason = null)
         {
             if (record == null || string.IsNullOrEmpty(record.profilingSessionId))
                 return;
 
-            try
-            {
-                ProfilingService.FinishAttached(record.id, abortReason);
-            }
-            catch (Exception ex)
+            string error;
+            if (!ProfilingService.TryFinishAttached(record.id, abortReason, out error))
             {
                 Debug.LogWarning(
-                    "[UnionAir] Could not finalize the profiling session attached to test run " +
-                    record.id + ": " + ex.Message);
+                    "[UnionAir] The profiling session attached to test run " + record.id +
+                    " could not be finalized and was released: " + error);
             }
         }
 

@@ -207,6 +207,34 @@ namespace LeonAkasaka.UnionAir.Editor
             else CompleteActive();
         }
 
+        /// <summary>
+        /// Finalizes the session attached to a test run, reporting failure instead of throwing.
+        /// </summary>
+        /// <param name="testRunId">Run the session is attached to.</param>
+        /// <param name="abortReason">Reason to record, or <c>null</c> to complete the session normally.</param>
+        /// <param name="error">What could not be finalized, or <c>null</c> when it was.</param>
+        /// <returns><c>false</c> when the session had to be let go rather than finalized.</returns>
+        /// <remarks>
+        /// For callers that must go on to release something of their own. A test run's activity is
+        /// released by the same statements that finish its record, and profiling failing on the
+        /// disk those statements are about to use must not take them down with it. The session is
+        /// released either way; only the artifacts it was still writing are at risk.
+        /// </remarks>
+        internal static bool TryFinishAttached(string testRunId, string abortReason, out string error)
+        {
+            error = null;
+            try
+            {
+                FinishAttached(testRunId, abortReason);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
         internal static void DeleteArmed(string id)
         {
             if (_active == null || _active.id != id || _active.state != "armed") return;
@@ -394,28 +422,76 @@ namespace LeonAkasaka.UnionAir.Editor
         private static void CompleteActive()
         {
             if (_active == null || !_active.IsActive) return;
-            AccumulateSegmentTime();
-            CloseWriters(); StopRawCapture();
-            FinalizeStatistics(_active);
-            _active.state = "completed"; _active.finishedAt = UtcNow(); FinalizeArtifacts(_active); SaveCompleted(_active);
-            var id = _active.id; _active = null; TryDelete(ActivePath);
-            ProfilingArtifactStore.Trim(ProfilingArtifactStore.ProfilingRoot, 10, id);
+            try
+            {
+                AccumulateSegmentTime();
+                CloseWriters(); StopRawCapture();
+                FinalizeStatistics(_active);
+                _active.state = "completed"; _active.finishedAt = UtcNow(); FinalizeArtifacts(_active); SaveCompleted(_active);
+                var id = _active.id; _active = null; TryDelete(ActivePath);
+                ProfilingArtifactStore.Trim(ProfilingArtifactStore.ProfilingRoot, 10, id);
+            }
+            catch (Exception ex) { AbandonActive("Profiling could not be completed: " + ex.Message); throw; }
         }
 
         private static void AbortActive(string reason)
         {
             if (_active == null) return;
-            AccumulateSegmentTime();
-            CloseWriters(); StopRawCapture(); FinalizeStatistics(_active); _active.state = "aborted"; _active.error = reason; _active.finishedAt = UtcNow();
-            FinalizeArtifacts(_active); SaveCompleted(_active); _active = null; TryDelete(ActivePath);
+            try
+            {
+                AccumulateSegmentTime();
+                CloseWriters(); StopRawCapture(); FinalizeStatistics(_active); _active.state = "aborted"; _active.error = reason; _active.finishedAt = UtcNow();
+                FinalizeArtifacts(_active); SaveCompleted(_active); _active = null; TryDelete(ActivePath);
+            }
+            catch (Exception ex) { AbandonActive("Profiling could not be aborted: " + ex.Message); throw; }
         }
 
         private static void FailActive(string reason)
         {
             if (_active == null) return;
-            AccumulateSegmentTime();
-            CloseWriters(); StopRawCapture(); FinalizeStatistics(_active); _active.state = "failed"; _active.error = reason; _active.finishedAt = UtcNow();
-            FinalizeArtifacts(_active); SaveCompleted(_active); _active = null; TryDelete(ActivePath);
+            try
+            {
+                AccumulateSegmentTime();
+                CloseWriters(); StopRawCapture(); FinalizeStatistics(_active); _active.state = "failed"; _active.error = reason; _active.finishedAt = UtcNow();
+                FinalizeArtifacts(_active); SaveCompleted(_active); _active = null; TryDelete(ActivePath);
+            }
+            catch (Exception ex) { AbandonActive("Profiling could not be failed cleanly: " + ex.Message); throw; }
+        }
+
+        /// <summary>
+        /// Releases the active session when finalizing it threw partway through.
+        /// </summary>
+        /// <param name="reason">What went wrong, recorded on the session that is being let go.</param>
+        /// <remarks>
+        /// <para>
+        /// Every step is independent and best-effort, because the premise is that the ordinary path
+        /// already failed. What must not survive is the pair <c>_active</c> and <c>active.json</c>.
+        /// A session left active in memory makes <see cref="TryCreateArmed"/> refuse every later
+        /// session for the rest of the Editor session; one left on disk is restored by
+        /// <see cref="Initialize"/> after the next domain reload, as a session for work that has
+        /// already finished.
+        /// </para>
+        /// <para>
+        /// The recorders and the raw capture are closed first because both read <c>_active</c>, and
+        /// the Profiler settings <c>StopRawCapture</c> restores are global to the Editor.
+        /// </para>
+        /// </remarks>
+        private static void AbandonActive(string reason)
+        {
+            var record = _active;
+            try { CloseWriters(); } catch { }
+            try { StopRawCapture(); } catch { }
+            if (record != null)
+            {
+                record.state = "failed";
+                record.error = reason;
+                record.finishedAt = UtcNow();
+                try { FinalizeStatistics(record); } catch { }
+                try { SaveCompleted(record); } catch { }
+            }
+            _active = null;
+            _liveStatistics = null;
+            TryDelete(ActivePath);
         }
 
         private static void StartRawCapture()
@@ -535,6 +611,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            // FailActive releases the session itself even when it throws, so this only has to report.
             try
             {
                 FailActive(reason);
@@ -542,20 +619,6 @@ namespace LeonAkasaka.UnionAir.Editor
             catch (Exception cleanupException)
             {
                 Debug.LogError("[UnionAir] Profiling restore cleanup also failed: " + cleanupException.Message);
-                var record = _active;
-                try { CloseWriters(); } catch { }
-                try { StopRawCapture(); } catch { }
-                if (record != null)
-                {
-                    record.state = "failed";
-                    record.error = reason;
-                    record.finishedAt = UtcNow();
-                    try { FinalizeStatistics(record); } catch { }
-                    try { SaveCompleted(record); } catch { }
-                }
-                _active = null;
-                _liveStatistics = null;
-                TryDelete(ActivePath);
             }
         }
 
