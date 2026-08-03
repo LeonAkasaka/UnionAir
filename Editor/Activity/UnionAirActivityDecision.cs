@@ -103,6 +103,47 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
+        /// Whether a declared activity is debris, for an owner that is not the only possible one.
+        /// </summary>
+        /// <param name="declared">Whether the activity flag is set.</param>
+        /// <param name="declaredSource">Source the flag names.</param>
+        /// <param name="ownerSource">Source whose records the caller restored.</param>
+        /// <param name="declaredId">Record id the flag names; may be empty.</param>
+        /// <param name="recordId">Id of the record the owning service restored, or <c>null</c> when it restored none.</param>
+        /// <param name="recordIsActive">Whether that record is still in a non-terminal state.</param>
+        /// <remarks>
+        /// <para>
+        /// A flag owned by someone else says nothing about the caller's records, so it cannot be
+        /// judged here. The test-run activity is the case that needs this: a run started from the
+        /// Test Runner window is adopted with no record and an empty id, which is exactly the shape
+        /// <see cref="IsDebris"/> reports as debris. Releasing it would end the activity for a run
+        /// that is still going, and a PlayMode run reloads the domain, so the owning service
+        /// re-initializes in the middle of one.
+        /// </para>
+        /// <para>
+        /// Adopted activities are reconciled by whatever can observe the underlying work instead -
+        /// for test runs, the Test Framework poll in <c>TestRunnerService.Update</c>, which can see
+        /// whether the run is actually still active rather than inferring it from a missing record.
+        /// </para>
+        /// </remarks>
+        internal static bool IsDebrisForOwner(
+            bool declared,
+            string declaredSource,
+            string ownerSource,
+            string declaredId,
+            string recordId,
+            bool recordIsActive)
+        {
+            if (!declared)
+                return false;
+
+            if (!string.Equals(declaredSource ?? "", ownerSource ?? "", StringComparison.Ordinal))
+                return false;
+
+            return IsDebris(declared, declaredId, recordId, recordIsActive);
+        }
+
+        /// <summary>
         /// Returns the activity that should be reported as what the Editor is busy with.
         /// </summary>
         internal static UnionAirActivityRecord SelectCurrent(IReadOnlyList<UnionAirActivityRecord> active)

@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.InputSystem")]
 [assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.TestRunner")]
 [assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.Tests")]
+[assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.Tests.TestRunner")]
 
 namespace LeonAkasaka.UnionAir.Editor
 {

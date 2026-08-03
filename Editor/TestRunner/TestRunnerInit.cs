@@ -1,5 +1,8 @@
+using System.Runtime.CompilerServices;
 using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
+
+[assembly: InternalsVisibleTo("LeonAkasaka.UnionAir.Editor.Tests.TestRunner")]
 
 [assembly: LeonAkasaka.UnionAir.Editor.UnionAirBuiltinAssembly]
 [assembly: LeonAkasaka.UnionAir.Editor.UnionAirCategory(

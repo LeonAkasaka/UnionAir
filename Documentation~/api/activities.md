@@ -108,13 +108,15 @@ Everything else — `compile`, `assetUpdate`, `build`, `buildTargetSwitch` — i
 Declared activities keep their identity in Unity's `SessionState`, which survives a domain reload but is cleared when the Editor process restarts. That difference is what makes crash recovery work, in both directions:
 
 - **A record with no activity** belongs to a process that died. Its owning service finalizes it on the next initialization.
-- **An activity with no record** is debris. Nothing would ever close it — `SessionState` outlives every reload — so the Editor would report itself busy, and reject every endpoint that declared a conflict, for the rest of the session. It is released on the next initialization with a Console warning rather than trusted.
+- **An activity with no record** is debris. Nothing would ever close it — `SessionState` outlives every reload — so the Editor would report itself busy, and reject every endpoint that declared a conflict, for the rest of the session. It is released on the next initialization with a Console warning rather than trusted. Only an activity UnionAir owns is judged this way: an adopted test run has no record by design, and is reconciled instead by watching whether the Unity Test Framework is still running one.
 
 Both directions are checked because either one alone leaves a way to get stuck. This is the pattern `InputReplayService` already used, now shared.
 
 ### An operation UnionAir starts does not begin until its record is durable
 
-A request that starts a tracked operation — `POST /api/compile`, `POST /api/builds`, `POST /api/build/target` — persists its record **before** opening the activity, and answers `500` without starting anything when that write fails. The write is retried once immediately, because a virus scanner or the search indexer holding the destination for a moment is the common transient cause and clears by itself; a full disk or an unwritable directory does not, and is reported rather than waited on.
+A request that starts a tracked operation — `POST /api/compile`, `POST /api/builds`, `POST /api/build/target`, `POST /api/test-runs` — persists its record **before** opening the activity, and answers `500` without starting anything when that write fails. The write is retried once immediately, because a virus scanner or the search indexer holding the destination for a moment is the common transient cause and clears by itself; a full disk or an unwritable directory does not, and is reported rather than waited on.
+
+A test run is the case where honoring that meant giving up the Unity Test Framework's run identifier: the framework returns it only once the run has been dispatched, so a record keyed by it could never be written first. UnionAir issues its own id and keeps the framework's privately, as the handle cancellation needs.
 
 Activity UnionAir merely **adopts** cannot be refused — a compilation an IDE triggered is already running — so it is recorded best-effort. Its terminal path releases the activity regardless of whether any write succeeded.
 

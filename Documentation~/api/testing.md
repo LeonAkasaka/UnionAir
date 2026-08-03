@@ -85,7 +85,9 @@ Starts one asynchronous EditMode or PlayMode test run and returns `202 Accepted`
 }
 ```
 
-The endpoint returns `409` while the Editor is playing or changing Play mode, compiling, updating, or already running tests. It returns `503` if the installed Unity Test Framework version does not provide the active-run inspection required to prevent concurrent execution; UnionAir logs this compatibility failure once per domain load. UnionAir adds no timeout; test hangs and cancellation cleanup follow Unity Test Framework behavior.
+`id` is issued by UnionAir. It is the id every endpoint on this page takes, and it is not the Unity Test Framework's own run identifier — the framework returns that only once the run has been dispatched, which is too late to record the run before starting it. UnionAir keeps the framework's identifier privately, for cancellation.
+
+The endpoint returns `409` while the Editor is playing or changing Play mode, compiling, updating, or already running tests. It returns `503` if the installed Unity Test Framework version does not provide the active-run inspection required to prevent concurrent execution; UnionAir logs this compatibility failure once per domain load. It returns `500` when the run record could not be written, in which case nothing was handed to the Unity Test Framework; see [Editor Activities](activities.md). UnionAir adds no timeout; test hangs and cancellation cleanup follow Unity Test Framework behavior.
 
 ---
 
@@ -134,7 +136,7 @@ Per-test progress is served directly from memory and persisted at most twice per
 
 ## DELETE /api/test-runs/{id}
 
-Requests cancellation of the active UnionAir run and returns `202` with state `canceling`. Unknown or external run IDs return `404`; completed, already-canceling, or otherwise non-cancelable runs return `409`. Cancellation is asynchronous and status should continue to be polled.
+Requests cancellation of the active UnionAir run and returns `202` with state `canceling`. Unknown or external run IDs return `404`; completed, already-canceling, or otherwise non-cancelable runs return `409`. A run whose Unity Test Framework handle is unavailable also returns `409`, which happens only when the framework accepted the run without naming it. Cancellation is asynchronous and status should continue to be polled.
 
 ---
 
