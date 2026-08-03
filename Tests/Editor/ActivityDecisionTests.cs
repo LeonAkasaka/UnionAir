@@ -153,6 +153,55 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void IsDebrisForOwner_IsFalseForAFlagAnotherSourceOwns()
+        {
+            // The shape of an adopted test run: declared, no id, and no record behind it, which is
+            // exactly what IsDebris reports as debris. Releasing it would end the activity for a
+            // run that is still going, and a PlayMode run reloads the domain, so the service
+            // re-initializes in the middle of one.
+            Assert.IsTrue(UnionAirActivityDecision.IsDebris(true, "", null, false));
+            Assert.IsFalse(
+                UnionAirActivityDecision.IsDebrisForOwner(true, "external", "unionAir", "", null, false));
+        }
+
+        [Test]
+        public void IsDebrisForOwner_IsFalseWhenNothingIsDeclared()
+        {
+            Assert.IsFalse(
+                UnionAirActivityDecision.IsDebrisForOwner(false, "unionAir", "unionAir", "", null, false));
+        }
+
+        [Test]
+        public void IsDebrisForOwner_IsFalseForTheLiveRecordThatOwnsIt()
+        {
+            Assert.IsFalse(
+                UnionAirActivityDecision.IsDebrisForOwner(true, "unionAir", "unionAir", "t-1", "t-1", true));
+        }
+
+        [Test]
+        public void IsDebrisForOwner_MatchesIsDebrisWhenTheSourcesAgree()
+        {
+            // No record restored, a terminal record, and a record that is not the one the flag
+            // names: the three ways an owned flag outlives what it stood for.
+            Assert.IsTrue(
+                UnionAirActivityDecision.IsDebrisForOwner(true, "unionAir", "unionAir", "t-1", null, false));
+            Assert.IsTrue(
+                UnionAirActivityDecision.IsDebrisForOwner(true, "unionAir", "unionAir", "t-1", "t-1", false));
+            Assert.IsTrue(
+                UnionAirActivityDecision.IsDebrisForOwner(true, "unionAir", "unionAir", "t-2", "t-1", true));
+        }
+
+        [Test]
+        public void IsDebrisForOwner_TreatsAMissingSourceAsUnowned()
+        {
+            // A flag that names no source is not the caller's to release.
+            Assert.IsFalse(
+                UnionAirActivityDecision.IsDebrisForOwner(true, null, "unionAir", "t-1", null, false));
+            Assert.IsFalse(
+                UnionAirActivityDecision.IsDebrisForOwner(true, "", "unionAir", "t-1", null, false));
+        }
+
+        [Test]
         public void RejectionJson_DerivesAMessageFromTheActivity()
         {
             var json = UnionAirActivityDecision.RejectionJson(

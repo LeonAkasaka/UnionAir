@@ -88,7 +88,9 @@ EditMode または PlayMode の非同期 run を1件開始し、`202 Accepted` �
 }
 ```
 
-Editor が Play 中または Play mode 遷移中、compile/update 中、別のテスト実行中は `409` です。導入済みの Unity Test Framework versionから同時実行防止に必要なactive run状態を取得できない場合は`503`を返し、UnionAirはこの互換性エラーをdomain loadごとに1回記録します。UnionAir 独自 timeout はなく、ハングや cancel cleanup は Unity Test Framework の動作に従います。
+`id` は UnionAir が発行します。このページのすべての endpoint が受け取るのはこの id であり、Unity Test Framework 自身の run 識別子ではありません。framework が自身の識別子を返すのは run を投入した後であり、run を開始する前に記録するには遅すぎるためです。framework の識別子は cancel 用として UnionAir が内部で保持します。
+
+Editor が Play 中または Play mode 遷移中、compile/update 中、別のテスト実行中は `409` です。導入済みの Unity Test Framework versionから同時実行防止に必要なactive run状態を取得できない場合は`503`を返し、UnionAirはこの互換性エラーをdomain loadごとに1回記録します。run record を書き込めなかった場合は `500` を返し、このとき Unity Test Framework には何も渡されていません([Editor アクティビティ](activities.ja.md) を参照)。UnionAir 独自 timeout はなく、ハングや cancel cleanup は Unity Test Framework の動作に従います。
 
 ---
 
@@ -137,7 +139,7 @@ current metadata は domain reload を越えて保持されます。Editor 再�
 
 ## DELETE /api/test-runs/{id}
 
-active UnionAir run の cancel を要求し、`canceling` state とともに `202` を返します。不明または外部 run ID は `404`、完了済み、canceling 済み、その他 cancel 不能な run は `409` です。cancel は非同期なので status の polling を継続してください。
+active UnionAir run の cancel を要求し、`canceling` state とともに `202` を返します。不明または外部 run ID は `404`、完了済み、canceling 済み、その他 cancel 不能な run は `409` です。Unity Test Framework の handle が得られない run も `409` になりますが、これは framework が run を受理しながら識別子を返さなかった場合に限られます。cancel は非同期なので status の polling を継続してください。
 
 ---
 
