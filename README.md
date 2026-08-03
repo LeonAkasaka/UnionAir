@@ -5,7 +5,7 @@
 > **⚠️ Experimental**
 > This package is an experimental, pre-beta prototype. There are **no guarantees** of backward compatibility, versioning stability, or behavior. Any API may change or be removed without notice.
 
-UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making it easy to integrate with LLM MCP bridges, development bots, CI tooling, or any HTTP client.
+UnionAir exposes Unity Editor state as a simple **REST API** over HTTP, making it easy to integrate with AI assistants, development bots, CI tooling, or any HTTP client.
 
 ## Design Philosophy
 
@@ -156,9 +156,9 @@ curl -X POST http://localhost:8765/api/gameobjects \
   -d '{"name":"MyObject","parent":{"type":"hierarchyPath","value":"Canvas"}}'
 ```
 
-## MCP Bridge
+## AI Integration
 
-To use with an LLM MCP client, run a separate Node.js MCP bridge that calls these REST endpoints. The Unity package itself has no MCP dependency.
+UnionAir does not provide a dedicated MCP server, and none is currently planned. AI clients can discover the available operations through `GET /api/help` and call the REST endpoints directly. If a client needs a different integration surface, use a thin wrapper around the help API and REST endpoints, or client-side features such as skills. AI-specific integration remains outside the Unity package.
 
 ## Documentation
 
