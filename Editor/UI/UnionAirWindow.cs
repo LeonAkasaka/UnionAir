@@ -106,6 +106,11 @@ namespace LeonAkasaka.UnionAir.Editor
                 DrawCopyableUrl("Help URL", baseUrl + "help");
             }
 
+            if (!string.IsNullOrEmpty(UnionAirEndpointDiscovery.LastWarning))
+                EditorGUILayout.HelpBox(
+                    UnionAirEndpointDiscovery.LastWarning,
+                    MessageType.Warning);
+
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Server", EditorStyles.boldLabel);
             using (new EditorGUI.DisabledScope(isRunning))

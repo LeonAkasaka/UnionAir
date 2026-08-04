@@ -148,6 +148,7 @@ namespace LeonAkasaka.UnionAir.Editor
             LogLifecycle(
                 $"start complete reason={reason} port={port} thread={listenerThread.ManagedThreadId}");
             Debug.Log($"[UnionAir] REST API server started on http://localhost:{port}/");
+            UnionAirEndpointDiscovery.Publish(port);
             return true;
         }
 
@@ -331,6 +332,7 @@ namespace LeonAkasaka.UnionAir.Editor
             LogLifecycle(
                 $"stop complete reason={reason} port={Port} closedPending={closedPending} " +
                 $"thread={DescribeThread(listenerThread)}");
+            UnionAirEndpointDiscovery.RemoveOwned(Port);
             Debug.Log("[UnionAir] REST API server stopped.");
         }
 

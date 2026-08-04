@@ -131,6 +131,18 @@ Read this before enabling any write category:
 - The **Build** category carries the `executableOutput` and `assetUpdate` risks. Enabling it lets any local process change build settings that are written to `ProjectSettings/` and shared with everyone who works on the project, and start a player build, which runs the project's build scripts and writes a runnable program to `Builds/UnionAir/` in the project directory. A build also occupies the Unity main thread for a minute or more, during which UnionAir answers nothing at all.
 - Category enablement is **not per-project**. It lives in `EditorPrefs`, which Unity scopes to the user account and Editor version, so a category enabled for one project stays enabled for every project opened with the same Editor.
 
+## API Discovery
+
+After the listener starts, UnionAir atomically publishes its active API Base URL to
+`<project>/.unionair/endpoint.txt` as one UTF-8 line with a trailing slash. Clients should read and
+trim that file, validate `{baseUrl}health`, and then call `{baseUrl}help?detail=full`. The file is
+advisory: a hard Editor crash can leave it behind, so a failed health check means the client must
+treat it as stale. Clean stops and observed listener failures remove the current instance's file.
+
+UnionAir maintains `.unionair/.gitignore` so `endpoint.txt` and atomic-write temporary files do not
+create Git changes. Project configuration may share the same directory; `settings.json` is not
+ignored.
+
 ## Quick Example
 
 ```bash
