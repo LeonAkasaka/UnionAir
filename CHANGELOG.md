@@ -72,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Automatic port startup now contains probe-allocation exceptions, counts only distinct ports against its eight-candidate budget, skips port-specific listener rejections, and gives a retained port one delayed retry before reassignment. Fatal listener failures still stop immediately and produce one concise error instead of escaping through the Editor update callback.
 - A player build no longer leaves loaded scenes reported as externally changed. `BuildPipeline.BuildPlayer` raises `sceneClosed` for the loaded scene without a matching `sceneOpened`, which dropped the disk baseline and made every later refresh or compile request return `409` with `reason: "untracked"` until the scene was saved or reopened by hand. Baselines are now captured before the build and restored afterwards, but only for scenes whose file is byte-identical — a scene changed on disk during the build still trips the guard.
 - Classified Unity 6 Bee Player compilation outputs under `Library/Bee/PlayerScriptAssemblies` as `player`, while preserving conservative handling of mixed and unrelated output directories.
 

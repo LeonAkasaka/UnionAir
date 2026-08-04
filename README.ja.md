@@ -99,9 +99,10 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 
 ## ポート選択
 
-デフォルトは **Automatic** です。UnionAir は空いているloopback portを解決し、同じEditor process
-内のdomain reloadでは通常そのportを再利用して、実際のURLを`.unionair/endpoint.txt`へ公開します。
-scriptやCIで安定したportが必要な場合はEditorWindowで **Fixed** を選び、`1..65535`を指定します。
+デフォルトは **Automatic** です。UnionAirは空いているloopback portを解決し、同じEditor process
+内のdomain reloadをまたいでそのportを保持して、実際のURLを`.unionair/endpoint.txt`へ公開します。
+一時的なaddress-in-useが発生した場合は、保持したportを遅延後にもう一度試してからfresh portを
+選択します。scriptやCIで安定したportが必要な場合はEditorWindowで **Fixed** を選び、`1..65535`を指定します。
 
 ## エンドポイント
 

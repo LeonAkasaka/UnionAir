@@ -38,6 +38,8 @@ namespace LeonAkasaka.UnionAir.Editor
         private readonly string _instanceId = Guid.NewGuid().ToString("N").Substring(0, 8);
         private ListenerState _state;
         private int _lifecycleGeneration;
+        private UnionAirPortStartResult _lastStartResult = UnionAirPortStartResult.Failed;
+        private Exception _lastStartException;
 
         /// <summary>Raised on the main thread after an unexpected listener thread exit is cleaned up.</summary>
         internal event Action<string> UnexpectedlyStopped;
@@ -77,7 +79,8 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>Raised on the main thread for each incoming request path.</summary>
         public event Action<string> OnRequest;
 
-        internal bool LastStartFailureWasAddressInUse { get; private set; }
+        internal bool LastStartFailureWasAddressInUse =>
+            _lastStartResult == UnionAirPortStartResult.AddressInUse;
 
         /// <summary>
         /// Starts the HTTP listener on <c>localhost</c>.
@@ -91,11 +94,15 @@ namespace LeonAkasaka.UnionAir.Editor
         internal void SetLifecycleGeneration(int generation)
             => _lifecycleGeneration = generation;
 
-        internal bool TryStart(int port, string reason, bool suppressAddressInUseError)
+        internal bool TryStart(
+            int port,
+            string reason,
+            bool suppressAddressInUseError,
+            bool deferAutomaticFallback = false)
         {
             if (!UnionAirPortAllocator.IsValidConfiguredPort(port))
             {
-                LastStartFailureWasAddressInUse = false;
+                _lastStartResult = UnionAirPortStartResult.Failed;
                 Debug.LogError(
                     $"[UnionAir] Invalid configured port {port}. Use 0 for Automatic or 1..65535 for Fixed.");
                 return false;
@@ -106,18 +113,23 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var retained = UnionAirSession.LoadAutomaticPort();
             int assigned;
+            Exception allocationError;
             var result = UnionAirPortAllocator.TryStartAutomatic(
                 retained,
                 candidate =>
                 {
-                    if (TryStartConcrete(candidate, reason + "-automatic", true))
+                    if (TryStartConcrete(
+                            candidate,
+                            reason + "-automatic",
+                            true,
+                            true))
                         return UnionAirPortStartResult.Started;
-                    return LastStartFailureWasAddressInUse
-                        ? UnionAirPortStartResult.AddressInUse
-                        : UnionAirPortStartResult.Failed;
+                    return _lastStartResult;
                 },
                 UnionAirPortAllocator.AllocateLoopbackPort,
-                out assigned);
+                out assigned,
+                out allocationError,
+                deferAutomaticFallback);
 
             if (result == UnionAirPortStartResult.Started)
             {
@@ -127,7 +139,33 @@ namespace LeonAkasaka.UnionAir.Editor
                 return true;
             }
 
-            LastStartFailureWasAddressInUse = result == UnionAirPortStartResult.AddressInUse;
+            _lastStartResult = result;
+            if (allocationError != null)
+            {
+                _lastStartException = allocationError;
+                var message =
+                    $"[UnionAir] Failed to allocate an Automatic loopback port: {allocationError.Message}";
+                Debug.LogError(message);
+                UnionAirLifecycleDiagnostics.Record(
+                    $"{LifecyclePrefix} automatic port allocation failed " +
+                    DescribeException(allocationError));
+                UnionAirLifecycleDiagnostics.DumpFailure(
+                    "automatic port allocation failed");
+                return false;
+            }
+
+            if (result == UnionAirPortStartResult.CandidateUnavailable)
+            {
+                var detail = _lastStartException == null
+                    ? "the listener rejected every candidate"
+                    : _lastStartException.Message;
+                Debug.LogError(
+                    $"[UnionAir] Automatic server startup could not use any fresh port candidate: {detail}");
+                UnionAirLifecycleDiagnostics.DumpFailure(
+                    "automatic port candidates were unavailable");
+                return false;
+            }
+
             if (LastStartFailureWasAddressInUse && !suppressAddressInUseError)
                 Debug.LogError(
                     $"[UnionAir] Automatic server startup exhausted " +
@@ -135,12 +173,17 @@ namespace LeonAkasaka.UnionAir.Editor
             return false;
         }
 
-        private bool TryStartConcrete(int port, string reason, bool suppressAddressInUseError)
+        private bool TryStartConcrete(
+            int port,
+            string reason,
+            bool suppressAddressInUseError,
+            bool suppressCandidateUnavailableError = false)
         {
             if (_state != null)
                 StopInternal("replacement-start");
 
-            LastStartFailureWasAddressInUse = false;
+            _lastStartResult = UnionAirPortStartResult.Failed;
+            _lastStartException = null;
             var listener = new HttpListener();
             var pending = new ConcurrentQueue<HttpListenerContext>();
             var state = new ListenerState(listener, pending, new RestRouter());
@@ -158,7 +201,8 @@ namespace LeonAkasaka.UnionAir.Editor
                     listener,
                     port,
                     ex,
-                    suppressAddressInUseError);
+                    suppressAddressInUseError,
+                    suppressCandidateUnavailableError);
                 return false;
             }
 
@@ -175,6 +219,8 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             catch (Exception ex)
             {
+                _lastStartResult = UnionAirPortStartResult.Failed;
+                _lastStartException = ex;
                 var message =
                     $"{LifecyclePrefix} listener thread failed to start port={port} {DescribeException(ex)}";
                 UnionAirLifecycleDiagnostics.Record(message);
@@ -187,6 +233,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             _state = state;
             Port = port;
+            _lastStartResult = UnionAirPortStartResult.Started;
             EditorApplication.update -= ProcessPending;
             EditorApplication.update += ProcessPending;
             LogLifecycle(
@@ -384,14 +431,21 @@ namespace LeonAkasaka.UnionAir.Editor
             HttpListener listener,
             int port,
             Exception startException,
-            bool suppressAddressInUseError)
+            bool suppressAddressInUseError,
+            bool suppressCandidateUnavailableError)
         {
-            LastStartFailureWasAddressInUse = IsAddressAlreadyInUse(startException);
+            _lastStartResult = ClassifyListenerStartException(startException);
+            _lastStartException = startException;
             var diagnosticMessage =
-                $"{LifecyclePrefix} start failed addressInUse={LastStartFailureWasAddressInUse} " +
+                $"{LifecyclePrefix} start failed result={_lastStartResult} " +
                 $"{DescribeException(startException)}";
             UnionAirLifecycleDiagnostics.Record(diagnosticMessage);
-            if (!LastStartFailureWasAddressInUse || !suppressAddressInUseError)
+            var suppress =
+                (_lastStartResult == UnionAirPortStartResult.AddressInUse &&
+                 suppressAddressInUseError) ||
+                (_lastStartResult == UnionAirPortStartResult.CandidateUnavailable &&
+                 suppressCandidateUnavailableError);
+            if (!suppress)
             {
                 Debug.LogError(
                     $"[UnionAir] Failed to start server on port {port}: {startException.Message}");
@@ -454,22 +508,28 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
-        private static bool IsAddressAlreadyInUse(Exception exception)
+        internal static UnionAirPortStartResult ClassifyListenerStartException(
+            Exception exception)
         {
             for (var current = exception; current != null; current = current.InnerException)
             {
                 if (current is SocketException socketException &&
                     socketException.SocketErrorCode == SocketError.AddressAlreadyInUse)
-                    return true;
+                    return UnionAirPortStartResult.AddressInUse;
 
-                if (current is HttpListenerException listenerException &&
-                    (listenerException.NativeErrorCode == 10048 ||
-                     listenerException.NativeErrorCode == 183 ||
-                     listenerException.NativeErrorCode == 32))
-                    return true;
+                if (current is HttpListenerException listenerException)
+                {
+                    if (listenerException.NativeErrorCode == 10048 ||
+                        listenerException.NativeErrorCode == 183 ||
+                        listenerException.NativeErrorCode == 32)
+                        return UnionAirPortStartResult.AddressInUse;
+
+                    if (listenerException.NativeErrorCode == 5)
+                        return UnionAirPortStartResult.CandidateUnavailable;
+                }
             }
 
-            return false;
+            return UnionAirPortStartResult.Failed;
         }
 
         private static string DescribeException(Exception exception)

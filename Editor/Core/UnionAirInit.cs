@@ -204,7 +204,8 @@ namespace LeonAkasaka.UnionAir.Editor
             if (Server.TryStart(
                     port,
                     $"{_autoStartReason}-attempt-{attempt}",
-                    true))
+                    true,
+                    deferAutomaticFallback: port == 0 && attempt == 1))
             {
                 CancelAutoStart($"started-attempt-{attempt}");
                 return;

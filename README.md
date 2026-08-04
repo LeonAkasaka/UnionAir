@@ -97,10 +97,11 @@ Pin the tag. `main` is kept releasable but runs ahead of it, and a UPM Git URL t
 
 ## Port Selection
 
-The default is **Automatic**. UnionAir resolves a free loopback port, normally reuses it across
-domain reloads in the same Editor process, and publishes the concrete URL through
-`.unionair/endpoint.txt`. Select **Fixed** in the EditorWindow when a script or CI environment needs
-a stable port in the range `1..65535`.
+The default is **Automatic**. UnionAir resolves a free loopback port, retains it across domain reloads
+in the same Editor process, and publishes the concrete URL through `.unionair/endpoint.txt`. After a
+transient address-in-use result, the retained port gets one delayed retry before UnionAir selects a
+fresh port. Select **Fixed** in the EditorWindow when a script or CI environment needs a stable port
+in the range `1..65535`.
 
 ## Endpoints
 
