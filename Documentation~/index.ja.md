@@ -48,16 +48,16 @@ Window > UnionAir > REST Bridge
 上記メニューから EditorWindow を開き、サーバの状態を確認してください。
 
 起動成功後は、実際の API Base URL も `<project>/.unionair/endpoint.txt` に公開されます。ファイルを
-読み込んで空白を除去し、短い timeout で `{baseUrl}health` を呼び出してから
-`{baseUrl}help?detail=full` を呼び出してください。ファイルがない場合や health check に失敗した
-場合は、検証済み server がないものとして扱います。process が強制終了すると古い発見情報が残る
-可能性があります。
+読み込んで空白を除去し、短い timeout で `{baseUrl}health` を呼び出して、その`projectPath`が
+`<project>`と一致することを確認してから`{baseUrl}help?detail=full`を呼び出してください。ファイルが
+ない場合、health checkに失敗した場合、projectが一致しない場合は、検証済みserverがないものとして
+扱います。processが強制終了すると、別projectのEditorを指す古い発見情報が残る可能性があります。
 
 ### 3. 動作確認
 
 ```bash
 curl http://localhost:8765/api/health
-# => {"status":"ok","unityVersion":"6000.3.5f2"}
+# => {"status":"ok","unityVersion":"6000.3.5f2","projectPath":"C:\\Work\\MyProject"}
 ```
 
 ---

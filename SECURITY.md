@@ -14,7 +14,7 @@ UnionAir runs an HTTP server inside the Unity Editor. Understand this model befo
 - **Category enablement is not per-project.** It is stored in `EditorPrefs`, which Unity scopes to the user account and Editor version. Enabling a write category while one project is open leaves it enabled for every project opened with the same Editor, until it is turned off again in **Window > UnionAir > REST Bridge**.
 - Test code can hang, change scenes or assets, enter Play mode, access the file system or network, and execute any other code permitted to the Unity Editor process. The Test Runner API does not sandbox tests or impose a timeout.
 - Memory Profiler snapshots capture the Editor's managed heap. A snapshot of a project can therefore contain any string the Editor held in memory, and is served over the same unauthenticated local port.
-- `.unionair/endpoint.txt` is discovery metadata, not authentication or proof of liveness. A client must validate it through `GET /api/health`; a hard Editor crash can leave stale content behind.
+- `.unionair/endpoint.txt` is discovery metadata, not authentication or proof of liveness. A client must call `GET /api/health` and compare its `projectPath` with the directory containing the discovery file; a hard Editor crash can leave stale content that now points at another project's Editor.
 
 This package is **experimental**; the security posture may change in future releases.
 

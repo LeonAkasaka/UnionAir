@@ -40,7 +40,7 @@
       "source": "builtin",
       "enabled": true,
       "category": "read",
-      "summary": "Checks whether the server is running.",
+      "summary": "Checks whether the server is running and identifies its Unity project.",
       "risk": ["readOnly"],
       "playModePolicy": "allowed",
       "pathParams": [],
@@ -97,16 +97,23 @@
 
 ## GET /api/health
 
-サーバが稼働しているかを確認します。
+サーバが稼働しているかを確認し、そのEditor processが公開するUnity projectを識別します。
+`.unionair/endpoint.txt`からURLを発見したclientは、`projectPath`をそのファイルがあるproject
+directoryと比較する必要があります。一致しない場合、発見ファイルはstaleであり、別projectの
+Editorを指しています。
 
 ### レスポンス
 
 ```json
 {
   "status": "ok",
-  "unityVersion": "6000.3.5f2"
+  "unityVersion": "6000.3.5f2",
+  "projectPath": "C:\\Work\\MyProject"
 }
 ```
+
+`projectPath`はprojectの`Assets` directoryの絶対parent pathです。host platformのpath semantics
+(Windowsでは大文字小文字を区別しない)で比較してください。
 
 ---
 

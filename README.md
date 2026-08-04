@@ -135,9 +135,10 @@ Read this before enabling any write category:
 
 After the listener starts, UnionAir atomically publishes its active API Base URL to
 `<project>/.unionair/endpoint.txt` as one UTF-8 line with a trailing slash. Clients should read and
-trim that file, validate `{baseUrl}health`, and then call `{baseUrl}help?detail=full`. The file is
-advisory: a hard Editor crash can leave it behind, so a failed health check means the client must
-treat it as stale. Clean stops and observed listener failures remove the current instance's file.
+trim that file, call `{baseUrl}health`, verify that its `projectPath` matches the project directory
+containing the file, and then call `{baseUrl}help?detail=full`. The file is advisory: a hard Editor
+crash can leave it behind, so a failed health check or project mismatch means the client must treat
+it as stale. Clean stops and observed listener failures remove the current instance's file.
 
 UnionAir maintains `.unionair/.gitignore` so `endpoint.txt` and atomic-write temporary files do not
 create Git changes. Project configuration may share the same directory; `settings.json` is not

@@ -16,7 +16,7 @@ UnionAir は Unity Editor 内で HTTP サーバを実行します。書き込み
 - **カテゴリの有効/無効はプロジェクト単位ではありません。** 設定は `EditorPrefs` に保存され、Unity はこれをユーザーアカウントと Editor バージョン単位で管理します。あるプロジェクトを開いた状態で書き込み系カテゴリを有効化すると、同じ Editor で開くすべてのプロジェクトでも有効なままになります。無効化するには **Window > UnionAir > REST Bridge** で戻してください。
 - テストコードはハング、シーンやアセットの変更、Play モードへの移行、ファイルシステムやネットワークへのアクセスなど、Unity Editor プロセスに許可された任意のコードを実行できます。Test Runner API はテストをサンドボックス化せず、timeout も設けません。
 - Memory Profiler の snapshot は Editor のマネージドヒープを取得します。そのため snapshot にはその時点で Editor がメモリ上に保持していた任意の文字列が含まれる可能性があり、認証のない同じローカルポートから配信されます。
-- `.unionair/endpoint.txt` は発見用 metadata であり、認証でも生存証明でもありません。クライアントは `GET /api/health` で検証する必要があり、Editor が強制終了すると古い内容が残る可能性があります。
+- `.unionair/endpoint.txt` は発見用 metadata であり、認証でも生存証明でもありません。clientは`GET /api/health`を呼び出し、その`projectPath`を発見ファイルがあるdirectoryと比較する必要があります。Editorが強制終了すると、別projectのEditorを指す古い内容が残る可能性があります。
 
 本パッケージは**実験的**であり、セキュリティ姿勢は将来のリリースで変更される可能性があります。
 

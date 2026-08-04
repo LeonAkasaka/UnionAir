@@ -137,10 +137,10 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 
 listener の起動後、UnionAir は実際の API Base URL を末尾スラッシュ付きの UTF-8 1行として
 `<project>/.unionair/endpoint.txt` へ原子的に公開します。クライアントはこのファイルを読み込んで
-空白を除去し、`{baseUrl}health` で検証してから `{baseUrl}help?detail=full` を呼び出してください。
-Editor が強制終了するとファイルが残る可能性があるため、このファイルは参考情報です。health check
-に失敗した場合は stale として扱います。clean stop と検出可能な listener 障害では現在の instance
-のファイルを削除します。
+空白を除去し、`{baseUrl}health`の`projectPath`がファイルを含むproject directoryと一致することを
+確認してから `{baseUrl}help?detail=full` を呼び出してください。Editor が強制終了するとファイルが
+残る可能性があるため、このファイルは参考情報です。health checkの失敗またはproject不一致はstale
+として扱います。clean stop と検出可能な listener 障害では現在の instance のファイルを削除します。
 
 UnionAir は `.unionair/.gitignore` を管理し、`endpoint.txt` と原子的書き込みの一時ファイルが Git
 差分を作らないようにします。project configuration は同じディレクトリを共有できますが、

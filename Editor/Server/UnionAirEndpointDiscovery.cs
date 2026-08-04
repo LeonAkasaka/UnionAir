@@ -24,38 +24,85 @@ namespace LeonAkasaka.UnionAir.Editor
 
         internal static void Publish(int port)
         {
-            string error;
-            if (TryPublish(UnionAirProjectPaths.ProjectRoot, port, out error))
+            try
             {
-                LastWarning = null;
-                return;
-            }
+                string error;
+                string warning;
+                if (!TryPublish(
+                        UnionAirProjectPaths.ProjectRoot,
+                        port,
+                        out error,
+                        out warning))
+                {
+                    ReportWarning(error);
+                    return;
+                }
 
-            ReportWarning(error);
+                if (!string.IsNullOrEmpty(warning))
+                    ReportWarning(warning);
+                else
+                    ClearWarning();
+            }
+            catch (Exception ex)
+            {
+                ReportWarning(
+                    $"Failed to resolve the project path for endpoint publication: {ex.Message}");
+            }
         }
 
         internal static void RemoveOwned(int port)
         {
-            bool removed;
-            string error;
-            if (!TryRemoveOwned(
-                    UnionAirProjectPaths.ProjectRoot,
-                    FormatBaseUrl(port),
-                    out removed,
-                    out error))
-                ReportWarning(error);
+            try
+            {
+                bool removed;
+                string error;
+                if (!TryRemoveOwned(
+                        UnionAirProjectPaths.ProjectRoot,
+                        FormatBaseUrl(port),
+                        out removed,
+                        out error))
+                    ReportWarning(error);
+                else
+                    ClearWarning();
+            }
+            catch (Exception ex)
+            {
+                ReportWarning(
+                    $"Failed to resolve the project path for endpoint removal: {ex.Message}");
+            }
         }
 
         internal static void ClearStaleAtEditorStart()
         {
-            string error;
-            if (!TryClearStale(UnionAirProjectPaths.ProjectRoot, out error))
-                ReportWarning(error);
+            try
+            {
+                string error;
+                if (!TryClearStale(UnionAirProjectPaths.ProjectRoot, out error))
+                    ReportWarning(error);
+                else
+                    ClearWarning();
+            }
+            catch (Exception ex)
+            {
+                ReportWarning(
+                    $"Failed to resolve the project path for stale endpoint cleanup: {ex.Message}");
+            }
         }
 
         internal static bool TryPublish(string projectRoot, int port, out string error)
         {
+            string warning;
+            return TryPublish(projectRoot, port, out error, out warning);
+        }
+
+        internal static bool TryPublish(
+            string projectRoot,
+            int port,
+            out string error,
+            out string warning)
+        {
             error = null;
+            warning = null;
             if (port < 1 || port > 65535)
             {
                 error = $"Cannot publish endpoint discovery for invalid port {port}.";
@@ -65,16 +112,34 @@ namespace LeonAkasaka.UnionAir.Editor
             try
             {
                 var directory = UnionAirProjectPaths.IntegrationDirectoryFor(projectRoot);
-                Directory.CreateDirectory(directory);
-                EnsureIgnoreFile(Path.Combine(directory, ".gitignore"));
                 WriteAtomicText(
                     Path.Combine(directory, "endpoint.txt"),
                     FormatBaseUrl(port) + "\n");
-                return true;
             }
             catch (Exception ex)
             {
                 error = $"Failed to publish .unionair/endpoint.txt: {ex.Message}";
+                return false;
+            }
+
+            string ignoreError;
+            if (!TryEnsureIgnore(projectRoot, out ignoreError))
+                warning = ignoreError;
+            return true;
+        }
+
+        internal static bool TryEnsureIgnore(string projectRoot, out string error)
+        {
+            error = null;
+            try
+            {
+                var directory = UnionAirProjectPaths.IntegrationDirectoryFor(projectRoot);
+                EnsureIgnoreFile(Path.Combine(directory, ".gitignore"));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = $"Failed to maintain .unionair/.gitignore: {ex.Message}";
                 return false;
             }
         }
@@ -131,6 +196,25 @@ namespace LeonAkasaka.UnionAir.Editor
 
         internal static void WriteAtomicText(string path, string content)
         {
+            Exception lastError = null;
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                try
+                {
+                    WriteAtomicTextOnce(path, content);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    lastError = ex;
+                }
+            }
+
+            throw lastError;
+        }
+
+        private static void WriteAtomicTextOnce(string path, string content)
+        {
             var directory = Path.GetDirectoryName(path);
             if (string.IsNullOrEmpty(directory))
                 throw new InvalidOperationException($"'{path}' has no parent directory.");
@@ -171,11 +255,26 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static void EnsureIgnoreFile(string path)
         {
-            var lines = new List<string>();
-            if (File.Exists(path))
-                lines.AddRange(File.ReadAllLines(path, Utf8WithoutBom));
+            var exists = File.Exists(path);
+            var existing = exists ? File.ReadAllText(path, Utf8WithoutBom) : string.Empty;
+            bool changed;
+            var updated = AddRequiredIgnoreRules(existing, out changed);
+            if (!exists || changed)
+                WriteAtomicText(path, updated);
+        }
 
-            var changed = !File.Exists(path);
+        internal static string AddRequiredIgnoreRules(string existing, out bool changed)
+        {
+            existing = existing ?? string.Empty;
+            var lines = new List<string>();
+            using (var reader = new StringReader(existing))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                    lines.Add(line);
+            }
+
+            var missing = new List<string>();
             foreach (var required in RequiredIgnoreLines)
             {
                 var present = false;
@@ -189,12 +288,41 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
 
                 if (present) continue;
-                lines.Add(required);
-                changed = true;
+                missing.Add(required);
             }
 
-            if (changed)
-                WriteAtomicText(path, string.Join("\n", lines.ToArray()) + "\n");
+            changed = missing.Count > 0;
+            if (!changed)
+                return existing;
+
+            var newline = DetectLineEnding(existing);
+            var updated = new StringBuilder(existing);
+            if (updated.Length > 0 &&
+                updated[updated.Length - 1] != '\r' &&
+                updated[updated.Length - 1] != '\n')
+                updated.Append(newline);
+            foreach (var required in missing)
+                updated.Append(required).Append(newline);
+            return updated.ToString();
+        }
+
+        private static string DetectLineEnding(string content)
+        {
+            for (var i = 0; i < content.Length; i++)
+            {
+                if (content[i] == '\r')
+                    return i + 1 < content.Length && content[i + 1] == '\n'
+                        ? "\r\n"
+                        : "\r";
+                if (content[i] == '\n')
+                    return "\n";
+            }
+            return Environment.NewLine;
+        }
+
+        private static void ClearWarning()
+        {
+            LastWarning = null;
         }
 
         private static void ReportWarning(string message)

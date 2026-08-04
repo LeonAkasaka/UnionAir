@@ -7,8 +7,14 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         public void Handle(HttpListenerRequest request, HttpListenerResponse response)
         {
-            var json = $"{{\"status\":\"ok\",\"unityVersion\":\"{RestResponse.EscapeJson(Application.unityVersion)}\"}}";
+            var json = BuildResponseJson(
+                Application.unityVersion,
+                UnionAirProjectPaths.ProjectRoot);
             RestResponse.Send(response, json);
         }
+
+        internal static string BuildResponseJson(string unityVersion, string projectPath)
+            => $"{{\"status\":\"ok\",\"unityVersion\":\"{RestResponse.EscapeJson(unityVersion)}\"," +
+               $"\"projectPath\":\"{RestResponse.EscapeJson(projectPath)}\"}}";
     }
 }

@@ -45,15 +45,16 @@ Window > UnionAir > REST Bridge
 Open the EditorWindow from the menu above and check the server status.
 
 The active API Base URL is also published to `<project>/.unionair/endpoint.txt` after a successful
-start. Read and trim the file, call `{baseUrl}health` with a short timeout, and then call
-`{baseUrl}help?detail=full`. Treat a missing file or failed health check as no validated server;
-a hard process crash can leave stale discovery state.
+start. Read and trim the file, call `{baseUrl}health` with a short timeout, verify that its
+`projectPath` matches `<project>`, and then call `{baseUrl}help?detail=full`. Treat a missing file,
+failed health check, or project mismatch as no validated server; a hard process crash can leave
+stale discovery state that now points at another project's Editor.
 
 ### 3. Verify operation
 
 ```bash
 curl http://localhost:8765/api/health
-# => {"status":"ok","unityVersion":"6000.3.5f2"}
+# => {"status":"ok","unityVersion":"6000.3.5f2","projectPath":"C:\\Work\\MyProject"}
 ```
 
 ---
