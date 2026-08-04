@@ -37,7 +37,7 @@ Returns a compact API manifest for LLMs, MCP bridges, and other tools that canno
       "source": "builtin",
       "enabled": true,
       "category": "read",
-      "summary": "Checks whether the server is running.",
+      "summary": "Checks whether the server is running and identifies its Unity project.",
       "risk": ["readOnly"],
       "playModePolicy": "allowed",
       "pathParams": [],
@@ -94,16 +94,23 @@ Application-side Editor assemblies can add custom controllers under `/api/custom
 
 ## GET /api/health
 
-Checks whether the server is running.
+Checks whether the server is running and identifies the Unity project served by that Editor
+process. A client that discovered the URL through `.unionair/endpoint.txt` must compare
+`projectPath` with the project directory containing that file; a mismatch means the discovery file
+is stale and now points at another project's Editor.
 
 ### Response
 
 ```json
 {
   "status": "ok",
-  "unityVersion": "6000.3.5f2"
+  "unityVersion": "6000.3.5f2",
+  "projectPath": "C:\\Work\\MyProject"
 }
 ```
+
+`projectPath` is the absolute parent directory of the project's `Assets` directory. Compare paths
+using the host platform's path semantics (case-insensitive on Windows).
 
 ---
 

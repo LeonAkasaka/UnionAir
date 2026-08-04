@@ -133,6 +133,19 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 - **Build** カテゴリは `executableOutput` と `assetUpdate` のリスクを持ちます。有効化すると、任意のローカルプロセスが `ProjectSettings/` に書き込まれプロジェクト関係者全員に共有されるビルド設定を変更でき、またプレイヤービルドを開始できるようになります。ビルドはプロジェクトのビルドスクリプトを実行し、実行可能なプログラムをプロジェクトディレクトリの `Builds/UnionAir/` に書き出します。またビルドは Unity のメインスレッドを 1 分以上占有し、その間 UnionAir は一切応答しません。
 - カテゴリの有効/無効は**プロジェクト単位ではありません**。設定は `EditorPrefs` に保存され、Unity はこれをユーザーアカウントと Editor バージョン単位で管理します。あるプロジェクトで有効化したカテゴリは、同じ Editor で開く他のすべてのプロジェクトでも有効なままになります。
 
+## API の発見
+
+listener の起動後、UnionAir は実際の API Base URL を末尾スラッシュ付きの UTF-8 1行として
+`<project>/.unionair/endpoint.txt` へ原子的に公開します。クライアントはこのファイルを読み込んで
+空白を除去し、`{baseUrl}health`の`projectPath`がファイルを含むproject directoryと一致することを
+確認してから `{baseUrl}help?detail=full` を呼び出してください。Editor が強制終了するとファイルが
+残る可能性があるため、このファイルは参考情報です。health checkの失敗またはproject不一致はstale
+として扱います。clean stop と検出可能な listener 障害では現在の instance のファイルを削除します。
+
+UnionAir は `.unionair/.gitignore` を管理し、`endpoint.txt` と原子的書き込みの一時ファイルが Git
+差分を作らないようにします。project configuration は同じディレクトリを共有できますが、
+`settings.json` は ignore されません。
+
 ## クイックサンプル
 
 ```bash

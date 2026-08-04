@@ -44,11 +44,17 @@ Window > UnionAir > REST Bridge
 
 Open the EditorWindow from the menu above and check the server status.
 
+The active API Base URL is also published to `<project>/.unionair/endpoint.txt` after a successful
+start. Read and trim the file, call `{baseUrl}health` with a short timeout, verify that its
+`projectPath` matches `<project>`, and then call `{baseUrl}help?detail=full`. Treat a missing file,
+failed health check, or project mismatch as no validated server; a hard process crash can leave
+stale discovery state that now points at another project's Editor.
+
 ### 3. Verify operation
 
 ```bash
 curl http://localhost:8765/api/health
-# => {"status":"ok","unityVersion":"6000.3.5f2"}
+# => {"status":"ok","unityVersion":"6000.3.5f2","projectPath":"C:\\Work\\MyProject"}
 ```
 
 ---
@@ -126,6 +132,11 @@ curl "http://localhost:8765/api/assets?path=Assets/UI"
 - **When the Editor starts**: The server starts automatically via `[InitializeOnLoad]`
 - **During Domain reload**: Closes the listener, waits briefly for its background thread, closes queued responses, aborts listener-owned in-flight or deferred connections, and then restarts automatically after the reload
 - **In Play Mode**: The server continues running. If it was stopped after Exit Play Mode, it restarts automatically
+
+Every successful start atomically replaces `.unionair/endpoint.txt`. Clean stop, replacement start,
+assembly reload, Editor exit, and an observed unexpected listener stop remove the URL only when the
+file still belongs to that server instance. Runtime discovery and temporary files are ignored by
+`.unionair/.gitignore`; clients should reread the file after a refused connection.
 
 If an automatic start encounters a transient address-in-use error immediately after a reload, UnionAir makes one initial attempt followed by up to five retries over approximately four seconds. Intermediate address-in-use failures are retained only in the lifecycle trace and do not pollute the Console or `/api/editor/logs`. Other startup failures always produce a concise Console error. If the listener thread exits unexpectedly, UnionAir completes listener cleanup before dumping the diagnostic trace and schedules up to three delayed recovery attempts per domain. Further unexpected exits stop automatic recovery and produce a concise error instead of entering an unbounded restart loop. UnionAir silently retains a bounded lifecycle trace across domain reloads and automatically dumps it once per domain when startup or cleanup fails. Enable **Diagnostic Lifecycle Logging** to stream the same process, reload generation, listener cleanup, thread, and native socket details during normal operation.
 

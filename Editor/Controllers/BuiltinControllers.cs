@@ -18,7 +18,8 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "",
             Category = UnionAirEndpointCategories.Read,
             TestRunPolicy = UnionAirTestRunPolicy.Allowed,
-            Summary = "Checks whether the server is running.")]
+            Summary = "Checks whether the server is running and identifies its Unity project.",
+            ResponseExample = "{\"status\":\"ok\",\"unityVersion\":\"6000.0.80f1\",\"projectPath\":\"C:\\\\Work\\\\MyProject\"}")]
         private void Health(UnionAirRequestContext ctx)
             => new HealthHandler().Handle(ctx.Request, ctx.Response);
     }

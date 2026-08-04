@@ -47,11 +47,17 @@ Window > UnionAir > REST Bridge
 
 上記メニューから EditorWindow を開き、サーバの状態を確認してください。
 
+起動成功後は、実際の API Base URL も `<project>/.unionair/endpoint.txt` に公開されます。ファイルを
+読み込んで空白を除去し、短い timeout で `{baseUrl}health` を呼び出して、その`projectPath`が
+`<project>`と一致することを確認してから`{baseUrl}help?detail=full`を呼び出してください。ファイルが
+ない場合、health checkに失敗した場合、projectが一致しない場合は、検証済みserverがないものとして
+扱います。processが強制終了すると、別projectのEditorを指す古い発見情報が残る可能性があります。
+
 ### 3. 動作確認
 
 ```bash
 curl http://localhost:8765/api/health
-# => {"status":"ok","unityVersion":"6000.3.5f2"}
+# => {"status":"ok","unityVersion":"6000.3.5f2","projectPath":"C:\\Work\\MyProject"}
 ```
 
 ---
@@ -129,6 +135,12 @@ curl "http://localhost:8765/api/assets?path=Assets/UI"
 - **Editor 起動時**: `[InitializeOnLoad]` によりサーバが自動起動
 - **Domain reload 中**: listener を閉じ、background thread の終了を短時間待機し、キュー内の response を閉じ、listener が所有する処理中または deferred の接続を中断してから、リロード後に自動再起動
 - **Play モード中**: サーバは稼働し続けます。Play モード終了後に停止していた場合は自動的に再起動します
+
+起動に成功するたび `.unionair/endpoint.txt` を原子的に置換します。clean stop、replacement start、
+assembly reload、Editor 終了、検出可能な予期しない listener 停止では、ファイルがその server
+instance のものと一致する場合だけ URL を削除します。runtime discovery と一時ファイルは
+`.unionair/.gitignore` によって ignore されます。接続が拒否されたクライアントはファイルを再読込
+してください。
 
 リロード直後の自動起動で一時的な address-in-use エラーが発生した場合、UnionAir は初回の試行に続いて約4秒間に最大5回再試行します。途中の address-in-use エラーはライフサイクルトレースにだけ保持され、Console や `/api/editor/logs` には出力されません。その他の起動失敗は常に短いエラーとして Console に出力されます。listener thread が予期せず終了した場合は、listener の清掃を完了してから診断トレースを出力し、ドメインあたり最大3回の遅延付き復旧を行います。それ以降の予期せぬ終了では自動復旧を停止し、無制限の再起動ループに入らず短いエラーを出力します。UnionAir は Domain reload をまたぐ固定長のライフサイクル履歴を通常は出力せずに保持し、起動または清掃に失敗した場合はドメインあたり1回だけ自動的にまとめて出力します。通常時にも process、reload generation、listener の清掃、thread、native socket の詳細を逐次確認するには **Diagnostic Lifecycle Logging** を有効にしてください。
 

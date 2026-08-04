@@ -39,6 +39,8 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             UnionAirLifecycleDiagnostics.Initialize();
             UnionAirSession.Initialize();
+            if (UnionAirSession.IsNewEditorSession)
+                UnionAirEndpointDiscovery.ClearStaleAtEditorStart();
             LoadedSceneDiskChangeGuard.Initialize();
             LifecycleGeneration = UnionAirSession.Generation;
             Server.SetLifecycleGeneration(LifecycleGeneration);
