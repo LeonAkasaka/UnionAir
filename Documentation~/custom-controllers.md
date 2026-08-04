@@ -189,7 +189,7 @@ Asset reference payloads may use `assetGuid` or `assetPath`. `assetType` is opti
 
 ## Play Mode and Security
 
-Custom controllers run inside the Unity Editor process with the permissions of the Editor assembly that defines them. UnionAir does not sandbox custom controller code.
+Custom controllers run inside the Unity Editor process with the permissions of the Editor assembly that defines them. UnionAir does not sandbox custom controller code. Disabling Custom Handlers only removes their HTTP routes; it does not prevent their assembly from loading or their code from running through another Editor entry point. Category and handler toggles limit API exposure and accidental operations, not malicious project code.
 
 Use category metadata and `PlayModePolicy` deliberately:
 

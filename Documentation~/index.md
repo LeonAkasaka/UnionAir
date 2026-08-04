@@ -51,7 +51,7 @@ start. Read and trim the file, call `{baseUrl}health` with a short timeout, veri
 failed health check, or project mismatch as no validated server; a hard process crash can leave
 stale discovery state that now points at another project's Editor.
 
-### Project settings and local approval
+### Project settings
 
 Schema-backed EditorWindow controls update a working configuration and automatically save the
 complete `<project>/.unionair/settings.json` after every change. The strict v1 document is:
@@ -71,12 +71,11 @@ wrong types, unsupported schemas, invalid ports, and a custom category without `
 invalidate the entire document. Invalid settings disable auto-start and fail closed to Read only;
 the first UI change repairs the file from those safe values.
 
-A valid file supplies project values before the auto-start decision, but sensitive values are
-requests, not grants. Use the EditorWindow to approve or refuse newly requested categories, custom
-handlers, and Play Mode scene changes. These decisions are stored in EditorPrefs under a normalized
-project-path key and are not shared through Git. A local category toggle can further disable an
-approved request. Enabling a capability in the EditorWindow adds its project request and local
-approval together. Removing capabilities or changing only the port does not require a new approval.
+A valid file supplies project values before the auto-start decision. The Built-in API category
+checkboxes, **Custom Handlers > Enable Custom Handlers**, and the Play Mode scene-change checkbox
+are the authoritative controls and write their values directly to the file. There is no separate
+local-approval layer. **Disable All Sensitive APIs...** clears every optional category, disables
+custom handlers, and denies Play Mode scene changes while preserving the port and auto-start.
 When the file is absent, the legacy EditorPrefs/default behavior is unchanged until the first
 schema-backed UI change. That change migrates the current effective values to a full v1 document
 and saves it immediately. UI changes take effect in memory first and are written atomically as
@@ -84,6 +83,12 @@ UTF-8 without a BOM. Failed writes remain pending and retry automatically. Domai
 the working document from SessionState and do not reread disk; external edits are loaded on the
 next Editor process start. Diagnostic lifecycle logging remains in EditorPrefs and does not create
 the project file.
+
+These settings prevent accidental operations and limit UnionAir's exposed routes; they are not an
+authentication boundary, sandbox, or tamper defense. The file is not signed. A process that can
+modify the project can edit it or add Editor code with the same Unity-process permissions. Treat
+the project and every local API client as trusted, and use OS or environment isolation when a real
+security boundary is required.
 
 ### 3. Verify operation
 
@@ -150,7 +155,7 @@ curl "${BASE_URL}assets?path=Assets/UI"
 | **Status** | Displays the server running state and port number |
 | **Port Mode** | Automatic (default) or Fixed; Fixed accepts `1..65535` while stopped |
 | **Auto Start on Load** | Whether to start the server automatically when the Editor starts |
-| **Project Configuration** | Shows `.unionair/settings.json` validity/source and automatic-save state; approve/refuse requests, toggle Local Access, and revoke local approvals |
+| **Disable All Sensitive APIs...** | Clears optional API categories, Custom Handlers, and Play Mode scene changes without changing server settings |
 | **Diagnostic Lifecycle Logging** | Streams detailed listener lifecycle events to the Console; disabled by default |
 | **Start / Stop / Restart** | Manual control of the server |
 | **Request Log** | Log of received requests (latest 100 entries) |

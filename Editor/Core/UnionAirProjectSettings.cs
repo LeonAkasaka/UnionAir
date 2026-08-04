@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
-using System.Security.Cryptography;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -17,25 +16,14 @@ namespace LeonAkasaka.UnionAir.Editor
         Invalid
     }
 
-    internal sealed class UnionAirLocalCapabilityState
-    {
-        internal string Capability;
-        internal bool Enabled;
-    }
-
-    /// <summary>Maintains the session working document and project-scoped local security decisions.</summary>
+    /// <summary>Maintains and persists the project settings working document.</summary>
     internal static class UnionAirProjectSettings
     {
-        private const string ApprovedPrefix = "UnionAir.Project.Approved.";
-        private const string DeniedPrefix = "UnionAir.Project.Denied.";
         private const string SessionSnapshotKey = "UnionAir.ProjectSettings.Snapshot";
-        private const string CustomHandlersCapability = "customHandlers";
-        private const string PlayModeSceneChangesCapability = "playMode.allowSceneChanges";
 
         private static UnionAirProjectSettingsDocument _document;
         private static HashSet<string> _knownCustomCategories =
             new HashSet<string>(StringComparer.Ordinal);
-        private static string _projectKey;
         private static bool _savePending;
         private static string _saveError;
         private static int _retryFailureCount;
@@ -46,15 +34,11 @@ namespace LeonAkasaka.UnionAir.Editor
 
         internal static string Error { get; private set; }
         internal static string SettingsPath => UnionAirProjectPaths.SettingsPath;
-        internal static bool IsProjectControlled => State != UnionAirProjectSettingsState.Missing;
-        internal static bool IsValid => State == UnionAirProjectSettingsState.Valid;
         internal static bool SavePending => _savePending;
         internal static string SaveError => _saveError;
-        internal static UnionAirProjectSettingsDocument Document => _document;
 
         internal static void Initialize()
         {
-            _projectKey = ProjectScopeKey(UnionAirProjectPaths.ProjectRoot);
             _knownCustomCategories = DiscoverCustomCategoryIds();
 
             var restored = !UnionAirSession.IsNewEditorSession && TryRestoreSessionSnapshot();
@@ -115,9 +99,8 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (State != UnionAirProjectSettingsState.Valid) return false;
             var identifier = CategoryIdentifier(categoryKey);
-            if (string.IsNullOrEmpty(identifier) || !_document.EnabledCategories.Contains(identifier))
-                return false;
-            return IsCapabilityEnabled(CategoryCapability(identifier));
+            return !string.IsNullOrEmpty(identifier) &&
+                   _document.EnabledCategories.Contains(identifier);
         }
 
         internal static void SetCategoryEnabled(string categoryKey, bool enabled)
@@ -127,15 +110,6 @@ namespace LeonAkasaka.UnionAir.Editor
 
             ApplyDocumentChange(delegate
             {
-                var capability = CategoryCapability(identifier);
-                if (enabled)
-                {
-                    if (identifier.StartsWith("custom:", StringComparison.Ordinal))
-                    {
-                        ApproveCapability(CustomHandlersCapability);
-                    }
-                    ApproveCapability(capability);
-                }
                 UnionAirProjectSettingsDocumentModel.SetCategoryEnabled(
                     _document, identifier, enabled);
             });
@@ -143,8 +117,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         internal static bool CustomHandlersEnabled
             => State == UnionAirProjectSettingsState.Valid &&
-               _document.CustomHandlers &&
-               IsCapabilityEnabled(CustomHandlersCapability);
+               _document.CustomHandlers;
 
         internal static void SetCustomHandlersEnabled(bool enabled)
         {
@@ -152,15 +125,12 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 UnionAirProjectSettingsDocumentModel.SetCustomHandlersEnabled(
                     _document, enabled);
-                if (enabled)
-                    ApproveCapability(CustomHandlersCapability);
             });
         }
 
         internal static bool AllowPlayModeSceneChanges
             => State == UnionAirProjectSettingsState.Valid &&
-               _document.AllowSceneChanges &&
-               IsCapabilityEnabled(PlayModeSceneChangesCapability);
+               _document.AllowSceneChanges;
 
         internal static void SetAllowPlayModeSceneChanges(bool enabled)
         {
@@ -168,79 +138,14 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 UnionAirProjectSettingsDocumentModel.SetAllowSceneChanges(
                     _document, enabled);
-                if (enabled)
-                    ApproveCapability(PlayModeSceneChangesCapability);
             });
         }
 
-        internal static string[] PendingCapabilities()
-        {
-            if (State != UnionAirProjectSettingsState.Valid) return new string[0];
-            var approved = LoadSet(ApprovedKey);
-            var denied = LoadSet(DeniedKey);
-            return UnionAirProjectSettingsDecision.Pending(
-                RequestedCapabilities(_document), approved, denied);
-        }
-
-        internal static UnionAirLocalCapabilityState[] LocalCapabilities()
-        {
-            if (State != UnionAirProjectSettingsState.Valid)
-                return new UnionAirLocalCapabilityState[0];
-
-            var approved = LoadSet(ApprovedKey);
-            var denied = LoadSet(DeniedKey);
-            var capabilities = new List<string>(RequestedCapabilities(_document));
-            capabilities.Sort(StringComparer.Ordinal);
-            var result = new UnionAirLocalCapabilityState[capabilities.Count];
-            for (var i = 0; i < capabilities.Count; i++)
+        internal static void DisableAllSensitiveApis()
+            => ApplyDocumentChange(delegate
             {
-                var capability = capabilities[i];
-                result[i] = new UnionAirLocalCapabilityState
-                {
-                    Capability = capability,
-                    Enabled = UnionAirProjectSettingsDecision.IsEffective(
-                        true, approved, denied, capability)
-                };
-            }
-            return result;
-        }
-
-        internal static void SetLocalCapabilityEnabled(string capability, bool enabled)
-        {
-            if (State != UnionAirProjectSettingsState.Valid ||
-                !ContainsCapability(RequestedCapabilities(_document), capability)) return;
-
-            if (enabled) ApproveCapability(capability);
-            else
-            {
-                var denied = LoadSet(DeniedKey);
-                denied.Add(capability);
-                SaveSet(DeniedKey, denied);
-            }
-            UnionAirRouteRegistry.Refresh();
-        }
-
-        internal static void ApprovePendingCapabilities()
-        {
-            foreach (var capability in PendingCapabilities())
-                ApproveCapability(capability);
-            UnionAirRouteRegistry.Refresh();
-        }
-
-        internal static void RefusePendingCapabilities()
-        {
-            var denied = LoadSet(DeniedKey);
-            foreach (var capability in PendingCapabilities())
-                denied.Add(capability);
-            SaveSet(DeniedKey, denied);
-            UnionAirRouteRegistry.Refresh();
-        }
-
-        internal static void ForgetApprovals()
-        {
-            EditorPrefs.DeleteKey(ApprovedKey);
-            UnionAirRouteRegistry.Refresh();
-        }
+                UnionAirProjectSettingsDocumentModel.DisableAllSensitiveApis(_document);
+            });
 
         private static void LoadFromDisk()
         {
@@ -280,16 +185,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 previousState,
                 _document,
                 CaptureLegacyEffectiveSettings);
-            if (previousState == UnionAirProjectSettingsState.Missing)
-            {
-                var approved = LoadSet(ApprovedKey);
-                var denied = LoadSet(DeniedKey);
-                foreach (var capability in RequestedCapabilities(_document))
-                    UnionAirProjectSettingsDecision.Approve(
-                        capability, approved, denied);
-                SaveSet(ApprovedKey, approved);
-                SaveSet(DeniedKey, denied);
-            }
         }
 
         private static UnionAirProjectSettingsDocument CaptureLegacyEffectiveSettings()
@@ -421,40 +316,6 @@ namespace LeonAkasaka.UnionAir.Editor
             return true;
         }
 
-        private static IEnumerable<string> RequestedCapabilities(
-            UnionAirProjectSettingsDocument document)
-        {
-            foreach (var category in document.EnabledCategories)
-                yield return CategoryCapability(category);
-            if (document.CustomHandlers) yield return CustomHandlersCapability;
-            if (document.AllowSceneChanges) yield return PlayModeSceneChangesCapability;
-        }
-
-        private static bool ContainsCapability(IEnumerable<string> values, string expected)
-        {
-            foreach (var value in values)
-                if (string.Equals(value, expected, StringComparison.Ordinal)) return true;
-            return false;
-        }
-
-        private static bool IsCapabilityEnabled(string capability)
-        {
-            var approved = LoadSet(ApprovedKey);
-            var denied = LoadSet(DeniedKey);
-            return UnionAirProjectSettingsDecision.IsEffective(
-                true, approved, denied, capability);
-        }
-
-        private static void ApproveCapability(string capability)
-        {
-            var approved = LoadSet(ApprovedKey);
-            var denied = LoadSet(DeniedKey);
-            UnionAirProjectSettingsDecision.Approve(
-                capability, approved, denied);
-            SaveSet(ApprovedKey, approved);
-            SaveSet(DeniedKey, denied);
-        }
-
         private static string CategoryIdentifier(string categoryKey)
         {
             const string builtin = "Builtin:";
@@ -464,44 +325,6 @@ namespace LeonAkasaka.UnionAir.Editor
             if (categoryKey.StartsWith(custom, StringComparison.Ordinal))
                 return "custom:" + categoryKey.Substring(custom.Length);
             return null;
-        }
-
-        private static string CategoryCapability(string identifier)
-            => "category:" + identifier;
-
-        private static string ApprovedKey => ApprovedPrefix + _projectKey;
-        private static string DeniedKey => DeniedPrefix + _projectKey;
-
-        private static HashSet<string> LoadSet(string key)
-        {
-            var result = new HashSet<string>(StringComparer.Ordinal);
-            var raw = EditorPrefs.GetString(key, "");
-            foreach (var value in raw.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
-                result.Add(value);
-            return result;
-        }
-
-        private static void SaveSet(string key, HashSet<string> values)
-        {
-            var ordered = new List<string>(values);
-            ordered.Sort(StringComparer.Ordinal);
-            if (ordered.Count == 0) EditorPrefs.DeleteKey(key);
-            else EditorPrefs.SetString(key, string.Join("\n", ordered.ToArray()));
-        }
-
-        internal static string ProjectScopeKey(string projectRoot)
-        {
-            var normalized = Path.GetFullPath(projectRoot)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            if (Path.DirectorySeparatorChar == '\\')
-                normalized = normalized.ToUpperInvariant();
-            using (var sha = SHA256.Create())
-            {
-                var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(normalized));
-                var sb = new StringBuilder(bytes.Length * 2);
-                foreach (var value in bytes) sb.Append(value.ToString("x2"));
-                return sb.ToString();
-            }
         }
 
         private static HashSet<string> DiscoverCustomCategoryIds()
@@ -651,6 +474,14 @@ namespace LeonAkasaka.UnionAir.Editor
             UnionAirProjectSettingsDocument document,
             bool enabled)
             => document.AllowSceneChanges = enabled;
+
+        internal static void DisableAllSensitiveApis(
+            UnionAirProjectSettingsDocument document)
+        {
+            document.EnabledCategories.Clear();
+            document.CustomHandlers = false;
+            document.AllowSceneChanges = false;
+        }
     }
 
     internal static class UnionAirProjectSettingsSavePolicy
@@ -761,36 +592,4 @@ namespace LeonAkasaka.UnionAir.Editor
         }
     }
 
-    internal static class UnionAirProjectSettingsDecision
-    {
-        internal static void Approve(
-            string capability,
-            ISet<string> approved,
-            ISet<string> denied)
-        {
-            approved.Add(capability);
-            denied.Remove(capability);
-        }
-
-        internal static bool IsEffective(
-            bool requested,
-            ISet<string> approved,
-            ISet<string> denied,
-            string capability)
-            => requested && approved.Contains(capability) && !denied.Contains(capability);
-
-        internal static string[] Pending(
-            IEnumerable<string> requested,
-            ISet<string> approved,
-            ISet<string> denied)
-        {
-            var result = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var capability in requested)
-                if (!approved.Contains(capability) && !denied.Contains(capability))
-                    result.Add(capability);
-            var ordered = new List<string>(result);
-            ordered.Sort(StringComparer.Ordinal);
-            return ordered.ToArray();
-        }
-    }
 }

@@ -54,7 +54,7 @@ Window > UnionAir > REST Bridge
 ない場合、health checkに失敗した場合、projectが一致しない場合は、検証済みserverがないものとして
 扱います。processが強制終了すると、別projectのEditorを指す古い発見情報が残る可能性があります。
 
-### Project設定とlocal承認
+### Project設定
 
 EditorWindowのschema対象controlはworking configurationを更新し、変更のたびに完全な
 `<project>/.unionair/settings.json`へ自動保存します。strictなv1 documentは次の形です:
@@ -74,17 +74,22 @@ port、`customHandlers:true`なしのcustom categoryはdocument全体を不正�
 auto-startを無効化し、Readだけの安全状態へ移行します。最初のUI変更時に、その安全値を基礎として
 完全なdocumentへ修復します。
 
-有効なファイルはauto-start判断より先にproject値を供給しますが、機密値は要求であって許可では
-ありません。新しく要求されたcategory、custom handler、Play Mode scene changeはEditorWindowで
-承認または拒否します。判断は正規化project pathのkeyでEditorPrefsへ保存され、Gitでは共有されません。
-local category toggleで承認済み要求をさらに無効化できます。EditorWindowで機能をオンにすると、
-project要求とlocal承認を同時に追加します。機能削減やportだけの変更は再承認を
-求めません。ファイルがない場合は、schema対象の最初のUI変更までは従来のEditorPrefs/default動作を
-維持します。その変更時に現在のeffective値を完全なv1 documentへ移行し、即座に保存します。UI変更は
+有効なファイルはauto-start判断より先にproject値を供給します。Built-in APIのcategory checkbox、
+**Custom Handlers > Enable Custom Handlers**、Play Modeのscene change checkboxが唯一のcontrolであり、
+その値を直接ファイルへ保存します。端末別の承認レイヤーはありません。
+**Disable All Sensitive APIs...**はportとauto-startを維持したまま、すべての任意category、
+custom handler、Play Mode scene changeを無効化します。ファイルがない場合は、schema対象の最初の
+UI変更までは従来のEditorPrefs/default動作を維持します。その変更時に現在のeffective値を完全な
+v1 documentへ移行し、即座に保存します。UI変更は
 最初にメモリへ反映され、UTF-8 BOMなしで原子的に書き込まれます。書き込み失敗はpendingのまま自動
 再試行します。domain reloadではSessionStateからworking documentを復元してdiskを再読込せず、外部
 編集は次回のEditor process起動時に読み込みます。Diagnostic Lifecycle LoggingはEditorPrefsに残り、
 project fileを作成しません。
+
+これらの設定は誤操作を防ぎ、UnionAirが公開するrouteを限定するためのものであり、認証境界、sandbox、
+改ざん防止ではありません。ファイルは署名されません。projectを変更できるprocessはファイルを編集し、
+Unity processと同じ権限のEditor codeを追加できます。projectとすべてのlocal API clientを信頼できる
+ものとして扱い、実際のsecurity boundaryが必要な場合はOSまたは実行環境で隔離してください。
 
 ### 3. 動作確認
 
@@ -151,7 +156,7 @@ curl "${BASE_URL}assets?path=Assets/UI"
 | **Status** | サーバの稼働状態とポート番号を表示 |
 | **Port Mode** | Automatic(デフォルト)またはFixed。停止中にFixedの`1..65535`を指定可能 |
 | **Auto Start on Load** | Editor 起動時にサーバを自動起動するかどうか |
-| **Project Configuration** | `.unionair/settings.json`のvalidity/sourceと自動保存状態、要求の承認/拒否、Local Access切替、local承認解除 |
+| **Disable All Sensitive APIs...** | server設定を維持したまま、任意API category、Custom Handlers、Play Mode scene changeをすべて無効化 |
 | **Diagnostic Lifecycle Logging** | listener の詳細なライフサイクルイベントを Console へ逐次出力するかどうか(デフォルトでは無効) |
 | **Start / Stop / Restart** | サーバの手動制御 |
 | **Request Log** | 受信リクエストのログ(最新100件) |

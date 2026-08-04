@@ -192,7 +192,7 @@ if (!UnionAirReferenceResolver.TryResolveAssetReference(
 
 ## Play モードとセキュリティ
 
-カスタムコントローラは、それを定義する Editor アセンブリの権限で Unity Editor プロセス内で実行されます。UnionAir はカスタムコントローラのコードをサンドボックス化しません。
+カスタムコントローラは、それを定義する Editor アセンブリの権限で Unity Editor プロセス内で実行されます。UnionAir はカスタムコントローラのコードをサンドボックス化しません。Custom Handlersを無効化してもHTTP routeが削除されるだけであり、assemblyのloadや別のEditor entry pointからのcode実行は防ぎません。categoryとhandlerのtoggleはAPI露出範囲と誤操作を制御するもので、悪意あるproject codeへの防御ではありません。
 
 カテゴリメタデータと `PlayModePolicy` は意図を持って設定してください:
 

@@ -139,13 +139,15 @@ the current Editor session instead of rereading disk. External file edits theref
 after the Editor process is restarted, and a later UI change in the current process can overwrite
 them. Diagnostic lifecycle logging remains an EditorPrefs-only setting.
 
-The file can request sensitive capabilities, but cannot grant them. Each user must approve newly
-requested categories, custom handlers, and Play Mode scene changes for that normalized project path
-in **Window > UnionAir > REST Bridge**. Effective access is the project request intersected with
-local approvals, minus local disables. Enabling a capability in the EditorWindow is an explicit
-request and local approval on that machine; **Local Access** can disable an approved request without
-changing the project file. Port-only changes and capability removals do not prompt again. Local
-approval decisions remain in `EditorPrefs` and are never written to the project file.
+The Built-in API category checkboxes, **Custom Handlers > Enable Custom Handlers**, and the Play Mode
+scene-change checkbox are the authoritative exposure controls. They update this file directly; there
+is no second local-approval layer. **Disable All Sensitive APIs...** clears every optional category,
+disables custom handlers, and denies Play Mode scene changes without changing the port or auto-start.
+
+These controls reduce accidental operations and limit which routes UnionAir exposes. They are not an
+authentication boundary, a sandbox, tamper protection, or a defense against malicious code. Any
+process that can modify the project can edit `settings.json` or add Editor code that runs with the
+Unity Editor's permissions. Treat the project and every local API client as trusted.
 
 ## Endpoints
 
@@ -177,7 +179,8 @@ Read this before enabling any write category:
 - Requests with a non-empty body must use `Content-Type: application/json`. Empty POST requests remain valid without a content type.
 - Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, Editor Actions, Test Runner, Profiling, and Build categories are opt-in; enabling them exposes state-changing operations and diagnostic artifacts — including arbitrary project test code, heap snapshots, Unity Editor menu execution, and asset deletion — to any local process. Enable them only when every local client is trusted.
 - The **Build** category carries the `executableOutput` and `assetUpdate` risks. Enabling it lets any local process change build settings that are written to `ProjectSettings/` and shared with everyone who works on the project, and start a player build, which runs the project's build scripts and writes a runnable program to `Builds/UnionAir/` in the project directory. A build also occupies the Unity main thread for a minute or more, during which UnionAir answers nothing at all.
-- Without `.unionair/settings.json`, category enablement retains the legacy `EditorPrefs` behavior and is shared by projects opened by that user and Editor version. With a project file, sensitive capabilities are scoped to the normalized project path and require a separate local approval; sharing the file never grants access on another machine.
+- Without `.unionair/settings.json`, category enablement retains the legacy `EditorPrefs` behavior and is shared by projects opened by that user and Editor version. With a project file, its values directly control the exposed API surface and can be shared through Git.
+- API enablement is an accidental-operation guard and exposure-scope control only. The settings file is not signed or tamper-resistant. Code already running in the Unity Editor process can change the settings or perform the same privileged work without UnionAir, so these toggles cannot contain malicious project code or an agent that can write and execute Editor code. Use OS accounts, filesystem permissions, or an isolated environment when stronger separation is required.
 
 ## API Discovery
 

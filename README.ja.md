@@ -139,13 +139,15 @@ UTF-8 BOMなしで原子的に保存します。書き込み失敗はpendingの�
 編集はEditor processの再起動後に反映され、同じprocess内で後からUI変更すると外部編集を上書きする
 場合があります。Diagnostic Lifecycle Loggingは引き続きEditorPrefsだけの設定です。
 
-このファイルは機密機能を要求できますが、許可を付与できません。各ユーザーは新しく要求された
-category、custom handler、Play Mode scene changeを、正規化されたproject pathごとに
-**Window > UnionAir > REST Bridge** で承認する必要があります。effective accessはproject要求と
-local承認の積集合からlocal無効化を引いたものです。EditorWindowで機能をオンにする操作は、この端末で
-の明示的な要求とlocal承認を兼ねます。**Local Access**ではproject fileを変更せずに承認済み要求を
-無効化できます。portだけの変更や機能削減では再承認しません。local承認はEditorPrefsに残り、
-project fileには書き込まれません。
+Built-in APIのcategory checkbox、**Custom Handlers > Enable Custom Handlers**、Play Modeの
+scene change checkboxが、API露出範囲を決める唯一のcontrolです。これらは直接ファイルを更新し、
+端末別の承認レイヤーはありません。**Disable All Sensitive APIs...**はportとauto-startを維持したまま、
+すべての任意category、custom handler、Play Mode scene changeを無効化します。
+
+これらのcontrolは誤操作を減らし、UnionAirが公開するrouteを限定するためのものです。認証境界、
+sandbox、改ざん防止、悪意あるcodeへの防御ではありません。projectを変更できるprocessは
+`settings.json`を編集したり、Unity Editorと同じ権限で動くEditor codeを追加したりできます。
+projectとすべてのlocal API clientを信頼できるものとして扱ってください。
 
 ## エンドポイント
 
@@ -177,7 +179,8 @@ project fileには書き込まれません。
 - 空でないボディを持つリクエストには `Content-Type: application/json` が必要です。空の POST は Content-Type なしでも引き続き有効です。
 - 既定で有効なのは **Read** カテゴリのみです。Scene Write / Asset Write / Play Mode / Editor Actions / Test Runner / Profiling / Build はオプトインであり、有効化するとプロジェクトの任意のテストコード、heap snapshot、Unity Editor のメニュー実行、アセット削除を含む操作や診断成果物が、任意のローカルプロセスに公開されます。すべてのローカルクライアントを信頼できる場合にのみ有効化してください。
 - **Build** カテゴリは `executableOutput` と `assetUpdate` のリスクを持ちます。有効化すると、任意のローカルプロセスが `ProjectSettings/` に書き込まれプロジェクト関係者全員に共有されるビルド設定を変更でき、またプレイヤービルドを開始できるようになります。ビルドはプロジェクトのビルドスクリプトを実行し、実行可能なプログラムをプロジェクトディレクトリの `Builds/UnionAir/` に書き出します。またビルドは Unity のメインスレッドを 1 分以上占有し、その間 UnionAir は一切応答しません。
-- `.unionair/settings.json`がない場合、category enablementは従来どおりEditorPrefsに保存され、そのユーザーとEditor versionで開くproject間で共有されます。project fileがある場合、機密機能は正規化project path単位となり、別途local承認が必要です。ファイルを共有しても別のマシンで権限は付与されません。
+- `.unionair/settings.json`がない場合、category enablementは従来どおりEditorPrefsに保存され、そのユーザーとEditor versionで開くproject間で共有されます。project fileがある場合、その値がAPIの露出範囲を直接制御し、Gitで共有できます。
+- API enablementは誤操作防止と露出範囲の制御に限られます。settings fileは署名も改ざん耐性も持ちません。Unity Editor process内で既に動作するcodeは設定を変更でき、UnionAirを経由せず同じ特権操作を実行できます。そのため、project codeやEditor codeを書いて実行できるagentの悪意をこれらのtoggleで封じ込めることはできません。より強い分離が必要な場合は、OS account、filesystem permission、隔離環境を使用してください。
 
 ## API の発見
 

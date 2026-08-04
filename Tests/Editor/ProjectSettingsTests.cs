@@ -135,93 +135,6 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
-        public void CapabilityDecision_RequiresRequestAndApprovalAndHonorsLocalDenial()
-        {
-            var approved = new HashSet<string> { "category:assetWrite" };
-            var denied = new HashSet<string>();
-            Assert.IsTrue(UnionAirProjectSettingsDecision.IsEffective(
-                true, approved, denied, "category:assetWrite"));
-            Assert.IsFalse(UnionAirProjectSettingsDecision.IsEffective(
-                false, approved, denied, "category:assetWrite"));
-
-            denied.Add("category:assetWrite");
-            Assert.IsFalse(UnionAirProjectSettingsDecision.IsEffective(
-                true, approved, denied, "category:assetWrite"));
-        }
-
-        [Test]
-        public void CapabilityDecision_ExplicitApprovalClearsALocalDenial()
-        {
-            var approved = new HashSet<string>();
-            var denied = new HashSet<string> { "category:assetWrite" };
-
-            UnionAirProjectSettingsDecision.Approve(
-                "category:assetWrite", approved, denied);
-
-            CollectionAssert.Contains(approved, "category:assetWrite");
-            CollectionAssert.DoesNotContain(denied, "category:assetWrite");
-        }
-
-        [Test]
-        public void Pending_OnlyReturnsNewlyRequestedCapabilities()
-        {
-            var approved = new HashSet<string> { "category:assetWrite" };
-            var pending = UnionAirProjectSettingsDecision.Pending(
-                new[] { "category:assetWrite", "category:sceneWrite" },
-                approved,
-                new HashSet<string>());
-            CollectionAssert.AreEqual(new[] { "category:sceneWrite" }, pending);
-        }
-
-        [Test]
-        public void Pending_TreatsApprovalAndRefusalAsReviewedDecisions()
-        {
-            var requested = new[]
-            {
-                "category:assetWrite",
-                "category:sceneWrite",
-                "customHandlers"
-            };
-            var pending = UnionAirProjectSettingsDecision.Pending(
-                requested,
-                new HashSet<string> { "category:assetWrite" },
-                new HashSet<string> { "category:sceneWrite" });
-            CollectionAssert.AreEqual(new[] { "customHandlers" }, pending);
-        }
-
-        [Test]
-        public void Pending_PromptsOnlyForCapabilitySetGrowth()
-        {
-            var approved = new HashSet<string>
-            {
-                "category:assetWrite",
-                "category:sceneWrite"
-            };
-            var denied = new HashSet<string>();
-
-            CollectionAssert.IsEmpty(UnionAirProjectSettingsDecision.Pending(
-                new[] { "category:assetWrite" }, approved, denied));
-            CollectionAssert.AreEqual(
-                new[] { "category:build" },
-                UnionAirProjectSettingsDecision.Pending(
-                    new[] { "category:assetWrite", "category:build" },
-                    approved,
-                    denied));
-        }
-
-        [Test]
-        public void ProjectScopeKey_NormalizesEquivalentProjectPaths()
-        {
-            var root = Path.Combine(Path.GetTempPath(), "UnionAirScope");
-            Assert.AreEqual(
-                UnionAirProjectSettings.ProjectScopeKey(root),
-                UnionAirProjectSettings.ProjectScopeKey(root + Path.DirectorySeparatorChar));
-            Assert.AreNotEqual(
-                UnionAirProjectSettings.ProjectScopeKey(root),
-                UnionAirProjectSettings.ProjectScopeKey(root + "-other"));
-        }
-
-        [Test]
         public void Loader_ReportsMissingValidAndInvalidWithoutPartialApplication()
         {
             var directory = Path.Combine(
@@ -547,6 +460,28 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             CollectionAssert.AreEquivalent(
                 new[] { "assetWrite" },
                 document.EnabledCategories);
+        }
+
+        [Test]
+        public void WorkingDocument_DisableAllSensitiveApisPreservesServerSettings()
+        {
+            var document = new UnionAirProjectSettingsDocument
+            {
+                Port = 43123,
+                AutoStart = true,
+                CustomHandlers = true,
+                AllowSceneChanges = true
+            };
+            document.EnabledCategories.Add("assetWrite");
+            document.EnabledCategories.Add("custom:toolActions");
+
+            UnionAirProjectSettingsDocumentModel.DisableAllSensitiveApis(document);
+
+            Assert.AreEqual(43123, document.Port);
+            Assert.IsTrue(document.AutoStart);
+            Assert.IsFalse(document.CustomHandlers);
+            Assert.IsFalse(document.AllowSceneChanges);
+            CollectionAssert.IsEmpty(document.EnabledCategories);
         }
     }
 }

@@ -149,7 +149,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (newDiagnosticLogging != diagnosticLogging)
                 UnionAirSettings.DiagnosticLifecycleLogging = newDiagnosticLogging;
 
-            DrawProjectConfiguration();
+            DrawProjectSettingsWarnings();
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Play Mode Safety", EditorStyles.boldLabel);
@@ -161,6 +161,17 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorGUILayout.HelpBox(
                 "When disabled, scene-object write endpoints are rejected during Play Mode even if the request includes allowWhilePlaying=true.",
                 MessageType.Info);
+
+            if (GUILayout.Button("Disable All Sensitive APIs..."))
+            {
+                if (EditorUtility.DisplayDialog(
+                        "Disable All Sensitive APIs",
+                        "Disable every optional Built-in API category, Custom Handlers, and " +
+                        "Play Mode scene changes? Read-only APIs remain enabled.",
+                        "Disable All",
+                        "Cancel"))
+                    UnionAirProjectSettings.DisableAllSensitiveApis();
+            }
 
             EditorGUILayout.Space(8);
             using (new EditorGUILayout.HorizontalScope())
@@ -299,79 +310,25 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorGUILayout.EndScrollView();
         }
 
-        private void DrawProjectConfiguration()
+        private static void DrawProjectSettingsWarnings()
         {
-            EditorGUILayout.Space(8);
-            EditorGUILayout.LabelField("Project Configuration", EditorStyles.boldLabel);
-            EditorGUILayout.SelectableLabel(
-                UnionAirProjectSettings.SettingsPath,
-                EditorStyles.miniLabel,
-                GUILayout.Height(EditorGUIUtility.singleLineHeight));
-
-            switch (UnionAirProjectSettings.State)
+            if (UnionAirProjectSettings.State == UnionAirProjectSettingsState.Invalid)
             {
-                case UnionAirProjectSettingsState.Valid:
-                    EditorGUILayout.LabelField("Source", ".unionair/settings.json");
-                    break;
-                case UnionAirProjectSettingsState.Invalid:
-                    EditorGUILayout.HelpBox(
-                        "Invalid settings.json; auto-start and sensitive capabilities fail closed. " +
-                        "Changing any project setting replaces it with a complete safe document. " +
-                        UnionAirProjectSettings.Error,
-                        MessageType.Error);
-                    break;
-                default:
-                    EditorGUILayout.LabelField(
-                        "Source",
-                        "EditorPrefs / defaults (first change creates settings.json)");
-                    break;
+                EditorGUILayout.HelpBox(
+                    "Invalid .unionair/settings.json; auto-start and optional APIs fail closed. " +
+                    "Changing any setting replaces it with a complete safe document. " +
+                    UnionAirProjectSettings.Error,
+                    MessageType.Error);
             }
 
             if (UnionAirProjectSettings.SavePending)
             {
-                EditorGUILayout.LabelField("Persistence", "Retry scheduled");
                 EditorGUILayout.HelpBox(
                     "Project settings are active in memory but have not been saved. " +
+                    "Saving will be retried automatically. " +
                     UnionAirProjectSettings.SaveError,
                     MessageType.Warning);
             }
-            else if (UnionAirProjectSettings.IsValid)
-                EditorGUILayout.LabelField("Persistence", "Saved automatically");
-
-            var pending = UnionAirProjectSettings.PendingCapabilities();
-            if (pending.Length > 0)
-            {
-                EditorGUILayout.HelpBox(
-                    "Project settings request locally unapproved capabilities:\n" +
-                    string.Join("\n", pending),
-                    MessageType.Warning);
-                using (new EditorGUILayout.HorizontalScope())
-                {
-                    if (GUILayout.Button("Approve Requested"))
-                        UnionAirProjectSettings.ApprovePendingCapabilities();
-                    if (GUILayout.Button("Refuse Requested"))
-                        UnionAirProjectSettings.RefusePendingCapabilities();
-                }
-            }
-
-            var localCapabilities = UnionAirProjectSettings.LocalCapabilities();
-            if (localCapabilities.Length > 0)
-            {
-                EditorGUILayout.Space(4);
-                EditorGUILayout.LabelField("Local Access", EditorStyles.miniBoldLabel);
-                foreach (var local in localCapabilities)
-                {
-                    var enabled = EditorGUILayout.ToggleLeft(
-                        local.Capability,
-                        local.Enabled);
-                    if (enabled != local.Enabled)
-                        UnionAirProjectSettings.SetLocalCapabilityEnabled(
-                            local.Capability, enabled);
-                }
-            }
-
-            if (UnionAirProjectSettings.IsValid && GUILayout.Button("Forget Local Approvals"))
-                UnionAirProjectSettings.ForgetApprovals();
         }
 
         private void SyncPortInputs()
