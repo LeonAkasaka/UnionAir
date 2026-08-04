@@ -103,6 +103,39 @@ transient address-in-use result, the retained port gets one delayed retry before
 fresh port. Select **Fixed** in the EditorWindow when a script or CI environment needs a stable port
 in the range `1..65535`.
 
+## Project Configuration
+
+Use **Save Effective Settings** in the EditorWindow to create a reviewable
+`<project>/.unionair/settings.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "server": {
+    "port": 0,
+    "autoStart": true
+  },
+  "api": {
+    "enabledCategories": [],
+    "customHandlers": false
+  },
+  "playMode": {
+    "allowSceneChanges": false
+  }
+}
+```
+
+All fields are required. Built-in category IDs are bare (for example `assetWrite`); custom IDs use
+`custom:<id>`. Do not list `read`, which is always enabled. When this file is absent, the existing
+EditorPrefs and defaults remain in effect. When it is valid, its server values take precedence.
+When it is invalid, UnionAir applies none of it, disables auto-start, and exposes only Read.
+
+The file can request sensitive capabilities, but cannot grant them. Each user must approve newly
+requested categories, custom handlers, and Play Mode scene changes for that normalized project path
+in **Window > UnionAir > REST Bridge**. Effective access is the project request intersected with
+local approvals, minus local disables. Port-only changes and capability removals do not prompt
+again. Local approval decisions remain in `EditorPrefs` and are never written to the project file.
+
 ## Endpoints
 
 | Group | Scope | Security |
@@ -133,7 +166,7 @@ Read this before enabling any write category:
 - Requests with a non-empty body must use `Content-Type: application/json`. Empty POST requests remain valid without a content type.
 - Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, Editor Actions, Test Runner, Profiling, and Build categories are opt-in; enabling them exposes state-changing operations and diagnostic artifacts — including arbitrary project test code, heap snapshots, Unity Editor menu execution, and asset deletion — to any local process. Enable them only when every local client is trusted.
 - The **Build** category carries the `executableOutput` and `assetUpdate` risks. Enabling it lets any local process change build settings that are written to `ProjectSettings/` and shared with everyone who works on the project, and start a player build, which runs the project's build scripts and writes a runnable program to `Builds/UnionAir/` in the project directory. A build also occupies the Unity main thread for a minute or more, during which UnionAir answers nothing at all.
-- Category enablement is **not per-project**. It lives in `EditorPrefs`, which Unity scopes to the user account and Editor version, so a category enabled for one project stays enabled for every project opened with the same Editor.
+- Without `.unionair/settings.json`, category enablement retains the legacy `EditorPrefs` behavior and is shared by projects opened by that user and Editor version. With a project file, sensitive capabilities are scoped to the normalized project path and require a separate local approval; sharing the file never grants access on another machine.
 
 ## API Discovery
 

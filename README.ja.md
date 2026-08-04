@@ -104,6 +104,39 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 一時的なaddress-in-useが発生した場合は、保持したportを遅延後にもう一度試してからfresh portを
 選択します。scriptやCIで安定したportが必要な場合はEditorWindowで **Fixed** を選び、`1..65535`を指定します。
 
+## プロジェクト設定
+
+EditorWindow の **Save Effective Settings** で、レビュー可能な
+`<project>/.unionair/settings.json` を作成できます:
+
+```json
+{
+  "schemaVersion": 1,
+  "server": {
+    "port": 0,
+    "autoStart": true
+  },
+  "api": {
+    "enabledCategories": [],
+    "customHandlers": false
+  },
+  "playMode": {
+    "allowSceneChanges": false
+  }
+}
+```
+
+すべてのfieldが必須です。built-in category IDは`assetWrite`のようなbare ID、custom IDは
+`custom:<id>`を使います。常時有効な`read`は記載しません。ファイルがない場合は既存の
+EditorPrefs/default動作を維持し、有効なファイルがある場合はserver値が優先されます。不正な
+ファイルは一部も適用せず、auto-startを無効化してReadだけを公開します。
+
+このファイルは機密機能を要求できますが、許可を付与できません。各ユーザーは新しく要求された
+category、custom handler、Play Mode scene changeを、正規化されたproject pathごとに
+**Window > UnionAir > REST Bridge** で承認する必要があります。effective accessはproject要求と
+local承認の積集合からlocal無効化を引いたものです。portだけの変更や機能削減では再承認しません。
+local承認はEditorPrefsに残り、project fileには書き込まれません。
+
 ## エンドポイント
 
 | グループ | 範囲 | セキュリティ |
@@ -134,7 +167,7 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 - 空でないボディを持つリクエストには `Content-Type: application/json` が必要です。空の POST は Content-Type なしでも引き続き有効です。
 - 既定で有効なのは **Read** カテゴリのみです。Scene Write / Asset Write / Play Mode / Editor Actions / Test Runner / Profiling / Build はオプトインであり、有効化するとプロジェクトの任意のテストコード、heap snapshot、Unity Editor のメニュー実行、アセット削除を含む操作や診断成果物が、任意のローカルプロセスに公開されます。すべてのローカルクライアントを信頼できる場合にのみ有効化してください。
 - **Build** カテゴリは `executableOutput` と `assetUpdate` のリスクを持ちます。有効化すると、任意のローカルプロセスが `ProjectSettings/` に書き込まれプロジェクト関係者全員に共有されるビルド設定を変更でき、またプレイヤービルドを開始できるようになります。ビルドはプロジェクトのビルドスクリプトを実行し、実行可能なプログラムをプロジェクトディレクトリの `Builds/UnionAir/` に書き出します。またビルドは Unity のメインスレッドを 1 分以上占有し、その間 UnionAir は一切応答しません。
-- カテゴリの有効/無効は**プロジェクト単位ではありません**。設定は `EditorPrefs` に保存され、Unity はこれをユーザーアカウントと Editor バージョン単位で管理します。あるプロジェクトで有効化したカテゴリは、同じ Editor で開く他のすべてのプロジェクトでも有効なままになります。
+- `.unionair/settings.json`がない場合、category enablementは従来どおりEditorPrefsに保存され、そのユーザーとEditor versionで開くproject間で共有されます。project fileがある場合、機密機能は正規化project path単位となり、別途local承認が必要です。ファイルを共有しても別のマシンで権限は付与されません。
 
 ## API の発見
 

@@ -3,7 +3,7 @@ using UnityEditor;
 namespace LeonAkasaka.UnionAir.Editor
 {
     /// <summary>
-    /// Persistent UnionAir settings stored in Unity <see cref="EditorPrefs"/>.
+    /// Resolves UnionAir settings from project configuration or legacy <see cref="EditorPrefs"/>.
     /// </summary>
     public static class UnionAirSettings
     {
@@ -20,18 +20,20 @@ namespace LeonAkasaka.UnionAir.Editor
         /// A value of <c>0</c> selects Automatic mode; a running server exposes its concrete port
         /// through <see cref="RestHttpServer.Port"/>.
         /// </summary>
+        /// <remarks>A valid project settings file takes precedence over the stored EditorPrefs value.</remarks>
         public static int Port
         {
-            get => EditorPrefs.GetInt(PortKey, 0);
+            get => UnionAirProjectSettings.ResolvePort(EditorPrefs.GetInt(PortKey, 0));
             set => EditorPrefs.SetInt(PortKey, value);
         }
 
         /// <summary>
         /// Gets or sets whether UnionAir should start automatically when the Unity editor loads.
         /// </summary>
+        /// <remarks>A valid project settings file takes precedence over the stored EditorPrefs value.</remarks>
         public static bool AutoStart
         {
-            get => EditorPrefs.GetBool(AutoStartKey, true);
+            get => UnionAirProjectSettings.ResolveAutoStart(EditorPrefs.GetBool(AutoStartKey, true));
             set => EditorPrefs.SetBool(AutoStartKey, value);
         }
 
@@ -44,8 +46,16 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </remarks>
         public static bool CustomHandlersEnabled
         {
-            get => EditorPrefs.GetBool(CustomHandlersEnabledKey, false);
-            set => EditorPrefs.SetBool(CustomHandlersEnabledKey, value);
+            get => UnionAirProjectSettings.State == UnionAirProjectSettingsState.Missing
+                ? EditorPrefs.GetBool(CustomHandlersEnabledKey, false)
+                : UnionAirProjectSettings.CustomHandlersEnabled;
+            set
+            {
+                if (UnionAirProjectSettings.State == UnionAirProjectSettingsState.Missing)
+                    EditorPrefs.SetBool(CustomHandlersEnabledKey, value);
+                else
+                    UnionAirProjectSettings.SetCustomHandlersEnabled(value);
+            }
         }
 
         /// <summary>
@@ -53,8 +63,16 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </summary>
         public static bool AllowPlayModeSceneChanges
         {
-            get => EditorPrefs.GetBool(AllowPlayModeSceneChangesKey, false);
-            set => EditorPrefs.SetBool(AllowPlayModeSceneChangesKey, value);
+            get => UnionAirProjectSettings.State == UnionAirProjectSettingsState.Missing
+                ? EditorPrefs.GetBool(AllowPlayModeSceneChangesKey, false)
+                : UnionAirProjectSettings.AllowPlayModeSceneChanges;
+            set
+            {
+                if (UnionAirProjectSettings.State == UnionAirProjectSettingsState.Missing)
+                    EditorPrefs.SetBool(AllowPlayModeSceneChangesKey, value);
+                else
+                    UnionAirProjectSettings.SetAllowPlayModeSceneChanges(value);
+            }
         }
 
         /// <summary>
@@ -76,6 +94,10 @@ namespace LeonAkasaka.UnionAir.Editor
         public static bool IsCategoryEnabled(string key, bool enabledByDefault)
         {
             if (string.IsNullOrEmpty(key)) return false;
+            if (UnionAirProjectSettings.State == UnionAirProjectSettingsState.Valid)
+                return UnionAirProjectSettings.IsCategoryEnabled(key);
+            if (UnionAirProjectSettings.State == UnionAirProjectSettingsState.Invalid)
+                return false;
             var enabled = EditorPrefs.GetString(EnabledCategoriesKey, "");
             if (ContainsToken(enabled, key)) return true;
             var disabled = EditorPrefs.GetString(DisabledCategoriesKey, "");
@@ -92,6 +114,12 @@ namespace LeonAkasaka.UnionAir.Editor
         public static void SetCategoryEnabled(string key, bool enabled, bool enabledByDefault)
         {
             if (string.IsNullOrEmpty(key)) return;
+
+            if (UnionAirProjectSettings.State != UnionAirProjectSettingsState.Missing)
+            {
+                UnionAirProjectSettings.SetCategoryEnabled(key, enabled);
+                return;
+            }
 
             var explicitlyEnabled = EditorPrefs.GetString(EnabledCategoriesKey, "");
             var disabled = EditorPrefs.GetString(DisabledCategoriesKey, "");

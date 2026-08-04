@@ -29,6 +29,8 @@ namespace LeonAkasaka.UnionAir.Editor
         private int _portInput;
         private int _portMode;
         private int _tab;
+        private string _projectSettingsMessage;
+        private MessageType _projectSettingsMessageType;
 
         /// <summary>
         /// Opens the UnionAir REST Bridge window.
@@ -43,9 +45,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private void OnEnable()
         {
-            var configuredPort = UnionAirSettings.Port;
-            _portMode = configuredPort == 0 ? 0 : 1;
-            _portInput = configuredPort == 0 ? 8765 : configuredPort;
+            SyncPortInputs();
             _tab = EditorPrefs.GetInt(PrefKeyTab, 0);
             UnionAirInit.Server.OnRequest += AddLog;
         }
@@ -116,7 +116,8 @@ namespace LeonAkasaka.UnionAir.Editor
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Server", EditorStyles.boldLabel);
-            using (new EditorGUI.DisabledScope(isRunning))
+            var projectControlled = UnionAirProjectSettings.IsProjectControlled;
+            using (new EditorGUI.DisabledScope(isRunning || projectControlled))
             {
                 _portMode = EditorGUILayout.Popup(
                     "Port Mode",
@@ -134,12 +135,19 @@ namespace LeonAkasaka.UnionAir.Editor
                     "Fixed Port must be between 1 and 65535.",
                     MessageType.Error);
 
-            UnionAirSettings.AutoStart =
-                EditorGUILayout.Toggle("Auto Start on Load", UnionAirSettings.AutoStart);
+            if (projectControlled)
+                EditorGUILayout.LabelField(
+                    "Auto Start on Load",
+                    UnionAirSettings.AutoStart ? "Enabled (Project)" : "Disabled (Project)");
+            else
+                UnionAirSettings.AutoStart =
+                    EditorGUILayout.Toggle("Auto Start on Load", UnionAirSettings.AutoStart);
             UnionAirSettings.DiagnosticLifecycleLogging =
                 EditorGUILayout.Toggle(
                     "Diagnostic Lifecycle Logging",
                     UnionAirSettings.DiagnosticLifecycleLogging);
+
+            DrawProjectConfiguration();
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Play Mode Safety", EditorStyles.boldLabel);
@@ -290,6 +298,88 @@ namespace LeonAkasaka.UnionAir.Editor
             foreach (var line in _log)
                 EditorGUILayout.LabelField(line, EditorStyles.miniLabel);
             EditorGUILayout.EndScrollView();
+        }
+
+        private void DrawProjectConfiguration()
+        {
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField("Project Configuration", EditorStyles.boldLabel);
+            EditorGUILayout.SelectableLabel(
+                UnionAirProjectSettings.SettingsPath,
+                EditorStyles.miniLabel,
+                GUILayout.Height(EditorGUIUtility.singleLineHeight));
+
+            switch (UnionAirProjectSettings.State)
+            {
+                case UnionAirProjectSettingsState.Valid:
+                    EditorGUILayout.LabelField("Source", ".unionair/settings.json");
+                    break;
+                case UnionAirProjectSettingsState.Invalid:
+                    EditorGUILayout.HelpBox(
+                        "Invalid settings.json; auto-start and sensitive capabilities fail closed. " +
+                        UnionAirProjectSettings.Error,
+                        MessageType.Error);
+                    break;
+                default:
+                    EditorGUILayout.LabelField("Source", "EditorPrefs / defaults");
+                    break;
+            }
+
+            var pending = UnionAirProjectSettings.PendingCapabilities();
+            if (pending.Length > 0)
+            {
+                EditorGUILayout.HelpBox(
+                    "Project settings request locally unapproved capabilities:\n" +
+                    string.Join("\n", pending),
+                    MessageType.Warning);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Approve Requested"))
+                        UnionAirProjectSettings.ApprovePendingCapabilities();
+                    if (GUILayout.Button("Refuse Requested"))
+                        UnionAirProjectSettings.RefusePendingCapabilities();
+                }
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Save Effective Settings"))
+                {
+                    string error;
+                    if (UnionAirProjectSettings.TrySaveEffective(out error))
+                    {
+                        _projectSettingsMessage = "Saved .unionair/settings.json.";
+                        _projectSettingsMessageType = MessageType.Info;
+                        SyncPortInputs();
+                    }
+                    else
+                    {
+                        _projectSettingsMessage = error;
+                        _projectSettingsMessageType = MessageType.Error;
+                    }
+                }
+
+                if (GUILayout.Button("Reload"))
+                {
+                    UnionAirProjectSettings.Reload(true);
+                    SyncPortInputs();
+                    _projectSettingsMessage = "Reloaded project settings.";
+                    _projectSettingsMessageType = MessageType.Info;
+                }
+            }
+
+            if (UnionAirProjectSettings.IsValid && GUILayout.Button("Forget Local Approvals"))
+                UnionAirProjectSettings.ForgetApprovals();
+
+            if (!string.IsNullOrEmpty(_projectSettingsMessage))
+                EditorGUILayout.HelpBox(_projectSettingsMessage, _projectSettingsMessageType);
+        }
+
+        private void SyncPortInputs()
+        {
+            var configuredPort = UnionAirSettings.Port;
+            _portMode = configuredPort == 0 ? 0 : 1;
+            _portInput = configuredPort == 0 ? 8765 : configuredPort;
         }
 
         private static void DrawCopyableUrl(string label, string url)

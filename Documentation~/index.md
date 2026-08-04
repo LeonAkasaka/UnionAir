@@ -51,6 +51,32 @@ start. Read and trim the file, call `{baseUrl}health` with a short timeout, veri
 failed health check, or project mismatch as no validated server; a hard process crash can leave
 stale discovery state that now points at another project's Editor.
 
+### Project settings and local approval
+
+The EditorWindow can save the current effective configuration to
+`<project>/.unionair/settings.json`. The strict v1 document is:
+
+```json
+{
+  "schemaVersion": 1,
+  "server": { "port": 0, "autoStart": true },
+  "api": { "enabledCategories": [], "customHandlers": false },
+  "playMode": { "allowSceneChanges": false }
+}
+```
+
+Every field is required. Built-in category IDs are bare; custom category IDs use `custom:<id>`.
+`read` must not be listed because it is always enabled. Unknown or duplicate fields and categories,
+wrong types, unsupported schemas, invalid ports, and a custom category without `customHandlers:true`
+invalidate the entire document. Invalid settings disable auto-start and fail closed to Read only.
+
+A valid file supplies project values before the auto-start decision, but sensitive values are
+requests, not grants. Use the EditorWindow to approve or refuse newly requested categories, custom
+handlers, and Play Mode scene changes. These decisions are stored in EditorPrefs under a normalized
+project-path key and are not shared through Git. A local category toggle can further disable an
+approved request. Removing capabilities or changing only the port does not require a new approval.
+When the file is absent, the legacy EditorPrefs/default behavior is unchanged.
+
 ### 3. Verify operation
 
 ```bash
@@ -116,6 +142,7 @@ curl "${BASE_URL}assets?path=Assets/UI"
 | **Status** | Displays the server running state and port number |
 | **Port Mode** | Automatic (default) or Fixed; Fixed accepts `1..65535` while stopped |
 | **Auto Start on Load** | Whether to start the server automatically when the Editor starts |
+| **Project Configuration** | Shows `.unionair/settings.json` validity/source; save, reload, approve/refuse requests, and revoke local approvals |
 | **Diagnostic Lifecycle Logging** | Streams detailed listener lifecycle events to the Console; disabled by default |
 | **Start / Stop / Restart** | Manual control of the server |
 | **Request Log** | Log of received requests (latest 100 entries) |

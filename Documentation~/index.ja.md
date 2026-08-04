@@ -54,6 +54,31 @@ Window > UnionAir > REST Bridge
 ない場合、health checkに失敗した場合、projectが一致しない場合は、検証済みserverがないものとして
 扱います。processが強制終了すると、別projectのEditorを指す古い発見情報が残る可能性があります。
 
+### Project設定とlocal承認
+
+EditorWindowから現在のeffective設定を`<project>/.unionair/settings.json`へ保存できます。strictな
+v1 documentは次の形です:
+
+```json
+{
+  "schemaVersion": 1,
+  "server": { "port": 0, "autoStart": true },
+  "api": { "enabledCategories": [], "customHandlers": false },
+  "playMode": { "allowSceneChanges": false }
+}
+```
+
+すべてのfieldが必須です。built-in categoryはbare ID、custom categoryは`custom:<id>`を使います。
+常時有効な`read`は記載できません。未知または重複したfield/category、型違い、未対応schema、無効な
+port、`customHandlers:true`なしのcustom categoryはdocument全体を不正にします。不正な設定では
+auto-startを無効化し、Readだけの安全状態へ移行します。
+
+有効なファイルはauto-start判断より先にproject値を供給しますが、機密値は要求であって許可では
+ありません。新しく要求されたcategory、custom handler、Play Mode scene changeはEditorWindowで
+承認または拒否します。判断は正規化project pathのkeyでEditorPrefsへ保存され、Gitでは共有されません。
+local category toggleで承認済み要求をさらに無効化できます。機能削減やportだけの変更は再承認を
+求めません。ファイルがない場合は従来のEditorPrefs/default動作を維持します。
+
 ### 3. 動作確認
 
 ```bash
@@ -119,6 +144,7 @@ curl "${BASE_URL}assets?path=Assets/UI"
 | **Status** | サーバの稼働状態とポート番号を表示 |
 | **Port Mode** | Automatic(デフォルト)またはFixed。停止中にFixedの`1..65535`を指定可能 |
 | **Auto Start on Load** | Editor 起動時にサーバを自動起動するかどうか |
+| **Project Configuration** | `.unionair/settings.json`のvalidity/source表示、保存、reload、要求の承認/拒否、local承認解除 |
 | **Diagnostic Lifecycle Logging** | listener の詳細なライフサイクルイベントを Console へ逐次出力するかどうか(デフォルトでは無効) |
 | **Start / Stop / Restart** | サーバの手動制御 |
 | **Request Log** | 受信リクエストのログ(最新100件) |
