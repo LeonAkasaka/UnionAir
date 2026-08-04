@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.4.0] - 2026-08-04
+
+### Upgrade Notes
+
+- Console-log `timestamp` values are now UTC ISO 8601 with a `Z` suffix. Clients that interpreted the previous offset-free values as local time must update their parser.
+- The configured port now defaults to Automatic. Clients should read `.unionair/endpoint.txt` at connection time and reread it after a refused connection instead of assuming port `8765`.
+- A valid `.unionair/settings.json` takes precedence over EditorPrefs, but sensitive capabilities remain disabled until each user approves the project request locally. An invalid document fails closed rather than partially applying values.
 
 ### Added
 
@@ -313,5 +319,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 <!-- 0.1.0 and 0.2.0 predate this repository being published and were never tagged,
      so they have no release page to link to. -->
-[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.4.0
 [0.3.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.3.0

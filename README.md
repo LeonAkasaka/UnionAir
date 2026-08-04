@@ -73,7 +73,7 @@ disabled by default and upgrading the package should stay the project's decision
 3. Enter:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
+https://github.com/LeonAkasaka/UnionAir.git#v0.4.0
 ```
 
 ### Via manifest.json
@@ -83,7 +83,7 @@ Add the dependency to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.3.0"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.4.0"
   }
 }
 ```
