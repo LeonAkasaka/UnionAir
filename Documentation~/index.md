@@ -36,7 +36,8 @@ Reading compilation results needs no setup — `GET /api/compile` is in the alwa
 
 ### 2. Check the server
 
-When you open the Unity Editor, the REST server starts automatically (default port: **8765**).
+When you open the Unity Editor, the REST server starts automatically. The default port mode is
+**Automatic**; a free concrete loopback port is selected and published through the discovery file.
 
 ```
 Window > UnionAir > REST Bridge
@@ -53,7 +54,8 @@ stale discovery state that now points at another project's Editor.
 ### 3. Verify operation
 
 ```bash
-curl http://localhost:8765/api/health
+BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"
+curl "${BASE_URL}health"
 # => {"status":"ok","unityVersion":"6000.3.5f2","projectPath":"C:\\Work\\MyProject"}
 ```
 
@@ -64,7 +66,7 @@ curl http://localhost:8765/api/health
 ### Get the scene hierarchy
 
 ```bash
-curl http://localhost:8765/api/scene/hierarchy
+curl "${BASE_URL}scene/hierarchy"
 ```
 
 ```json
@@ -91,7 +93,7 @@ curl http://localhost:8765/api/scene/hierarchy
 ### Check the components of a specific GameObject
 
 ```bash
-curl --get "http://localhost:8765/api/gameobjects" \
+curl --get "${BASE_URL}gameobjects" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 ```
 
@@ -99,10 +101,10 @@ curl --get "http://localhost:8765/api/gameobjects" \
 
 ```bash
 # All Texture2D
-curl "http://localhost:8765/api/assets?type=Texture2D"
+curl "${BASE_URL}assets?type=Texture2D"
 
 # Filter by path
-curl "http://localhost:8765/api/assets?path=Assets/UI"
+curl "${BASE_URL}assets?path=Assets/UI"
 ```
 
 ---
@@ -112,7 +114,7 @@ curl "http://localhost:8765/api/assets?path=Assets/UI"
 | Item | Description |
 |------|------|
 | **Status** | Displays the server running state and port number |
-| **Port** | The server listening port (can only be changed while stopped) |
+| **Port Mode** | Automatic (default) or Fixed; Fixed accepts `1..65535` while stopped |
 | **Auto Start on Load** | Whether to start the server automatically when the Editor starts |
 | **Diagnostic Lifecycle Logging** | Streams detailed listener lifecycle events to the Console; disabled by default |
 | **Start / Stop / Restart** | Manual control of the server |

@@ -95,9 +95,12 @@ Pin the tag. `main` is kept releasable but runs ahead of it, and a UPM Git URL t
 1. The package auto-starts an HTTP server when the Unity Editor loads.
 2. Open **Window > UnionAir > REST Bridge** to view status and configure the port.
 
-## Default Port
+## Port Selection
 
-`8765` — configurable via the EditorWindow.
+The default is **Automatic**. UnionAir resolves a free loopback port, normally reuses it across
+domain reloads in the same Editor process, and publishes the concrete URL through
+`.unionair/endpoint.txt`. Select **Fixed** in the EditorWindow when a script or CI environment needs
+a stable port in the range `1..65535`.
 
 ## Endpoints
 
@@ -147,24 +150,26 @@ ignored.
 ## Quick Example
 
 ```bash
+BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"
+
 # Health check
-curl http://localhost:8765/api/health
+curl "${BASE_URL}health"
 
 # Scene hierarchy
-curl http://localhost:8765/api/scene/hierarchy
+curl "${BASE_URL}scene/hierarchy"
 
 # Loaded scenes
-curl http://localhost:8765/api/scenes
+curl "${BASE_URL}scenes"
 
 # Specific GameObject
-curl --get "http://localhost:8765/api/gameobjects" \
+curl --get "${BASE_URL}gameobjects" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 
 # All assets of type Texture2D
-curl "http://localhost:8765/api/assets?type=Texture2D"
+curl "${BASE_URL}assets?type=Texture2D"
 
 # Create a new empty GameObject (requires the Scene Write category to be enabled)
-curl -X POST http://localhost:8765/api/gameobjects \
+curl -X POST "${BASE_URL}gameobjects" \
   -H "Content-Type: application/json" \
   -d '{"name":"MyObject","parent":{"type":"hierarchyPath","value":"Canvas"}}'
 ```

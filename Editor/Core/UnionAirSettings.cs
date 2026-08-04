@@ -16,11 +16,13 @@ namespace LeonAkasaka.UnionAir.Editor
         private const string DisabledCategoriesKey = "UnionAir.DisabledCategories";
 
         /// <summary>
-        /// Gets or sets the TCP port used by the local HTTP server.
+        /// Gets or sets the configured TCP port used by the local HTTP server.
+        /// A value of <c>0</c> selects Automatic mode; a running server exposes its concrete port
+        /// through <see cref="RestHttpServer.Port"/>.
         /// </summary>
         public static int Port
         {
-            get => EditorPrefs.GetInt(PortKey, 8765);
+            get => EditorPrefs.GetInt(PortKey, 0);
             set => EditorPrefs.SetInt(PortKey, value);
         }
 

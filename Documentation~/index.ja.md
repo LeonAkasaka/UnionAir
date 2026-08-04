@@ -39,7 +39,8 @@ Test Runner API は任意機能です。プロジェクトに Unity Test Framewo
 
 ### 2. サーバの確認
 
-Unity Editor を開くと、REST サーバが自動的に起動します(デフォルトポート: **8765**)。
+Unity Editor を開くと、REST サーバが自動的に起動します。デフォルトのport modeは
+**Automatic** で、空いている具体的なloopback portを選択してdiscovery fileへ公開します。
 
 ```
 Window > UnionAir > REST Bridge
@@ -56,7 +57,8 @@ Window > UnionAir > REST Bridge
 ### 3. 動作確認
 
 ```bash
-curl http://localhost:8765/api/health
+BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"
+curl "${BASE_URL}health"
 # => {"status":"ok","unityVersion":"6000.3.5f2","projectPath":"C:\\Work\\MyProject"}
 ```
 
@@ -67,7 +69,7 @@ curl http://localhost:8765/api/health
 ### シーン階層の取得
 
 ```bash
-curl http://localhost:8765/api/scene/hierarchy
+curl "${BASE_URL}scene/hierarchy"
 ```
 
 ```json
@@ -94,7 +96,7 @@ curl http://localhost:8765/api/scene/hierarchy
 ### 特定の GameObject のコンポーネントを確認
 
 ```bash
-curl --get "http://localhost:8765/api/gameobjects" \
+curl --get "${BASE_URL}gameobjects" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 ```
 
@@ -102,10 +104,10 @@ curl --get "http://localhost:8765/api/gameobjects" \
 
 ```bash
 # すべての Texture2D
-curl "http://localhost:8765/api/assets?type=Texture2D"
+curl "${BASE_URL}assets?type=Texture2D"
 
 # パスで絞り込み
-curl "http://localhost:8765/api/assets?path=Assets/UI"
+curl "${BASE_URL}assets?path=Assets/UI"
 ```
 
 ---
@@ -115,7 +117,7 @@ curl "http://localhost:8765/api/assets?path=Assets/UI"
 | 項目 | 説明 |
 |------|------|
 | **Status** | サーバの稼働状態とポート番号を表示 |
-| **Port** | サーバの待ち受けポート(停止中のみ変更可能) |
+| **Port Mode** | Automatic(デフォルト)またはFixed。停止中にFixedの`1..65535`を指定可能 |
 | **Auto Start on Load** | Editor 起動時にサーバを自動起動するかどうか |
 | **Diagnostic Lifecycle Logging** | listener の詳細なライフサイクルイベントを Console へ逐次出力するかどうか(デフォルトでは無効) |
 | **Start / Stop / Restart** | サーバの手動制御 |

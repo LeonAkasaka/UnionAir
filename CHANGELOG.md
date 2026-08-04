@@ -59,6 +59,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Breaking:** The configured server port now defaults to Automatic (`0`) instead of fixed port `8765`. Automatic mode resolves a concrete loopback port before starting `HttpListener`, retains that assignment across domain reloads in the same Editor process when possible, and republishes `.unionair/endpoint.txt` when a conflict forces reassignment. Fixed ports `1..65535` remain available through the EditorWindow.
+
 - **Breaking:** a script compilation started by a player build is now recorded with `source: "build"` and a `buildId` naming the build, instead of being adopted as an unrelated `external` cycle. `GET /api/compile/records?source=` accepts `build` alongside `unionAir` and `external`, and every compile record now carries a `buildId` field that is `null` for cycles no build owns. A client that treated `source` as a two-value field must be updated.
 - `POST /api/editor/play` is now rejected with `409` while a script compilation is active. Entering Play mode during a compilation loses the request: Unity reloads the domain when the cycle finishes and discards the mode change with it. `POST /api/editor/stop`, `pause`, and `step` are deliberately unaffected — stopping a running game is exactly what a client needs to be able to do while something else is in flight.
 - **Breaking:** `POST /api/compile` now returns `500` when the compile record cannot be written, instead of starting a compilation whose result it could not report. The response promises an id to poll and a compilation ends in a domain reload that discards the in-memory copy, so a record that never reached disk makes that promise unkeepable.

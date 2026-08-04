@@ -27,6 +27,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private Vector2 _scroll;
         private Vector2 _logScroll;
         private int _portInput;
+        private int _portMode;
         private int _tab;
 
         /// <summary>
@@ -42,7 +43,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private void OnEnable()
         {
-            _portInput = UnionAirSettings.Port;
+            var configuredPort = UnionAirSettings.Port;
+            _portMode = configuredPort == 0 ? 0 : 1;
+            _portInput = configuredPort == 0 ? 8765 : configuredPort;
             _tab = EditorPrefs.GetInt(PrefKeyTab, 0);
             UnionAirInit.Server.OnRequest += AddLog;
         }
@@ -114,7 +117,22 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Server", EditorStyles.boldLabel);
             using (new EditorGUI.DisabledScope(isRunning))
-                _portInput = EditorGUILayout.IntField("Port", _portInput);
+            {
+                _portMode = EditorGUILayout.Popup(
+                    "Port Mode",
+                    _portMode,
+                    new[] { "Automatic", "Fixed" });
+                using (new EditorGUI.DisabledScope(_portMode == 0))
+                    _portInput = EditorGUILayout.IntField("Fixed Port", _portInput);
+            }
+
+            var configuredPort = _portMode == 0 ? 0 : _portInput;
+            var portIsValid = UnionAirPortAllocator.IsValidConfiguredPort(configuredPort) &&
+                              (_portMode == 0 || UnionAirPortAllocator.IsValidConcretePort(_portInput));
+            if (!portIsValid)
+                EditorGUILayout.HelpBox(
+                    "Fixed Port must be between 1 and 65535.",
+                    MessageType.Error);
 
             UnionAirSettings.AutoStart =
                 EditorGUILayout.Toggle("Auto Start on Load", UnionAirSettings.AutoStart);
@@ -134,12 +152,12 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorGUILayout.Space(8);
             using (new EditorGUILayout.HorizontalScope())
             {
-                using (new EditorGUI.DisabledScope(isRunning))
+                using (new EditorGUI.DisabledScope(isRunning || !portIsValid))
                 {
                     if (GUILayout.Button("Start"))
                     {
-                        UnionAirSettings.Port = _portInput;
-                        UnionAirInit.StartServerManually(_portInput);
+                        UnionAirSettings.Port = configuredPort;
+                        UnionAirInit.StartServerManually(configuredPort);
                     }
                 }
 
@@ -149,10 +167,13 @@ namespace LeonAkasaka.UnionAir.Editor
                         UnionAirInit.StopServerManually();
                 }
 
-                if (GUILayout.Button("Restart"))
+                using (new EditorGUI.DisabledScope(!portIsValid))
                 {
-                    UnionAirSettings.Port = _portInput;
-                    UnionAirInit.RestartServerManually(_portInput);
+                    if (GUILayout.Button("Restart"))
+                    {
+                        UnionAirSettings.Port = configuredPort;
+                        UnionAirInit.RestartServerManually(configuredPort);
+                    }
                 }
             }
 
@@ -383,8 +404,12 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 var state = endpoint.Enabled ? "" : " [disabled]";
                 EditorGUILayout.LabelField($"{endpoint.Method,-6} {endpoint.Path}{state}", EditorStyles.miniLabel);
-                if (GUILayout.Button("Copy", EditorStyles.miniButton, GUILayout.Width(46)))
-                    GUIUtility.systemCopyBuffer = $"http://localhost:{UnionAirSettings.Port}{endpoint.Path}";
+                var server = UnionAirInit.Server;
+                using (new EditorGUI.DisabledScope(!server.IsRunning))
+                {
+                    if (GUILayout.Button("Copy", EditorStyles.miniButton, GUILayout.Width(46)))
+                        GUIUtility.systemCopyBuffer = $"http://localhost:{server.Port}{endpoint.Path}";
+                }
             }
         }
 

@@ -54,7 +54,8 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorApplication.update -= LogStore.Update;
             EditorApplication.update += LogStore.Update;
             LogLifecycle(
-                $"initialize autoStart={UnionAirSettings.AutoStart} port={UnionAirSettings.Port}");
+                $"initialize autoStart={UnionAirSettings.AutoStart} " +
+                $"configuredPort={DescribeConfiguredPort(UnionAirSettings.Port)}");
 
             if (UnionAirSettings.AutoStart)
                 ScheduleAutoStart("editor-load");
@@ -166,7 +167,8 @@ namespace LeonAkasaka.UnionAir.Editor
             _autoStartReason = reason;
             EditorApplication.update += ProcessAutoStart;
             LogLifecycle(
-                $"auto-start scheduled reason={reason} port={UnionAirSettings.Port} " +
+                $"auto-start scheduled reason={reason} " +
+                $"configuredPort={DescribeConfiguredPort(UnionAirSettings.Port)} " +
                 $"initialDelaySeconds={initialDelaySeconds:0.##}");
         }
 
@@ -196,7 +198,8 @@ namespace LeonAkasaka.UnionAir.Editor
             var attempt = _retryDelayIndex + 1;
             var port = UnionAirSettings.Port;
             LogLifecycle(
-                $"auto-start attempt={attempt} reason={_autoStartReason} port={port}");
+                $"auto-start attempt={attempt} reason={_autoStartReason} " +
+                $"configuredPort={DescribeConfiguredPort(port)}");
 
             if (Server.TryStart(
                     port,
@@ -220,7 +223,7 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 Debug.LogError(
                     $"[UnionAir] Automatic server startup failed after {attempt} attempts on " +
-                    $"port {port}: the address remains in use.");
+                    $"configured port {DescribeConfiguredPort(port)}: the address remains in use.");
                 UnionAirLifecycleDiagnostics.DumpFailure(
                     $"automatic startup exhausted {attempt} attempts " +
                     $"for reason={_autoStartReason} port={port}");
@@ -256,5 +259,8 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             UnionAirLifecycleDiagnostics.Record($"{LifecyclePrefix} {message}");
         }
+
+        private static string DescribeConfiguredPort(int port)
+            => port == 0 ? "automatic" : "fixed:" + port;
     }
 }

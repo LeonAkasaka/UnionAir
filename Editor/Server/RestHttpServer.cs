@@ -93,6 +93,50 @@ namespace LeonAkasaka.UnionAir.Editor
 
         internal bool TryStart(int port, string reason, bool suppressAddressInUseError)
         {
+            if (!UnionAirPortAllocator.IsValidConfiguredPort(port))
+            {
+                LastStartFailureWasAddressInUse = false;
+                Debug.LogError(
+                    $"[UnionAir] Invalid configured port {port}. Use 0 for Automatic or 1..65535 for Fixed.");
+                return false;
+            }
+
+            if (port != 0)
+                return TryStartConcrete(port, reason, suppressAddressInUseError);
+
+            var retained = UnionAirSession.LoadAutomaticPort();
+            int assigned;
+            var result = UnionAirPortAllocator.TryStartAutomatic(
+                retained,
+                candidate =>
+                {
+                    if (TryStartConcrete(candidate, reason + "-automatic", true))
+                        return UnionAirPortStartResult.Started;
+                    return LastStartFailureWasAddressInUse
+                        ? UnionAirPortStartResult.AddressInUse
+                        : UnionAirPortStartResult.Failed;
+                },
+                UnionAirPortAllocator.AllocateLoopbackPort,
+                out assigned);
+
+            if (result == UnionAirPortStartResult.Started)
+            {
+                UnionAirSession.SaveAutomaticPort(assigned);
+                LogLifecycle(
+                    $"automatic port assigned configuredPort=0 retainedPort={retained} assignedPort={assigned}");
+                return true;
+            }
+
+            LastStartFailureWasAddressInUse = result == UnionAirPortStartResult.AddressInUse;
+            if (LastStartFailureWasAddressInUse && !suppressAddressInUseError)
+                Debug.LogError(
+                    $"[UnionAir] Automatic server startup exhausted " +
+                    $"{UnionAirPortAllocator.MaximumFreshCandidates} fresh port candidates.");
+            return false;
+        }
+
+        private bool TryStartConcrete(int port, string reason, bool suppressAddressInUseError)
+        {
             if (_state != null)
                 StopInternal("replacement-start");
 

@@ -97,9 +97,11 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 1. Unity Editor のロード時に HTTP サーバが自動的に起動します。
 2. **Window > UnionAir > REST Bridge** を開くと、状態の確認とポートの設定ができます。
 
-## デフォルトポート
+## ポート選択
 
-`8765` — EditorWindow から変更可能です。
+デフォルトは **Automatic** です。UnionAir は空いているloopback portを解決し、同じEditor process
+内のdomain reloadでは通常そのportを再利用して、実際のURLを`.unionair/endpoint.txt`へ公開します。
+scriptやCIで安定したportが必要な場合はEditorWindowで **Fixed** を選び、`1..65535`を指定します。
 
 ## エンドポイント
 
@@ -149,24 +151,26 @@ UnionAir は `.unionair/.gitignore` を管理し、`endpoint.txt` と原子的�
 ## クイックサンプル
 
 ```bash
+BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"
+
 # ヘルスチェック
-curl http://localhost:8765/api/health
+curl "${BASE_URL}health"
 
 # シーン階層
-curl http://localhost:8765/api/scene/hierarchy
+curl "${BASE_URL}scene/hierarchy"
 
 # ロード済みシーン
-curl http://localhost:8765/api/scenes
+curl "${BASE_URL}scenes"
 
 # 特定の GameObject
-curl --get "http://localhost:8765/api/gameobjects" \
+curl --get "${BASE_URL}gameobjects" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 
 # Texture2D 型のアセット一覧
-curl "http://localhost:8765/api/assets?type=Texture2D"
+curl "${BASE_URL}assets?type=Texture2D"
 
 # 空の GameObject を作成(Scene Write カテゴリの有効化が必要)
-curl -X POST http://localhost:8765/api/gameobjects \
+curl -X POST "${BASE_URL}gameobjects" \
   -H "Content-Type: application/json" \
   -d '{"name":"MyObject","parent":{"type":"hierarchyPath","value":"Canvas"}}'
 ```
