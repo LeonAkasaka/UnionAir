@@ -33,7 +33,7 @@ public class MyToolController
 
 This example registers `GET /api/custom/my-tool/status`.
 
-Custom handlers are disabled by default. Enable them in **Window > UnionAir > REST Bridge > Custom Handlers**. Custom categories can also be enabled or disabled independently.
+Custom handlers are disabled by default. Enable them in **Window > UnionAir > REST Bridge > Custom Handlers**. Custom categories can then be enabled or disabled independently; their checkboxes remain disabled while the Custom Handlers master switch is off.
 
 `Category` is a string so custom extensions can define their own grouping labels in `/api/help` and the EditorWindow. Built-in endpoints use `UnionAirEndpointCategories.Read`, `SceneWrite`, `AssetWrite`, `PlayMode`, `EditorActions`, `Profiling`, and the optional `TestRunner`. Category metadata controls enablement and default risk reporting. `Risk` is descriptive metadata for tools and LLMs; category enablement controls whether requests are accepted. Endpoints can set `UseRiskOverride = true` and `Risk = ...` when a route has a narrower risk profile than its category.
 

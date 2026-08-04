@@ -77,6 +77,7 @@ auto-startを無効化し、Readだけの安全状態へ移行します。最初
 有効なファイルはauto-start判断より先にproject値を供給します。Built-in APIのcategory checkbox、
 **Custom Handlers > Enable Custom Handlers**、Play Modeのscene change checkboxが唯一のcontrolであり、
 その値を直接ファイルへ保存します。端末別の承認レイヤーはありません。
+custom categoryのcheckboxは、Custom Handlersのmaster switchを有効にするまで操作できません。
 **Disable All Sensitive APIs...**はportとauto-startを維持したまま、すべての任意category、
 custom handler、Play Mode scene changeを無効化します。ファイルがない場合は、schema対象の最初の
 UI変更までは従来のEditorPrefs/default動作を維持します。その変更時に現在のeffective値を完全な

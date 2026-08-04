@@ -203,6 +203,44 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             }
         }
 
+        [Test]
+        public void Save_WritesSettingsEvenWhenIgnoreMaintenanceFails()
+        {
+            var projectRoot = Path.Combine(
+                Path.GetTempPath(),
+                "UnionAirProjectSettingsIgnoreTests-" + Guid.NewGuid().ToString("N"));
+            var integrationDirectory = Path.Combine(projectRoot, ".unionair");
+            var settingsPath = Path.Combine(integrationDirectory, "settings.json");
+            Directory.CreateDirectory(Path.Combine(integrationDirectory, ".gitignore"));
+            try
+            {
+                UnionAirProjectSettingsDocument document;
+                string parseError;
+                Assert.IsTrue(UnionAirProjectSettingsParser.TryParse(
+                    Valid, KnownCustom, out document, out parseError), parseError);
+
+                string persistenceError;
+                string ignoreWarning;
+                Assert.IsTrue(UnionAirProjectSettings.TryWriteDocument(
+                    settingsPath,
+                    projectRoot,
+                    document,
+                    out persistenceError,
+                    out ignoreWarning));
+
+                Assert.IsNull(persistenceError);
+                StringAssert.Contains(".unionair/.gitignore", ignoreWarning);
+                Assert.IsTrue(File.Exists(settingsPath));
+                Assert.AreEqual(
+                    UnionAirProjectSettingsParser.Serialize(document),
+                    File.ReadAllText(settingsPath, new UTF8Encoding(false)));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, true);
+            }
+        }
+
         [TestCase(-1)]
         [TestCase(65536)]
         public void PublicPortSetter_RejectsInvalidConfiguredPorts(int port)
@@ -425,6 +463,8 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             UnionAirProjectSettingsDocumentModel.SetAutoStart(document, true);
             UnionAirProjectSettingsDocumentModel.SetCategoryEnabled(
                 document, "assetWrite", true);
+            UnionAirProjectSettingsDocumentModel.SetCustomHandlersEnabled(
+                document, true);
             UnionAirProjectSettingsDocumentModel.SetCategoryEnabled(
                 document, "custom:toolActions", true);
             UnionAirProjectSettingsDocumentModel.SetAllowSceneChanges(document, true);
@@ -441,6 +481,25 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             CollectionAssert.AreEquivalent(
                 new[] { "assetWrite", "custom:toolActions" },
                 restored.EnabledCategories);
+        }
+
+        [Test]
+        public void WorkingDocument_CustomCategoryRequiresTheMasterToggle()
+        {
+            var document = new UnionAirProjectSettingsDocument
+            {
+                CustomHandlers = false
+            };
+
+            var error = Assert.Throws<InvalidOperationException>(delegate
+            {
+                UnionAirProjectSettingsDocumentModel.SetCategoryEnabled(
+                    document, "custom:toolActions", true);
+            });
+
+            StringAssert.Contains("Enable Custom Handlers", error.Message);
+            Assert.IsFalse(document.CustomHandlers);
+            CollectionAssert.IsEmpty(document.EnabledCategories);
         }
 
         [Test]

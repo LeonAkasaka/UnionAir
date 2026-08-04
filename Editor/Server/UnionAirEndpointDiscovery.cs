@@ -144,6 +144,21 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
+        internal static void UpdateIgnoreWarning(string warning)
+        {
+            if (!string.IsNullOrEmpty(warning))
+            {
+                ReportWarning(warning);
+                return;
+            }
+
+            if (LastWarning != null &&
+                LastWarning.StartsWith(
+                    "Failed to maintain .unionair/.gitignore:",
+                    StringComparison.Ordinal))
+                ClearWarning();
+        }
+
         internal static bool TryRemoveOwned(
             string projectRoot,
             string expectedBaseUrl,

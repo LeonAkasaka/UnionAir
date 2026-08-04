@@ -36,7 +36,7 @@ public class MyToolController
 
 この例は `GET /api/custom/my-tool/status` を登録します。
 
-カスタムハンドラーは既定で無効です。**Window > UnionAir > REST Bridge > Custom Handlers** で有効化してください。カスタムカテゴリも個別に有効/無効を切り替えられます。
+カスタムハンドラーは既定で無効です。**Window > UnionAir > REST Bridge > Custom Handlers** で有効化してください。その後、カスタムカテゴリを個別に有効/無効へ切り替えられます。Custom Handlersのmaster switchがオフの間、カテゴリのcheckboxは操作できません。
 
 `Category` は文字列であり、カスタム拡張は `/api/help` と EditorWindow に表示される独自のグループ名を定義できます。built-in エンドポイントは `UnionAirEndpointCategories.Read`、`SceneWrite`、`AssetWrite`、`PlayMode`、`EditorActions`、`Profiling`、任意機能の `TestRunner` を使用します。カテゴリメタデータは有効化状態と既定のリスク報告を制御します。`Risk` はツールや LLM 向けの説明用メタデータであり、リクエストを受け付けるかどうかはカテゴリの有効化状態が決めます。ルートがカテゴリより狭いリスクプロファイルを持つ場合、エンドポイントは `UseRiskOverride = true` と `Risk = ...` を設定できます。
 

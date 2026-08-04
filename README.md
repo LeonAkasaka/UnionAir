@@ -141,7 +141,8 @@ them. Diagnostic lifecycle logging remains an EditorPrefs-only setting.
 
 The Built-in API category checkboxes, **Custom Handlers > Enable Custom Handlers**, and the Play Mode
 scene-change checkbox are the authoritative exposure controls. They update this file directly; there
-is no second local-approval layer. **Disable All Sensitive APIs...** clears every optional category,
+is no second local-approval layer. Custom category checkboxes remain disabled until the Custom
+Handlers master switch is enabled. **Disable All Sensitive APIs...** clears every optional category,
 disables custom handlers, and denies Play Mode scene changes without changing the port or auto-start.
 
 These controls reduce accidental operations and limit which routes UnionAir exposes. They are not an

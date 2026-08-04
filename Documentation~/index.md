@@ -74,7 +74,8 @@ the first UI change repairs the file from those safe values.
 A valid file supplies project values before the auto-start decision. The Built-in API category
 checkboxes, **Custom Handlers > Enable Custom Handlers**, and the Play Mode scene-change checkbox
 are the authoritative controls and write their values directly to the file. There is no separate
-local-approval layer. **Disable All Sensitive APIs...** clears every optional category, disables
+local-approval layer. Custom category checkboxes remain disabled until the Custom Handlers master
+switch is enabled. **Disable All Sensitive APIs...** clears every optional category, disables
 custom handlers, and denies Play Mode scene changes while preserving the port and auto-start.
 When the file is absent, the legacy EditorPrefs/default behavior is unchanged until the first
 schema-backed UI change. That change migrates the current effective values to a full v1 document

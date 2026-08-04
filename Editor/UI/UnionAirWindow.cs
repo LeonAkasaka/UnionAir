@@ -121,7 +121,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 _portMode,
                 new[] { "Automatic", "Fixed" });
             using (new EditorGUI.DisabledScope(_portMode == 0))
-                _portInput = EditorGUILayout.IntField("Fixed Port", _portInput);
+                _portInput = EditorGUILayout.DelayedIntField("Fixed Port", _portInput);
 
             var configuredPort = _portMode == 0 ? 0 : _portInput;
             var portIsValid = UnionAirPortAllocator.IsValidConfiguredPort(configuredPort) &&
@@ -226,10 +226,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var oldEnabled = UnionAirSettings.CustomHandlersEnabled;
             var newEnabled = EditorGUILayout.Toggle("Enable Custom Handlers", oldEnabled);
             if (newEnabled != oldEnabled)
-            {
                 UnionAirSettings.CustomHandlersEnabled = newEnabled;
-                UnionAirRouteRegistry.Refresh();
-            }
 
             if (GUILayout.Button("Rescan Custom Handlers"))
                 UnionAirRouteRegistry.Refresh();
@@ -396,7 +393,9 @@ namespace LeonAkasaka.UnionAir.Editor
                     EditorPrefs.SetBool(prefKey, expanded);
                 }
 
-                var canToggle = category.CanDisable;
+                var canToggle = category.CanDisable &&
+                                (category.Source != UnionAirRouteSource.Custom ||
+                                 UnionAirSettings.CustomHandlersEnabled);
                 using (new EditorGUI.DisabledScope(!canToggle))
                 {
                     var newEnabled = EditorGUILayout.Toggle(
@@ -408,7 +407,6 @@ namespace LeonAkasaka.UnionAir.Editor
                             category.Key,
                             newEnabled,
                             category.EnabledByDefault);
-                        UnionAirRouteRegistry.Refresh();
                     }
                 }
 

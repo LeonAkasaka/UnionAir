@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Reflection;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -39,7 +38,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         internal static void Initialize()
         {
-            _knownCustomCategories = DiscoverCustomCategoryIds();
+            _knownCustomCategories = UnionAirRouteRegistry.GetKnownCustomCategoryIds();
 
             var restored = !UnionAirSession.IsNewEditorSession && TryRestoreSessionSnapshot();
             if (!restored)
@@ -52,6 +51,8 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (State == UnionAirProjectSettingsState.Invalid)
                 Debug.LogError($"[UnionAir] Invalid .unionair/settings.json: {Error}");
+
+            UnionAirRouteRegistry.RefreshState();
 
             if (_savePending)
                 ScheduleRetry();
@@ -86,14 +87,14 @@ namespace LeonAkasaka.UnionAir.Editor
             ApplyDocumentChange(delegate
             {
                 UnionAirProjectSettingsDocumentModel.SetPort(_document, port);
-            });
+            }, false);
         }
 
         internal static void SetAutoStart(bool autoStart)
             => ApplyDocumentChange(delegate
             {
                 UnionAirProjectSettingsDocumentModel.SetAutoStart(_document, autoStart);
-            });
+            }, false);
 
         internal static bool IsCategoryEnabled(string categoryKey)
         {
@@ -112,7 +113,7 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 UnionAirProjectSettingsDocumentModel.SetCategoryEnabled(
                     _document, identifier, enabled);
-            });
+            }, true);
         }
 
         internal static bool CustomHandlersEnabled
@@ -125,7 +126,7 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 UnionAirProjectSettingsDocumentModel.SetCustomHandlersEnabled(
                     _document, enabled);
-            });
+            }, true);
         }
 
         internal static bool AllowPlayModeSceneChanges
@@ -138,14 +139,14 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 UnionAirProjectSettingsDocumentModel.SetAllowSceneChanges(
                     _document, enabled);
-            });
+            }, false);
         }
 
         internal static void DisableAllSensitiveApis()
             => ApplyDocumentChange(delegate
             {
                 UnionAirProjectSettingsDocumentModel.DisableAllSensitiveApis(_document);
-            });
+            }, true);
 
         private static void LoadFromDisk()
         {
@@ -163,7 +164,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Error = loadError;
         }
 
-        private static void ApplyDocumentChange(Action change)
+        private static void ApplyDocumentChange(Action change, bool refreshRoutes)
         {
             EnsureWorkingDocument();
             change();
@@ -172,7 +173,8 @@ namespace LeonAkasaka.UnionAir.Editor
             _savePending = true;
             SaveSessionSnapshot();
             TryPersistWorkingDocument();
-            UnionAirRouteRegistry.Refresh();
+            if (refreshRoutes)
+                UnionAirRouteRegistry.RefreshState();
         }
 
         private static void EnsureWorkingDocument()
@@ -216,19 +218,15 @@ namespace LeonAkasaka.UnionAir.Editor
                 return true;
 
             string persistenceError;
-            if (UnionAirProjectSettingsSavePolicy.TryWrite(delegate
-            {
-                string ignoreError;
-                if (!UnionAirEndpointDiscovery.TryEnsureIgnore(
-                        UnionAirProjectPaths.ProjectRoot,
-                        out ignoreError))
-                    throw new IOException(ignoreError);
-
-                UnionAirEndpointDiscovery.WriteAtomicText(
+            string ignoreWarning;
+            if (TryWriteDocument(
                     SettingsPath,
-                    UnionAirProjectSettingsParser.Serialize(_document));
-            }, out persistenceError))
+                    UnionAirProjectPaths.ProjectRoot,
+                    _document,
+                    out persistenceError,
+                    out ignoreWarning))
             {
+                UnionAirEndpointDiscovery.UpdateIgnoreWarning(ignoreWarning);
                 var recovered = _savePending && !string.IsNullOrEmpty(_saveError);
                 _savePending = false;
                 _saveError = null;
@@ -249,6 +247,26 @@ namespace LeonAkasaka.UnionAir.Editor
             SaveSessionSnapshot();
             ScheduleRetry();
             return false;
+        }
+
+        internal static bool TryWriteDocument(
+            string settingsPath,
+            string projectRoot,
+            UnionAirProjectSettingsDocument document,
+            out string persistenceError,
+            out string ignoreWarning)
+        {
+            ignoreWarning = null;
+            if (!UnionAirProjectSettingsSavePolicy.TryWrite(delegate
+            {
+                UnionAirEndpointDiscovery.WriteAtomicText(
+                    settingsPath,
+                    UnionAirProjectSettingsParser.Serialize(document));
+            }, out persistenceError))
+                return false;
+
+            UnionAirEndpointDiscovery.TryEnsureIgnore(projectRoot, out ignoreWarning);
+            return true;
         }
 
         private static void ScheduleRetry()
@@ -327,85 +345,6 @@ namespace LeonAkasaka.UnionAir.Editor
             return null;
         }
 
-        private static HashSet<string> DiscoverCustomCategoryIds()
-        {
-            var result = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                var isBuiltInAssembly = assembly == typeof(UnionAirProjectSettings).Assembly;
-                try
-                {
-                    AddCategoryAttributes(
-                        result,
-                        assembly.GetCustomAttributes(typeof(UnionAirCategoryAttribute), false));
-                    isBuiltInAssembly = isBuiltInAssembly ||
-                                        assembly.IsDefined(
-                                            typeof(UnionAirBuiltinAssemblyAttribute), false);
-                }
-                catch
-                {
-                    // An unloadable third-party assembly cannot contribute a usable category.
-                }
-                Type[] types;
-                try { types = assembly.GetTypes(); }
-                catch (ReflectionTypeLoadException ex) { types = ex.Types; }
-                catch { continue; }
-                foreach (var type in types)
-                {
-                    if (type == null) continue;
-                    try
-                    {
-                        AddCategoryAttributes(
-                            result,
-                            type.GetCustomAttributes(typeof(UnionAirCategoryAttribute), false));
-                        if (!isBuiltInAssembly)
-                            AddEndpointCategories(result, type);
-                    }
-                    catch
-                    {
-                        // Ignore types whose metadata cannot be inspected.
-                    }
-                }
-            }
-            return result;
-        }
-
-        private static void AddEndpointCategories(HashSet<string> result, Type type)
-        {
-            var methods = type.GetMethods(
-                BindingFlags.Instance |
-                BindingFlags.Static |
-                BindingFlags.Public |
-                BindingFlags.NonPublic |
-                BindingFlags.DeclaredOnly);
-            foreach (var method in methods)
-            foreach (UnionAirEndpointAttribute endpoint in method.GetCustomAttributes(
-                         typeof(UnionAirEndpointAttribute), false))
-            {
-                if (string.IsNullOrEmpty(endpoint.Category) ||
-                    IsBuiltInCategory(endpoint.Category)) continue;
-                result.Add(endpoint.Category);
-            }
-        }
-
-        private static void AddCategoryAttributes(HashSet<string> result, object[] attributes)
-        {
-            foreach (UnionAirCategoryAttribute attribute in attributes)
-            {
-                if (string.IsNullOrEmpty(attribute.Id) || IsBuiltInCategory(attribute.Id)) continue;
-                result.Add(attribute.Id);
-            }
-        }
-
-        private static bool IsBuiltInCategory(string id)
-            => id == UnionAirEndpointCategories.Read ||
-               id == UnionAirEndpointCategories.SceneWrite ||
-               id == UnionAirEndpointCategories.AssetWrite ||
-               id == UnionAirEndpointCategories.PlayMode ||
-               id == UnionAirEndpointCategories.EditorActions ||
-               id == UnionAirEndpointCategories.TestRunner ||
-               id == UnionAirEndpointCategories.Profiling ||
-               id == UnionAirEndpointCategories.Build;
     }
 
     internal static class UnionAirProjectSettingsDocumentModel
@@ -450,8 +389,10 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (enabled)
             {
-                if (identifier.StartsWith("custom:", StringComparison.Ordinal))
-                    document.CustomHandlers = true;
+                if (identifier.StartsWith("custom:", StringComparison.Ordinal) &&
+                    !document.CustomHandlers)
+                    throw new InvalidOperationException(
+                        "Enable Custom Handlers before enabling a custom category.");
                 document.EnabledCategories.Add(identifier);
             }
             else

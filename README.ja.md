@@ -141,7 +141,8 @@ UTF-8 BOMなしで原子的に保存します。書き込み失敗はpendingの�
 
 Built-in APIのcategory checkbox、**Custom Handlers > Enable Custom Handlers**、Play Modeの
 scene change checkboxが、API露出範囲を決める唯一のcontrolです。これらは直接ファイルを更新し、
-端末別の承認レイヤーはありません。**Disable All Sensitive APIs...**はportとauto-startを維持したまま、
+端末別の承認レイヤーはありません。custom categoryのcheckboxは、Custom Handlersのmaster switchを
+有効にするまで操作できません。**Disable All Sensitive APIs...**はportとauto-startを維持したまま、
 すべての任意category、custom handler、Play Mode scene changeを無効化します。
 
 これらのcontrolは誤操作を減らし、UnionAirが公開するrouteを限定するためのものです。認証境界、
