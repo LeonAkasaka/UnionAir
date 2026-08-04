@@ -29,8 +29,6 @@ namespace LeonAkasaka.UnionAir.Editor
         private int _portInput;
         private int _portMode;
         private int _tab;
-        private string _projectSettingsMessage;
-        private MessageType _projectSettingsMessageType;
 
         /// <summary>
         /// Opens the UnionAir REST Bridge window.
@@ -116,8 +114,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Server", EditorStyles.boldLabel);
-            var projectControlled = UnionAirProjectSettings.IsProjectControlled;
-            using (new EditorGUI.DisabledScope(isRunning || projectControlled))
+            var previousPortMode = _portMode;
+            var previousPortInput = _portInput;
+            using (new EditorGUI.DisabledScope(isRunning))
             {
                 _portMode = EditorGUILayout.Popup(
                     "Port Mode",
@@ -134,25 +133,31 @@ namespace LeonAkasaka.UnionAir.Editor
                 EditorGUILayout.HelpBox(
                     "Fixed Port must be between 1 and 65535.",
                     MessageType.Error);
+            else if (!isRunning &&
+                     (previousPortMode != _portMode || previousPortInput != _portInput) &&
+                     configuredPort != UnionAirSettings.Port)
+                UnionAirSettings.Port = configuredPort;
 
-            if (projectControlled)
-                EditorGUILayout.LabelField(
-                    "Auto Start on Load",
-                    UnionAirSettings.AutoStart ? "Enabled (Project)" : "Disabled (Project)");
-            else
-                UnionAirSettings.AutoStart =
-                    EditorGUILayout.Toggle("Auto Start on Load", UnionAirSettings.AutoStart);
-            UnionAirSettings.DiagnosticLifecycleLogging =
-                EditorGUILayout.Toggle(
-                    "Diagnostic Lifecycle Logging",
-                    UnionAirSettings.DiagnosticLifecycleLogging);
+            var autoStart = UnionAirSettings.AutoStart;
+            var newAutoStart = EditorGUILayout.Toggle("Auto Start on Load", autoStart);
+            if (newAutoStart != autoStart)
+                UnionAirSettings.AutoStart = newAutoStart;
+
+            var diagnosticLogging = UnionAirSettings.DiagnosticLifecycleLogging;
+            var newDiagnosticLogging = EditorGUILayout.Toggle(
+                "Diagnostic Lifecycle Logging", diagnosticLogging);
+            if (newDiagnosticLogging != diagnosticLogging)
+                UnionAirSettings.DiagnosticLifecycleLogging = newDiagnosticLogging;
 
             DrawProjectConfiguration();
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Play Mode Safety", EditorStyles.boldLabel);
-            UnionAirSettings.AllowPlayModeSceneChanges =
-                EditorGUILayout.Toggle("Allow Play Mode Scene Changes", UnionAirSettings.AllowPlayModeSceneChanges);
+            var allowSceneChanges = UnionAirSettings.AllowPlayModeSceneChanges;
+            var newAllowSceneChanges = EditorGUILayout.Toggle(
+                "Allow Play Mode Scene Changes", allowSceneChanges);
+            if (newAllowSceneChanges != allowSceneChanges)
+                UnionAirSettings.AllowPlayModeSceneChanges = newAllowSceneChanges;
             EditorGUILayout.HelpBox(
                 "When disabled, scene-object write endpoints are rejected during Play Mode even if the request includes allowWhilePlaying=true.",
                 MessageType.Info);
@@ -163,10 +168,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 using (new EditorGUI.DisabledScope(isRunning || !portIsValid))
                 {
                     if (GUILayout.Button("Start"))
-                    {
-                        UnionAirSettings.Port = configuredPort;
                         UnionAirInit.StartServerManually(configuredPort);
-                    }
                 }
 
                 using (new EditorGUI.DisabledScope(!isRunning))
@@ -178,10 +180,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 using (new EditorGUI.DisabledScope(!portIsValid))
                 {
                     if (GUILayout.Button("Restart"))
-                    {
-                        UnionAirSettings.Port = configuredPort;
                         UnionAirInit.RestartServerManually(configuredPort);
-                    }
                 }
             }
 
@@ -317,13 +316,27 @@ namespace LeonAkasaka.UnionAir.Editor
                 case UnionAirProjectSettingsState.Invalid:
                     EditorGUILayout.HelpBox(
                         "Invalid settings.json; auto-start and sensitive capabilities fail closed. " +
+                        "Changing any project setting replaces it with a complete safe document. " +
                         UnionAirProjectSettings.Error,
                         MessageType.Error);
                     break;
                 default:
-                    EditorGUILayout.LabelField("Source", "EditorPrefs / defaults");
+                    EditorGUILayout.LabelField(
+                        "Source",
+                        "EditorPrefs / defaults (first change creates settings.json)");
                     break;
             }
+
+            if (UnionAirProjectSettings.SavePending)
+            {
+                EditorGUILayout.LabelField("Persistence", "Retry scheduled");
+                EditorGUILayout.HelpBox(
+                    "Project settings are active in memory but have not been saved. " +
+                    UnionAirProjectSettings.SaveError,
+                    MessageType.Warning);
+            }
+            else if (UnionAirProjectSettings.IsValid)
+                EditorGUILayout.LabelField("Persistence", "Saved automatically");
 
             var pending = UnionAirProjectSettings.PendingCapabilities();
             if (pending.Length > 0)
@@ -341,38 +354,24 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
             }
 
-            using (new EditorGUILayout.HorizontalScope())
+            var localCapabilities = UnionAirProjectSettings.LocalCapabilities();
+            if (localCapabilities.Length > 0)
             {
-                if (GUILayout.Button("Save Effective Settings"))
+                EditorGUILayout.Space(4);
+                EditorGUILayout.LabelField("Local Access", EditorStyles.miniBoldLabel);
+                foreach (var local in localCapabilities)
                 {
-                    string error;
-                    if (UnionAirProjectSettings.TrySaveEffective(out error))
-                    {
-                        _projectSettingsMessage = "Saved .unionair/settings.json.";
-                        _projectSettingsMessageType = MessageType.Info;
-                        SyncPortInputs();
-                    }
-                    else
-                    {
-                        _projectSettingsMessage = error;
-                        _projectSettingsMessageType = MessageType.Error;
-                    }
-                }
-
-                if (GUILayout.Button("Reload"))
-                {
-                    UnionAirProjectSettings.Reload(true);
-                    SyncPortInputs();
-                    _projectSettingsMessage = "Reloaded project settings.";
-                    _projectSettingsMessageType = MessageType.Info;
+                    var enabled = EditorGUILayout.ToggleLeft(
+                        local.Capability,
+                        local.Enabled);
+                    if (enabled != local.Enabled)
+                        UnionAirProjectSettings.SetLocalCapabilityEnabled(
+                            local.Capability, enabled);
                 }
             }
 
             if (UnionAirProjectSettings.IsValid && GUILayout.Button("Forget Local Approvals"))
                 UnionAirProjectSettings.ForgetApprovals();
-
-            if (!string.IsNullOrEmpty(_projectSettingsMessage))
-                EditorGUILayout.HelpBox(_projectSettingsMessage, _projectSettingsMessageType);
         }
 
         private void SyncPortInputs()
@@ -439,9 +438,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     EditorPrefs.SetBool(prefKey, expanded);
                 }
 
-                var canToggle = category.CanDisable &&
-                                (category.Source != UnionAirRouteSource.Custom ||
-                                 UnionAirSettings.CustomHandlersEnabled);
+                var canToggle = category.CanDisable;
                 using (new EditorGUI.DisabledScope(!canToggle))
                 {
                     var newEnabled = EditorGUILayout.Toggle(

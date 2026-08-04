@@ -150,6 +150,19 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void CapabilityDecision_ExplicitApprovalClearsALocalDenial()
+        {
+            var approved = new HashSet<string>();
+            var denied = new HashSet<string> { "category:assetWrite" };
+
+            UnionAirProjectSettingsDecision.Approve(
+                "category:assetWrite", approved, denied);
+
+            CollectionAssert.Contains(approved, "category:assetWrite");
+            CollectionAssert.DoesNotContain(denied, "category:assetWrite");
+        }
+
+        [Test]
         public void Pending_OnlyReturnsNewlyRequestedCapabilities()
         {
             var approved = new HashSet<string> { "category:assetWrite" };
@@ -275,6 +288,265 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             {
                 Directory.Delete(directory, true);
             }
+        }
+
+        [TestCase(-1)]
+        [TestCase(65536)]
+        public void PublicPortSetter_RejectsInvalidConfiguredPorts(int port)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                delegate { UnionAirSettings.Port = port; });
+        }
+
+        [Test]
+        public void SessionSnapshot_RoundTripsAValidDirtyWorkingDocument()
+        {
+            UnionAirProjectSettingsDocument original;
+            string error;
+            Assert.IsTrue(UnionAirProjectSettingsParser.TryParse(
+                Valid, KnownCustom, out original, out error), error);
+
+            var encoded = UnionAirProjectSettingsSnapshotCodec.Encode(
+                UnionAirProjectSettingsState.Valid,
+                original,
+                null,
+                true,
+                "disk unavailable");
+
+            UnionAirProjectSettingsState state;
+            UnionAirProjectSettingsDocument restored;
+            string loadError;
+            bool savePending;
+            string saveError;
+            Assert.IsTrue(UnionAirProjectSettingsSnapshotCodec.TryDecode(
+                encoded,
+                KnownCustom,
+                out state,
+                out restored,
+                out loadError,
+                out savePending,
+                out saveError));
+            Assert.AreEqual(UnionAirProjectSettingsState.Valid, state);
+            Assert.AreEqual(original.Port, restored.Port);
+            Assert.AreEqual(original.AutoStart, restored.AutoStart);
+            CollectionAssert.AreEquivalent(
+                original.EnabledCategories,
+                restored.EnabledCategories);
+            Assert.IsTrue(savePending);
+            Assert.AreEqual("disk unavailable", saveError);
+            Assert.IsNull(loadError);
+        }
+
+        [TestCase(UnionAirProjectSettingsState.Missing, null)]
+        [TestCase(UnionAirProjectSettingsState.Invalid, "invalid document")]
+        public void SessionSnapshot_RoundTripsNonDocumentSourceState(
+            UnionAirProjectSettingsState expectedState,
+            string expectedError)
+        {
+            var encoded = UnionAirProjectSettingsSnapshotCodec.Encode(
+                expectedState, null, expectedError, false, null);
+
+            UnionAirProjectSettingsState state;
+            UnionAirProjectSettingsDocument document;
+            string loadError;
+            bool savePending;
+            string saveError;
+            Assert.IsTrue(UnionAirProjectSettingsSnapshotCodec.TryDecode(
+                encoded,
+                KnownCustom,
+                out state,
+                out document,
+                out loadError,
+                out savePending,
+                out saveError));
+            Assert.AreEqual(expectedState, state);
+            Assert.AreEqual(expectedError, loadError);
+            Assert.IsNull(document);
+            Assert.IsFalse(savePending);
+            Assert.IsNull(saveError);
+        }
+
+        [Test]
+        public void SessionSnapshot_RestoresMemoryInsteadOfAChangedDiskDocument()
+        {
+            UnionAirProjectSettingsDocument memoryDocument;
+            string error;
+            Assert.IsTrue(UnionAirProjectSettingsParser.TryParse(
+                Valid, KnownCustom, out memoryDocument, out error), error);
+            var encoded = UnionAirProjectSettingsSnapshotCodec.Encode(
+                UnionAirProjectSettingsState.Valid,
+                memoryDocument,
+                null,
+                false,
+                null);
+            var changedOnDisk = Valid.Replace("\"port\":0", "\"port\":43210");
+            Assert.AreNotEqual(
+                UnionAirProjectSettingsParser.Serialize(memoryDocument),
+                changedOnDisk);
+
+            UnionAirProjectSettingsState state;
+            UnionAirProjectSettingsDocument restored;
+            string loadError;
+            bool savePending;
+            string saveError;
+            Assert.IsTrue(UnionAirProjectSettingsSnapshotCodec.TryDecode(
+                encoded,
+                KnownCustom,
+                out state,
+                out restored,
+                out loadError,
+                out savePending,
+                out saveError));
+            Assert.AreEqual(0, restored.Port);
+        }
+
+        [Test]
+        public void SavePolicy_KeepsFailureAndUsesTheRequiredRetrySchedule()
+        {
+            var attempts = 0;
+            string error;
+            Assert.IsFalse(UnionAirProjectSettingsSavePolicy.TryWrite(delegate
+            {
+                attempts++;
+                throw new IOException("locked");
+            }, out error));
+            Assert.AreEqual(1, attempts);
+            Assert.AreEqual("locked", error);
+
+            Assert.AreEqual(11d, UnionAirProjectSettingsSavePolicy.NextRetryTime(10d, 0));
+            Assert.AreEqual(12d, UnionAirProjectSettingsSavePolicy.NextRetryTime(10d, 1));
+            Assert.AreEqual(15d, UnionAirProjectSettingsSavePolicy.NextRetryTime(10d, 2));
+            Assert.AreEqual(20d, UnionAirProjectSettingsSavePolicy.NextRetryTime(10d, 3));
+            Assert.AreEqual(40d, UnionAirProjectSettingsSavePolicy.NextRetryTime(10d, 4));
+            Assert.AreEqual(40d, UnionAirProjectSettingsSavePolicy.NextRetryTime(10d, 20));
+
+            Assert.IsTrue(UnionAirProjectSettingsSavePolicy.TryWrite(
+                delegate { attempts++; },
+                out error));
+            Assert.AreEqual(2, attempts);
+            Assert.IsNull(error);
+        }
+
+        [Test]
+        public void WorkingDocument_FirstMissingChangeMigratesEveryLegacyValue()
+        {
+            var legacy = new UnionAirProjectSettingsDocument
+            {
+                Port = 8765,
+                AutoStart = true,
+                CustomHandlers = true,
+                AllowSceneChanges = true
+            };
+            legacy.EnabledCategories.Add("assetWrite");
+            var captures = 0;
+
+            var document = UnionAirProjectSettingsDocumentModel.BeginChange(
+                UnionAirProjectSettingsState.Missing,
+                null,
+                delegate
+                {
+                    captures++;
+                    return legacy;
+                });
+
+            Assert.AreSame(legacy, document);
+            Assert.AreEqual(1, captures);
+            Assert.AreEqual(8765, document.Port);
+            Assert.IsTrue(document.AutoStart);
+            Assert.IsTrue(document.CustomHandlers);
+            Assert.IsTrue(document.AllowSceneChanges);
+            CollectionAssert.AreEquivalent(
+                new[] { "assetWrite" },
+                document.EnabledCategories);
+        }
+
+        [Test]
+        public void WorkingDocument_FirstInvalidChangeStartsFromFailClosedValues()
+        {
+            var document = UnionAirProjectSettingsDocumentModel.BeginChange(
+                UnionAirProjectSettingsState.Invalid,
+                null,
+                delegate
+                {
+                    Assert.Fail("Invalid settings must not capture legacy values.");
+                    return null;
+                });
+
+            Assert.AreEqual(0, document.Port);
+            Assert.IsFalse(document.AutoStart);
+            Assert.IsFalse(document.CustomHandlers);
+            Assert.IsFalse(document.AllowSceneChanges);
+            CollectionAssert.IsEmpty(document.EnabledCategories);
+        }
+
+        [Test]
+        public void WorkingDocument_ValidSourceKeepsTheCurrentDocument()
+        {
+            var original = new UnionAirProjectSettingsDocument
+            {
+                Port = 8765,
+                AutoStart = true
+            };
+
+            var document = UnionAirProjectSettingsDocumentModel.BeginChange(
+                UnionAirProjectSettingsState.Valid,
+                original,
+                delegate
+                {
+                    Assert.Fail("A valid working document must not recapture legacy values.");
+                    return null;
+                });
+
+            Assert.AreSame(original, document);
+        }
+
+        [Test]
+        public void WorkingDocument_SettersProduceACompleteSerializableDocument()
+        {
+            var document = UnionAirProjectSettingsDocumentModel.BeginChange(
+                UnionAirProjectSettingsState.Invalid,
+                null,
+                delegate { return null; });
+
+            UnionAirProjectSettingsDocumentModel.SetPort(document, 43123);
+            UnionAirProjectSettingsDocumentModel.SetAutoStart(document, true);
+            UnionAirProjectSettingsDocumentModel.SetCategoryEnabled(
+                document, "assetWrite", true);
+            UnionAirProjectSettingsDocumentModel.SetCategoryEnabled(
+                document, "custom:toolActions", true);
+            UnionAirProjectSettingsDocumentModel.SetAllowSceneChanges(document, true);
+
+            var serialized = UnionAirProjectSettingsParser.Serialize(document);
+            UnionAirProjectSettingsDocument restored;
+            string error;
+            Assert.IsTrue(UnionAirProjectSettingsParser.TryParse(
+                serialized, KnownCustom, out restored, out error), error);
+            Assert.AreEqual(43123, restored.Port);
+            Assert.IsTrue(restored.AutoStart);
+            Assert.IsTrue(restored.CustomHandlers);
+            Assert.IsTrue(restored.AllowSceneChanges);
+            CollectionAssert.AreEquivalent(
+                new[] { "assetWrite", "custom:toolActions" },
+                restored.EnabledCategories);
+        }
+
+        [Test]
+        public void WorkingDocument_DisablingCustomHandlersRemovesCustomRequests()
+        {
+            var document = new UnionAirProjectSettingsDocument
+            {
+                CustomHandlers = true
+            };
+            document.EnabledCategories.Add("assetWrite");
+            document.EnabledCategories.Add("custom:toolActions");
+
+            UnionAirProjectSettingsDocumentModel.SetCustomHandlersEnabled(
+                document, false);
+
+            Assert.IsFalse(document.CustomHandlers);
+            CollectionAssert.AreEquivalent(
+                new[] { "assetWrite" },
+                document.EnabledCategories);
         }
     }
 }

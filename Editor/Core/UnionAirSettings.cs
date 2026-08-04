@@ -1,3 +1,4 @@
+using System;
 using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -24,7 +25,14 @@ namespace LeonAkasaka.UnionAir.Editor
         public static int Port
         {
             get => UnionAirProjectSettings.ResolvePort(EditorPrefs.GetInt(PortKey, 0));
-            set => EditorPrefs.SetInt(PortKey, value);
+            set
+            {
+                if (!UnionAirPortAllocator.IsValidConfiguredPort(value))
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value), value, "Port must be 0 (Automatic) or between 1 and 65535.");
+                if (value != Port)
+                    UnionAirProjectSettings.SetPort(value);
+            }
         }
 
         /// <summary>
@@ -34,7 +42,11 @@ namespace LeonAkasaka.UnionAir.Editor
         public static bool AutoStart
         {
             get => UnionAirProjectSettings.ResolveAutoStart(EditorPrefs.GetBool(AutoStartKey, true));
-            set => EditorPrefs.SetBool(AutoStartKey, value);
+            set
+            {
+                if (value != AutoStart)
+                    UnionAirProjectSettings.SetAutoStart(value);
+            }
         }
 
         /// <summary>
@@ -51,9 +63,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 : UnionAirProjectSettings.CustomHandlersEnabled;
             set
             {
-                if (UnionAirProjectSettings.State == UnionAirProjectSettingsState.Missing)
-                    EditorPrefs.SetBool(CustomHandlersEnabledKey, value);
-                else
+                if (value != CustomHandlersEnabled)
                     UnionAirProjectSettings.SetCustomHandlersEnabled(value);
             }
         }
@@ -68,9 +78,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 : UnionAirProjectSettings.AllowPlayModeSceneChanges;
             set
             {
-                if (UnionAirProjectSettings.State == UnionAirProjectSettingsState.Missing)
-                    EditorPrefs.SetBool(AllowPlayModeSceneChangesKey, value);
-                else
+                if (value != AllowPlayModeSceneChanges)
                     UnionAirProjectSettings.SetAllowPlayModeSceneChanges(value);
             }
         }
@@ -115,34 +123,8 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (string.IsNullOrEmpty(key)) return;
 
-            if (UnionAirProjectSettings.State != UnionAirProjectSettingsState.Missing)
-            {
+            if (enabled != IsCategoryEnabled(key, enabledByDefault))
                 UnionAirProjectSettings.SetCategoryEnabled(key, enabled);
-                return;
-            }
-
-            var explicitlyEnabled = EditorPrefs.GetString(EnabledCategoriesKey, "");
-            var disabled = EditorPrefs.GetString(DisabledCategoriesKey, "");
-            if (enabled == enabledByDefault)
-            {
-                explicitlyEnabled = RemoveToken(explicitlyEnabled, key);
-                disabled = RemoveToken(disabled, key);
-            }
-            else if (enabled)
-            {
-                disabled = RemoveToken(disabled, key);
-                if (!ContainsToken(explicitlyEnabled, key))
-                    explicitlyEnabled = string.IsNullOrEmpty(explicitlyEnabled) ? key : explicitlyEnabled + "," + key;
-            }
-            else
-            {
-                explicitlyEnabled = RemoveToken(explicitlyEnabled, key);
-                if (!ContainsToken(disabled, key))
-                    disabled = string.IsNullOrEmpty(disabled) ? key : disabled + "," + key;
-            }
-
-            EditorPrefs.SetString(EnabledCategoriesKey, explicitlyEnabled);
-            EditorPrefs.SetString(DisabledCategoriesKey, disabled);
         }
 
         private static bool ContainsToken(string csv, string token)
@@ -153,16 +135,5 @@ namespace LeonAkasaka.UnionAir.Editor
             return false;
         }
 
-        private static string RemoveToken(string csv, string token)
-        {
-            var parts = csv.Split(',');
-            var result = "";
-            foreach (var part in parts)
-            {
-                if (string.IsNullOrEmpty(part) || part == token) continue;
-                result = string.IsNullOrEmpty(result) ? part : result + "," + part;
-            }
-            return result;
-        }
     }
 }

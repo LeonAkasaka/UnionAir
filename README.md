@@ -105,8 +105,8 @@ in the range `1..65535`.
 
 ## Project Configuration
 
-Use **Save Effective Settings** in the EditorWindow to create a reviewable
-`<project>/.unionair/settings.json`:
+Schema-backed controls in the EditorWindow edit a working configuration and automatically write
+the complete, reviewable `<project>/.unionair/settings.json` after every change:
 
 ```json
 {
@@ -128,13 +128,24 @@ Use **Save Effective Settings** in the EditorWindow to create a reviewable
 All fields are required. Built-in category IDs are bare (for example `assetWrite`); custom IDs use
 `custom:<id>`. Do not list `read`, which is always enabled. When this file is absent, the existing
 EditorPrefs and defaults remain in effect. When it is valid, its server values take precedence.
-When it is invalid, UnionAir applies none of it, disables auto-start, and exposes only Read.
+When it is invalid, UnionAir applies none of it, disables auto-start, and exposes only Read. The
+first UI change replaces an invalid file with a complete document based on those safe values.
+
+When the file is absent, no file is created until a schema-backed control actually changes. That
+first change migrates the current EditorPrefs/effective values into a complete v1 document. Changes
+take effect in memory immediately and are saved atomically as UTF-8 without a BOM; failed writes
+remain pending and are retried automatically. A domain reload restores the working document from
+the current Editor session instead of rereading disk. External file edits therefore take effect only
+after the Editor process is restarted, and a later UI change in the current process can overwrite
+them. Diagnostic lifecycle logging remains an EditorPrefs-only setting.
 
 The file can request sensitive capabilities, but cannot grant them. Each user must approve newly
 requested categories, custom handlers, and Play Mode scene changes for that normalized project path
 in **Window > UnionAir > REST Bridge**. Effective access is the project request intersected with
-local approvals, minus local disables. Port-only changes and capability removals do not prompt
-again. Local approval decisions remain in `EditorPrefs` and are never written to the project file.
+local approvals, minus local disables. Enabling a capability in the EditorWindow is an explicit
+request and local approval on that machine; **Local Access** can disable an approved request without
+changing the project file. Port-only changes and capability removals do not prompt again. Local
+approval decisions remain in `EditorPrefs` and are never written to the project file.
 
 ## Endpoints
 

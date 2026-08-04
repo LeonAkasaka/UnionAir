@@ -78,6 +78,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             CancelAutoStart("before-assembly-reload");
             LogLifecycle($"before-reload begin running={Server.IsRunning}");
+            UnionAirProjectSettings.FlushPendingWrite();
 
             try
             {
@@ -95,6 +96,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             CancelAutoStart("editor-quitting");
             LogLifecycle($"editor-quitting begin running={Server.IsRunning}");
+            UnionAirProjectSettings.FlushPendingWrite();
             try
             {
                 Server.Stop("editor-quitting");

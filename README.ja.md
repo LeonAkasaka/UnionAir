@@ -106,8 +106,8 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 
 ## プロジェクト設定
 
-EditorWindow の **Save Effective Settings** で、レビュー可能な
-`<project>/.unionair/settings.json` を作成できます:
+EditorWindowのschema対象controlはworking configurationを編集し、変更のたびに完全でレビュー可能な
+`<project>/.unionair/settings.json`へ自動保存します:
 
 ```json
 {
@@ -129,13 +129,23 @@ EditorWindow の **Save Effective Settings** で、レビュー可能な
 すべてのfieldが必須です。built-in category IDは`assetWrite`のようなbare ID、custom IDは
 `custom:<id>`を使います。常時有効な`read`は記載しません。ファイルがない場合は既存の
 EditorPrefs/default動作を維持し、有効なファイルがある場合はserver値が優先されます。不正な
-ファイルは一部も適用せず、auto-startを無効化してReadだけを公開します。
+ファイルは一部も適用せず、auto-startを無効化してReadだけを公開します。最初のUI変更時に、その
+安全値を基礎とする完全なdocumentで不正なファイルを置換します。
+
+ファイルがない場合、schema対象controlが実際に変更されるまではファイルを作成しません。最初の
+変更時に現在のEditorPrefs/effective値を完全なv1 documentへ移行します。変更は即座にメモリへ反映し、
+UTF-8 BOMなしで原子的に保存します。書き込み失敗はpendingのまま自動再試行します。domain reloadでは
+現在のEditor sessionのworking documentを復元し、diskを再読込しません。そのため外部でのファイル
+編集はEditor processの再起動後に反映され、同じprocess内で後からUI変更すると外部編集を上書きする
+場合があります。Diagnostic Lifecycle Loggingは引き続きEditorPrefsだけの設定です。
 
 このファイルは機密機能を要求できますが、許可を付与できません。各ユーザーは新しく要求された
 category、custom handler、Play Mode scene changeを、正規化されたproject pathごとに
 **Window > UnionAir > REST Bridge** で承認する必要があります。effective accessはproject要求と
-local承認の積集合からlocal無効化を引いたものです。portだけの変更や機能削減では再承認しません。
-local承認はEditorPrefsに残り、project fileには書き込まれません。
+local承認の積集合からlocal無効化を引いたものです。EditorWindowで機能をオンにする操作は、この端末で
+の明示的な要求とlocal承認を兼ねます。**Local Access**ではproject fileを変更せずに承認済み要求を
+無効化できます。portだけの変更や機能削減では再承認しません。local承認はEditorPrefsに残り、
+project fileには書き込まれません。
 
 ## エンドポイント
 
