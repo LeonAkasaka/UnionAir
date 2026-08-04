@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Console-log `timestamp` values are now UTC ISO 8601 with a `Z` suffix. Clients that interpreted the previous offset-free values as local time must update their parser.
 - The configured port now defaults to Automatic. Clients should read `.unionair/endpoint.txt` at connection time and reread it after a refused connection instead of assuming port `8765`.
-- A valid `.unionair/settings.json` takes precedence over EditorPrefs, but sensitive capabilities remain disabled until each user approves the project request locally. An invalid document fails closed rather than partially applying values.
+- A valid `.unionair/settings.json` takes precedence over EditorPrefs and directly controls the exposed API surface; there is no separate local-approval step. The file is not ignored by `.unionair/.gitignore`, so a category enabled in a committed document is enabled for everyone who opens that project. Review it before sharing a project, and use **Disable All Sensitive APIs...** to clear every optional category, custom handlers, and Play Mode scene changes. When the file is absent the legacy EditorPrefs behavior is unchanged, and an invalid document fails closed rather than partially applying values.
 
 ### Added
 
