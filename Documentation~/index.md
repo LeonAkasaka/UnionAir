@@ -153,7 +153,7 @@ curl "${BASE_URL}assets?path=Assets/UI"
 | Item | Description |
 |------|------|
 | **Status** | Displays the server running state and port number |
-| **Port Mode** | Automatic (default) or Fixed; Fixed accepts `1..65535` while stopped |
+| **Port Mode** | Automatic (default) or Fixed; Fixed accepts `1..65535`. Changes made while running are saved immediately and apply on Restart |
 | **Auto Start on Load** | Whether to start the server automatically when the Editor starts |
 | **Disable All Sensitive APIs...** | Clears optional API categories, Custom Handlers, and Play Mode scene changes without changing server settings |
 | **Diagnostic Lifecycle Logging** | Streams detailed listener lifecycle events to the Console; disabled by default |

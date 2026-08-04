@@ -154,7 +154,7 @@ curl "${BASE_URL}assets?path=Assets/UI"
 | 項目 | 説明 |
 |------|------|
 | **Status** | サーバの稼働状態とポート番号を表示 |
-| **Port Mode** | Automatic(デフォルト)またはFixed。停止中にFixedの`1..65535`を指定可能 |
+| **Port Mode** | Automatic(デフォルト)またはFixed。Fixedでは`1..65535`を指定可能。稼働中の変更は即時保存され、Restartで反映 |
 | **Auto Start on Load** | Editor 起動時にサーバを自動起動するかどうか |
 | **Disable All Sensitive APIs...** | server設定を維持したまま、任意API category、Custom Handlers、Play Mode scene changeをすべて無効化 |
 | **Diagnostic Lifecycle Logging** | listener の詳細なライフサイクルイベントを Console へ逐次出力するかどうか(デフォルトでは無効) |

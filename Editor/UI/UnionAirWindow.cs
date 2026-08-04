@@ -116,15 +116,12 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorGUILayout.LabelField("Server", EditorStyles.boldLabel);
             var previousPortMode = _portMode;
             var previousPortInput = _portInput;
-            using (new EditorGUI.DisabledScope(isRunning))
-            {
-                _portMode = EditorGUILayout.Popup(
-                    "Port Mode",
-                    _portMode,
-                    new[] { "Automatic", "Fixed" });
-                using (new EditorGUI.DisabledScope(_portMode == 0))
-                    _portInput = EditorGUILayout.IntField("Fixed Port", _portInput);
-            }
+            _portMode = EditorGUILayout.Popup(
+                "Port Mode",
+                _portMode,
+                new[] { "Automatic", "Fixed" });
+            using (new EditorGUI.DisabledScope(_portMode == 0))
+                _portInput = EditorGUILayout.IntField("Fixed Port", _portInput);
 
             var configuredPort = _portMode == 0 ? 0 : _portInput;
             var portIsValid = UnionAirPortAllocator.IsValidConfiguredPort(configuredPort) &&
@@ -133,10 +130,14 @@ namespace LeonAkasaka.UnionAir.Editor
                 EditorGUILayout.HelpBox(
                     "Fixed Port must be between 1 and 65535.",
                     MessageType.Error);
-            else if (!isRunning &&
-                     (previousPortMode != _portMode || previousPortInput != _portInput) &&
+            else if ((previousPortMode != _portMode || previousPortInput != _portInput) &&
                      configuredPort != UnionAirSettings.Port)
                 UnionAirSettings.Port = configuredPort;
+
+            if (isRunning)
+                EditorGUILayout.HelpBox(
+                    "Port changes are saved immediately and apply when the server is restarted.",
+                    MessageType.Info);
 
             var autoStart = UnionAirSettings.AutoStart;
             var newAutoStart = EditorGUILayout.Toggle("Auto Start on Load", autoStart);
