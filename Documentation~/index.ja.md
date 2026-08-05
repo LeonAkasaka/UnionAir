@@ -16,7 +16,7 @@ LLM MCP ブリッジ・開発ボット・CI ツールなど、HTTP を扱える�
 **Window > Package Manager** を開き、**+** から **Install package from git URL...** を選択して次の URL を入力します:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
+https://github.com/LeonAkasaka/UnionAir.git#v0.4.0
 ```
 
 または、`Packages/manifest.json` に直接依存関係を追加します:
@@ -24,7 +24,7 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.3.0"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.4.0"
   }
 }
 ```
@@ -39,7 +39,8 @@ Test Runner API は任意機能です。プロジェクトに Unity Test Framewo
 
 ### 2. サーバの確認
 
-Unity Editor を開くと、REST サーバが自動的に起動します(デフォルトポート: **8765**)。
+Unity Editor を開くと、REST サーバが自動的に起動します。デフォルトのport modeは
+**Automatic** で、空いている具体的なloopback portを選択してdiscovery fileへ公開します。
 
 ```
 Window > UnionAir > REST Bridge
@@ -53,10 +54,49 @@ Window > UnionAir > REST Bridge
 ない場合、health checkに失敗した場合、projectが一致しない場合は、検証済みserverがないものとして
 扱います。processが強制終了すると、別projectのEditorを指す古い発見情報が残る可能性があります。
 
+### Project設定
+
+EditorWindowのschema対象controlはworking configurationを更新し、変更のたびに完全な
+`<project>/.unionair/settings.json`へ自動保存します。strictなv1 documentは次の形です:
+
+```json
+{
+  "schemaVersion": 1,
+  "server": { "port": 0, "autoStart": true },
+  "api": { "enabledCategories": [], "customHandlers": false },
+  "playMode": { "allowSceneChanges": false }
+}
+```
+
+すべてのfieldが必須です。built-in categoryはbare ID、custom categoryは`custom:<id>`を使います。
+常時有効な`read`は記載できません。未知または重複したfield/category、型違い、未対応schema、無効な
+port、`customHandlers:true`なしのcustom categoryはdocument全体を不正にします。不正な設定では
+auto-startを無効化し、Readだけの安全状態へ移行します。最初のUI変更時に、その安全値を基礎として
+完全なdocumentへ修復します。
+
+有効なファイルはauto-start判断より先にproject値を供給します。Built-in APIのcategory checkbox、
+**Custom Handlers > Enable Custom Handlers**、Play Modeのscene change checkboxが唯一のcontrolであり、
+その値を直接ファイルへ保存します。端末別の承認レイヤーはありません。
+custom categoryのcheckboxは、Custom Handlersのmaster switchを有効にするまで操作できません。
+**Disable All Sensitive APIs...**はportとauto-startを維持したまま、すべての任意category、
+custom handler、Play Mode scene changeを無効化します。ファイルがない場合は、schema対象の最初の
+UI変更までは従来のEditorPrefs/default動作を維持します。その変更時に現在のeffective値を完全な
+v1 documentへ移行し、即座に保存します。UI変更は
+最初にメモリへ反映され、UTF-8 BOMなしで原子的に書き込まれます。書き込み失敗はpendingのまま自動
+再試行します。domain reloadではSessionStateからworking documentを復元してdiskを再読込せず、外部
+編集は次回のEditor process起動時に読み込みます。Diagnostic Lifecycle LoggingはEditorPrefsに残り、
+project fileを作成しません。
+
+これらの設定は誤操作を防ぎ、UnionAirが公開するrouteを限定するためのものであり、認証境界、sandbox、
+改ざん防止ではありません。ファイルは署名されません。projectを変更できるprocessはファイルを編集し、
+Unity processと同じ権限のEditor codeを追加できます。projectとすべてのlocal API clientを信頼できる
+ものとして扱い、実際のsecurity boundaryが必要な場合はOSまたは実行環境で隔離してください。
+
 ### 3. 動作確認
 
 ```bash
-curl http://localhost:8765/api/health
+BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"
+curl "${BASE_URL}health"
 # => {"status":"ok","unityVersion":"6000.3.5f2","projectPath":"C:\\Work\\MyProject"}
 ```
 
@@ -67,7 +107,7 @@ curl http://localhost:8765/api/health
 ### シーン階層の取得
 
 ```bash
-curl http://localhost:8765/api/scene/hierarchy
+curl "${BASE_URL}scene/hierarchy"
 ```
 
 ```json
@@ -94,7 +134,7 @@ curl http://localhost:8765/api/scene/hierarchy
 ### 特定の GameObject のコンポーネントを確認
 
 ```bash
-curl --get "http://localhost:8765/api/gameobjects" \
+curl --get "${BASE_URL}gameobjects" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 ```
 
@@ -102,10 +142,10 @@ curl --get "http://localhost:8765/api/gameobjects" \
 
 ```bash
 # すべての Texture2D
-curl "http://localhost:8765/api/assets?type=Texture2D"
+curl "${BASE_URL}assets?type=Texture2D"
 
 # パスで絞り込み
-curl "http://localhost:8765/api/assets?path=Assets/UI"
+curl "${BASE_URL}assets?path=Assets/UI"
 ```
 
 ---
@@ -115,8 +155,9 @@ curl "http://localhost:8765/api/assets?path=Assets/UI"
 | 項目 | 説明 |
 |------|------|
 | **Status** | サーバの稼働状態とポート番号を表示 |
-| **Port** | サーバの待ち受けポート(停止中のみ変更可能) |
+| **Port Mode** | Automatic(デフォルト)またはFixed。Fixedでは`1..65535`を指定可能。稼働中の変更は即時保存され、Restartで反映 |
 | **Auto Start on Load** | Editor 起動時にサーバを自動起動するかどうか |
+| **Disable All Sensitive APIs...** | server設定を維持したまま、任意API category、Custom Handlers、Play Mode scene changeをすべて無効化 |
 | **Diagnostic Lifecycle Logging** | listener の詳細なライフサイクルイベントを Console へ逐次出力するかどうか(デフォルトでは無効) |
 | **Start / Stop / Restart** | サーバの手動制御 |
 | **Request Log** | 受信リクエストのログ(最新100件) |
@@ -142,6 +183,6 @@ instance のものと一致する場合だけ URL を削除します。runtime d
 `.unionair/.gitignore` によって ignore されます。接続が拒否されたクライアントはファイルを再読込
 してください。
 
-リロード直後の自動起動で一時的な address-in-use エラーが発生した場合、UnionAir は初回の試行に続いて約4秒間に最大5回再試行します。途中の address-in-use エラーはライフサイクルトレースにだけ保持され、Console や `/api/editor/logs` には出力されません。その他の起動失敗は常に短いエラーとして Console に出力されます。listener thread が予期せず終了した場合は、listener の清掃を完了してから診断トレースを出力し、ドメインあたり最大3回の遅延付き復旧を行います。それ以降の予期せぬ終了では自動復旧を停止し、無制限の再起動ループに入らず短いエラーを出力します。UnionAir は Domain reload をまたぐ固定長のライフサイクル履歴を通常は出力せずに保持し、起動または清掃に失敗した場合はドメインあたり1回だけ自動的にまとめて出力します。通常時にも process、reload generation、listener の清掃、thread、native socket の詳細を逐次確認するには **Diagnostic Lifecycle Logging** を有効にしてください。
+Fixed modeでは、一時的なaddress-in-useエラーの後、同じconfigured portを約4秒間に最大5回再試行します。Automatic modeでは、まずreloadをまたいで保持したconcrete portを試します。そのportがまだ使用中なら0.1秒待ってもう一度試し、それでも失敗した場合にfresh candidateへ移ります。その後は最大8個の異なるfresh portを即時に試し、競合するURL reservationなどcandidate固有のlistener拒否は次のcandidateへ進みます。probeによる割り当てまたはlistener threadの起動に失敗した場合は、短いエラーを1回出して試行を中断します。途中のaddress-in-useエラーはライフサイクルトレースにだけ保持され、Consoleや`/api/editor/logs`には出力されません。listener threadが予期せず終了した場合は、listenerの清掃を完了してから診断トレースを出力し、domainあたり最大3回の遅延付き復旧を行います。それ以降の予期せぬ終了では自動復旧を停止し、無制限の再起動ループに入らず短いエラーを出力します。UnionAirはdomain reloadをまたぐ固定長のライフサイクル履歴を通常は出力せずに保持し、起動または清掃に失敗した場合はdomainあたり1回だけ自動的にまとめて出力します。通常時にもprocess、reload generation、listenerの清掃、thread、native socketの詳細を逐次確認するには **Diagnostic Lifecycle Logging** を有効にしてください。
 
 deferred handler は response の生存期間を自身で管理します。停止時に残っている deferred 接続は listener を閉じることで中断されるため、deferred handler は reload またはサーバ停止後の response 書き込み失敗を処理する必要があります。

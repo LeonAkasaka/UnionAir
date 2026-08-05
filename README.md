@@ -73,7 +73,7 @@ disabled by default and upgrading the package should stay the project's decision
 3. Enter:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
+https://github.com/LeonAkasaka/UnionAir.git#v0.4.0
 ```
 
 ### Via manifest.json
@@ -83,7 +83,7 @@ Add the dependency to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.3.0"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.4.0"
   }
 }
 ```
@@ -95,9 +95,60 @@ Pin the tag. `main` is kept releasable but runs ahead of it, and a UPM Git URL t
 1. The package auto-starts an HTTP server when the Unity Editor loads.
 2. Open **Window > UnionAir > REST Bridge** to view status and configure the port.
 
-## Default Port
+## Port Selection
 
-`8765` — configurable via the EditorWindow.
+The default is **Automatic**. UnionAir resolves a free loopback port, retains it across domain reloads
+in the same Editor process, and publishes the concrete URL through `.unionair/endpoint.txt`. After a
+transient address-in-use result, the retained port gets one delayed retry before UnionAir selects a
+fresh port. Select **Fixed** in the EditorWindow when a script or CI environment needs a stable port
+in the range `1..65535`.
+
+## Project Configuration
+
+Schema-backed controls in the EditorWindow edit a working configuration and automatically write
+the complete, reviewable `<project>/.unionair/settings.json` after every change:
+
+```json
+{
+  "schemaVersion": 1,
+  "server": {
+    "port": 0,
+    "autoStart": true
+  },
+  "api": {
+    "enabledCategories": [],
+    "customHandlers": false
+  },
+  "playMode": {
+    "allowSceneChanges": false
+  }
+}
+```
+
+All fields are required. Built-in category IDs are bare (for example `assetWrite`); custom IDs use
+`custom:<id>`. Do not list `read`, which is always enabled. When this file is absent, the existing
+EditorPrefs and defaults remain in effect. When it is valid, its server values take precedence.
+When it is invalid, UnionAir applies none of it, disables auto-start, and exposes only Read. The
+first UI change replaces an invalid file with a complete document based on those safe values.
+
+When the file is absent, no file is created until a schema-backed control actually changes. That
+first change migrates the current EditorPrefs/effective values into a complete v1 document. Changes
+take effect in memory immediately and are saved atomically as UTF-8 without a BOM; failed writes
+remain pending and are retried automatically. A domain reload restores the working document from
+the current Editor session instead of rereading disk. External file edits therefore take effect only
+after the Editor process is restarted, and a later UI change in the current process can overwrite
+them. Diagnostic lifecycle logging remains an EditorPrefs-only setting.
+
+The Built-in API category checkboxes, **Custom Handlers > Enable Custom Handlers**, and the Play Mode
+scene-change checkbox are the authoritative exposure controls. They update this file directly; there
+is no second local-approval layer. Custom category checkboxes remain disabled until the Custom
+Handlers master switch is enabled. **Disable All Sensitive APIs...** clears every optional category,
+disables custom handlers, and denies Play Mode scene changes without changing the port or auto-start.
+
+These controls reduce accidental operations and limit which routes UnionAir exposes. They are not an
+authentication boundary, a sandbox, tamper protection, or a defense against malicious code. Any
+process that can modify the project can edit `settings.json` or add Editor code that runs with the
+Unity Editor's permissions. Treat the project and every local API client as trusted.
 
 ## Endpoints
 
@@ -129,7 +180,8 @@ Read this before enabling any write category:
 - Requests with a non-empty body must use `Content-Type: application/json`. Empty POST requests remain valid without a content type.
 - Only the **Read** category is enabled by default. The Scene Write, Asset Write, Play Mode, Editor Actions, Test Runner, Profiling, and Build categories are opt-in; enabling them exposes state-changing operations and diagnostic artifacts — including arbitrary project test code, heap snapshots, Unity Editor menu execution, and asset deletion — to any local process. Enable them only when every local client is trusted.
 - The **Build** category carries the `executableOutput` and `assetUpdate` risks. Enabling it lets any local process change build settings that are written to `ProjectSettings/` and shared with everyone who works on the project, and start a player build, which runs the project's build scripts and writes a runnable program to `Builds/UnionAir/` in the project directory. A build also occupies the Unity main thread for a minute or more, during which UnionAir answers nothing at all.
-- Category enablement is **not per-project**. It lives in `EditorPrefs`, which Unity scopes to the user account and Editor version, so a category enabled for one project stays enabled for every project opened with the same Editor.
+- Without `.unionair/settings.json`, category enablement retains the legacy `EditorPrefs` behavior and is shared by projects opened by that user and Editor version. With a project file, its values directly control the exposed API surface and can be shared through Git.
+- API enablement is an accidental-operation guard and exposure-scope control only. The settings file is not signed or tamper-resistant. Code already running in the Unity Editor process can change the settings or perform the same privileged work without UnionAir, so these toggles cannot contain malicious project code or an agent that can write and execute Editor code. Use OS accounts, filesystem permissions, or an isolated environment when stronger separation is required.
 
 ## API Discovery
 
@@ -147,24 +199,26 @@ ignored.
 ## Quick Example
 
 ```bash
+BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"
+
 # Health check
-curl http://localhost:8765/api/health
+curl "${BASE_URL}health"
 
 # Scene hierarchy
-curl http://localhost:8765/api/scene/hierarchy
+curl "${BASE_URL}scene/hierarchy"
 
 # Loaded scenes
-curl http://localhost:8765/api/scenes
+curl "${BASE_URL}scenes"
 
 # Specific GameObject
-curl --get "http://localhost:8765/api/gameobjects" \
+curl --get "${BASE_URL}gameobjects" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 
 # All assets of type Texture2D
-curl "http://localhost:8765/api/assets?type=Texture2D"
+curl "${BASE_URL}assets?type=Texture2D"
 
 # Create a new empty GameObject (requires the Scene Write category to be enabled)
-curl -X POST http://localhost:8765/api/gameobjects \
+curl -X POST "${BASE_URL}gameobjects" \
   -H "Content-Type: application/json" \
   -d '{"name":"MyObject","parent":{"type":"hierarchyPath","value":"Canvas"}}'
 ```

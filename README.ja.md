@@ -75,7 +75,7 @@ UnionAir 自身はこの依存を宣言していません。Test Runner カテ�
 3. 次の URL を入力します:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
+https://github.com/LeonAkasaka/UnionAir.git#v0.4.0
 ```
 
 ### manifest.json から
@@ -85,7 +85,7 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.3.0"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.4.0"
   }
 }
 ```
@@ -97,9 +97,58 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 1. Unity Editor のロード時に HTTP サーバが自動的に起動します。
 2. **Window > UnionAir > REST Bridge** を開くと、状態の確認とポートの設定ができます。
 
-## デフォルトポート
+## ポート選択
 
-`8765` — EditorWindow から変更可能です。
+デフォルトは **Automatic** です。UnionAirは空いているloopback portを解決し、同じEditor process
+内のdomain reloadをまたいでそのportを保持して、実際のURLを`.unionair/endpoint.txt`へ公開します。
+一時的なaddress-in-useが発生した場合は、保持したportを遅延後にもう一度試してからfresh portを
+選択します。scriptやCIで安定したportが必要な場合はEditorWindowで **Fixed** を選び、`1..65535`を指定します。
+
+## プロジェクト設定
+
+EditorWindowのschema対象controlはworking configurationを編集し、変更のたびに完全でレビュー可能な
+`<project>/.unionair/settings.json`へ自動保存します:
+
+```json
+{
+  "schemaVersion": 1,
+  "server": {
+    "port": 0,
+    "autoStart": true
+  },
+  "api": {
+    "enabledCategories": [],
+    "customHandlers": false
+  },
+  "playMode": {
+    "allowSceneChanges": false
+  }
+}
+```
+
+すべてのfieldが必須です。built-in category IDは`assetWrite`のようなbare ID、custom IDは
+`custom:<id>`を使います。常時有効な`read`は記載しません。ファイルがない場合は既存の
+EditorPrefs/default動作を維持し、有効なファイルがある場合はserver値が優先されます。不正な
+ファイルは一部も適用せず、auto-startを無効化してReadだけを公開します。最初のUI変更時に、その
+安全値を基礎とする完全なdocumentで不正なファイルを置換します。
+
+ファイルがない場合、schema対象controlが実際に変更されるまではファイルを作成しません。最初の
+変更時に現在のEditorPrefs/effective値を完全なv1 documentへ移行します。変更は即座にメモリへ反映し、
+UTF-8 BOMなしで原子的に保存します。書き込み失敗はpendingのまま自動再試行します。domain reloadでは
+現在のEditor sessionのworking documentを復元し、diskを再読込しません。そのため外部でのファイル
+編集はEditor processの再起動後に反映され、同じprocess内で後からUI変更すると外部編集を上書きする
+場合があります。Diagnostic Lifecycle Loggingは引き続きEditorPrefsだけの設定です。
+
+Built-in APIのcategory checkbox、**Custom Handlers > Enable Custom Handlers**、Play Modeの
+scene change checkboxが、API露出範囲を決める唯一のcontrolです。これらは直接ファイルを更新し、
+端末別の承認レイヤーはありません。custom categoryのcheckboxは、Custom Handlersのmaster switchを
+有効にするまで操作できません。**Disable All Sensitive APIs...**はportとauto-startを維持したまま、
+すべての任意category、custom handler、Play Mode scene changeを無効化します。
+
+これらのcontrolは誤操作を減らし、UnionAirが公開するrouteを限定するためのものです。認証境界、
+sandbox、改ざん防止、悪意あるcodeへの防御ではありません。projectを変更できるprocessは
+`settings.json`を編集したり、Unity Editorと同じ権限で動くEditor codeを追加したりできます。
+projectとすべてのlocal API clientを信頼できるものとして扱ってください。
 
 ## エンドポイント
 
@@ -131,7 +180,8 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.3.0
 - 空でないボディを持つリクエストには `Content-Type: application/json` が必要です。空の POST は Content-Type なしでも引き続き有効です。
 - 既定で有効なのは **Read** カテゴリのみです。Scene Write / Asset Write / Play Mode / Editor Actions / Test Runner / Profiling / Build はオプトインであり、有効化するとプロジェクトの任意のテストコード、heap snapshot、Unity Editor のメニュー実行、アセット削除を含む操作や診断成果物が、任意のローカルプロセスに公開されます。すべてのローカルクライアントを信頼できる場合にのみ有効化してください。
 - **Build** カテゴリは `executableOutput` と `assetUpdate` のリスクを持ちます。有効化すると、任意のローカルプロセスが `ProjectSettings/` に書き込まれプロジェクト関係者全員に共有されるビルド設定を変更でき、またプレイヤービルドを開始できるようになります。ビルドはプロジェクトのビルドスクリプトを実行し、実行可能なプログラムをプロジェクトディレクトリの `Builds/UnionAir/` に書き出します。またビルドは Unity のメインスレッドを 1 分以上占有し、その間 UnionAir は一切応答しません。
-- カテゴリの有効/無効は**プロジェクト単位ではありません**。設定は `EditorPrefs` に保存され、Unity はこれをユーザーアカウントと Editor バージョン単位で管理します。あるプロジェクトで有効化したカテゴリは、同じ Editor で開く他のすべてのプロジェクトでも有効なままになります。
+- `.unionair/settings.json`がない場合、category enablementは従来どおりEditorPrefsに保存され、そのユーザーとEditor versionで開くproject間で共有されます。project fileがある場合、その値がAPIの露出範囲を直接制御し、Gitで共有できます。
+- API enablementは誤操作防止と露出範囲の制御に限られます。settings fileは署名も改ざん耐性も持ちません。Unity Editor process内で既に動作するcodeは設定を変更でき、UnionAirを経由せず同じ特権操作を実行できます。そのため、project codeやEditor codeを書いて実行できるagentの悪意をこれらのtoggleで封じ込めることはできません。より強い分離が必要な場合は、OS account、filesystem permission、隔離環境を使用してください。
 
 ## API の発見
 
@@ -149,24 +199,26 @@ UnionAir は `.unionair/.gitignore` を管理し、`endpoint.txt` と原子的�
 ## クイックサンプル
 
 ```bash
+BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"
+
 # ヘルスチェック
-curl http://localhost:8765/api/health
+curl "${BASE_URL}health"
 
 # シーン階層
-curl http://localhost:8765/api/scene/hierarchy
+curl "${BASE_URL}scene/hierarchy"
 
 # ロード済みシーン
-curl http://localhost:8765/api/scenes
+curl "${BASE_URL}scenes"
 
 # 特定の GameObject
-curl --get "http://localhost:8765/api/gameobjects" \
+curl --get "${BASE_URL}gameobjects" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 
 # Texture2D 型のアセット一覧
-curl "http://localhost:8765/api/assets?type=Texture2D"
+curl "${BASE_URL}assets?type=Texture2D"
 
 # 空の GameObject を作成(Scene Write カテゴリの有効化が必要)
-curl -X POST http://localhost:8765/api/gameobjects \
+curl -X POST "${BASE_URL}gameobjects" \
   -H "Content-Type: application/json" \
   -d '{"name":"MyObject","parent":{"type":"hierarchyPath","value":"Canvas"}}'
 ```

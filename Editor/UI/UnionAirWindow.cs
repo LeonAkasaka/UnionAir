@@ -27,6 +27,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private Vector2 _scroll;
         private Vector2 _logScroll;
         private int _portInput;
+        private int _portMode;
         private int _tab;
 
         /// <summary>
@@ -42,7 +43,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private void OnEnable()
         {
-            _portInput = UnionAirSettings.Port;
+            SyncPortInputs();
             _tab = EditorPrefs.GetInt(PrefKeyTab, 0);
             UnionAirInit.Server.OnRequest += AddLog;
         }
@@ -113,34 +114,73 @@ namespace LeonAkasaka.UnionAir.Editor
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Server", EditorStyles.boldLabel);
-            using (new EditorGUI.DisabledScope(isRunning))
-                _portInput = EditorGUILayout.IntField("Port", _portInput);
+            var previousPortMode = _portMode;
+            var previousPortInput = _portInput;
+            _portMode = EditorGUILayout.Popup(
+                "Port Mode",
+                _portMode,
+                new[] { "Automatic", "Fixed" });
+            using (new EditorGUI.DisabledScope(_portMode == 0))
+                _portInput = EditorGUILayout.DelayedIntField("Fixed Port", _portInput);
 
-            UnionAirSettings.AutoStart =
-                EditorGUILayout.Toggle("Auto Start on Load", UnionAirSettings.AutoStart);
-            UnionAirSettings.DiagnosticLifecycleLogging =
-                EditorGUILayout.Toggle(
-                    "Diagnostic Lifecycle Logging",
-                    UnionAirSettings.DiagnosticLifecycleLogging);
+            var configuredPort = _portMode == 0 ? 0 : _portInput;
+            var portIsValid = UnionAirPortAllocator.IsValidConfiguredPort(configuredPort) &&
+                              (_portMode == 0 || UnionAirPortAllocator.IsValidConcretePort(_portInput));
+            if (!portIsValid)
+                EditorGUILayout.HelpBox(
+                    "Fixed Port must be between 1 and 65535.",
+                    MessageType.Error);
+            else if ((previousPortMode != _portMode || previousPortInput != _portInput) &&
+                     configuredPort != UnionAirSettings.Port)
+                UnionAirSettings.Port = configuredPort;
+
+            if (isRunning)
+                EditorGUILayout.HelpBox(
+                    "Port changes are saved immediately and apply when the server is restarted.",
+                    MessageType.Info);
+
+            var autoStart = UnionAirSettings.AutoStart;
+            var newAutoStart = EditorGUILayout.Toggle("Auto Start on Load", autoStart);
+            if (newAutoStart != autoStart)
+                UnionAirSettings.AutoStart = newAutoStart;
+
+            var diagnosticLogging = UnionAirSettings.DiagnosticLifecycleLogging;
+            var newDiagnosticLogging = EditorGUILayout.Toggle(
+                "Diagnostic Lifecycle Logging", diagnosticLogging);
+            if (newDiagnosticLogging != diagnosticLogging)
+                UnionAirSettings.DiagnosticLifecycleLogging = newDiagnosticLogging;
+
+            DrawProjectSettingsWarnings();
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Play Mode Safety", EditorStyles.boldLabel);
-            UnionAirSettings.AllowPlayModeSceneChanges =
-                EditorGUILayout.Toggle("Allow Play Mode Scene Changes", UnionAirSettings.AllowPlayModeSceneChanges);
+            var allowSceneChanges = UnionAirSettings.AllowPlayModeSceneChanges;
+            var newAllowSceneChanges = EditorGUILayout.Toggle(
+                "Allow Play Mode Scene Changes", allowSceneChanges);
+            if (newAllowSceneChanges != allowSceneChanges)
+                UnionAirSettings.AllowPlayModeSceneChanges = newAllowSceneChanges;
             EditorGUILayout.HelpBox(
                 "When disabled, scene-object write endpoints are rejected during Play Mode even if the request includes allowWhilePlaying=true.",
                 MessageType.Info);
 
+            if (GUILayout.Button("Disable All Sensitive APIs..."))
+            {
+                if (EditorUtility.DisplayDialog(
+                        "Disable All Sensitive APIs",
+                        "Disable every optional Built-in API category, Custom Handlers, and " +
+                        "Play Mode scene changes? Read-only APIs remain enabled.",
+                        "Disable All",
+                        "Cancel"))
+                    UnionAirProjectSettings.DisableAllSensitiveApis();
+            }
+
             EditorGUILayout.Space(8);
             using (new EditorGUILayout.HorizontalScope())
             {
-                using (new EditorGUI.DisabledScope(isRunning))
+                using (new EditorGUI.DisabledScope(isRunning || !portIsValid))
                 {
                     if (GUILayout.Button("Start"))
-                    {
-                        UnionAirSettings.Port = _portInput;
-                        UnionAirInit.StartServerManually(_portInput);
-                    }
+                        UnionAirInit.StartServerManually(configuredPort);
                 }
 
                 using (new EditorGUI.DisabledScope(!isRunning))
@@ -149,10 +189,10 @@ namespace LeonAkasaka.UnionAir.Editor
                         UnionAirInit.StopServerManually();
                 }
 
-                if (GUILayout.Button("Restart"))
+                using (new EditorGUI.DisabledScope(!portIsValid))
                 {
-                    UnionAirSettings.Port = _portInput;
-                    UnionAirInit.RestartServerManually(_portInput);
+                    if (GUILayout.Button("Restart"))
+                        UnionAirInit.RestartServerManually(configuredPort);
                 }
             }
 
@@ -186,10 +226,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var oldEnabled = UnionAirSettings.CustomHandlersEnabled;
             var newEnabled = EditorGUILayout.Toggle("Enable Custom Handlers", oldEnabled);
             if (newEnabled != oldEnabled)
-            {
                 UnionAirSettings.CustomHandlersEnabled = newEnabled;
-                UnionAirRouteRegistry.Refresh();
-            }
 
             if (GUILayout.Button("Rescan Custom Handlers"))
                 UnionAirRouteRegistry.Refresh();
@@ -271,6 +308,34 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorGUILayout.EndScrollView();
         }
 
+        private static void DrawProjectSettingsWarnings()
+        {
+            if (UnionAirProjectSettings.State == UnionAirProjectSettingsState.Invalid)
+            {
+                EditorGUILayout.HelpBox(
+                    "Invalid .unionair/settings.json; auto-start and optional APIs fail closed. " +
+                    "Changing any setting replaces it with a complete safe document. " +
+                    UnionAirProjectSettings.Error,
+                    MessageType.Error);
+            }
+
+            if (UnionAirProjectSettings.SavePending)
+            {
+                EditorGUILayout.HelpBox(
+                    "Project settings are active in memory but have not been saved. " +
+                    "Saving will be retried automatically. " +
+                    UnionAirProjectSettings.SaveError,
+                    MessageType.Warning);
+            }
+        }
+
+        private void SyncPortInputs()
+        {
+            var configuredPort = UnionAirSettings.Port;
+            _portMode = configuredPort == 0 ? 0 : 1;
+            _portInput = configuredPort == 0 ? 8765 : configuredPort;
+        }
+
         private static void DrawCopyableUrl(string label, string url)
         {
             using (new EditorGUILayout.HorizontalScope())
@@ -342,7 +407,6 @@ namespace LeonAkasaka.UnionAir.Editor
                             category.Key,
                             newEnabled,
                             category.EnabledByDefault);
-                        UnionAirRouteRegistry.Refresh();
                     }
                 }
 
@@ -383,8 +447,12 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 var state = endpoint.Enabled ? "" : " [disabled]";
                 EditorGUILayout.LabelField($"{endpoint.Method,-6} {endpoint.Path}{state}", EditorStyles.miniLabel);
-                if (GUILayout.Button("Copy", EditorStyles.miniButton, GUILayout.Width(46)))
-                    GUIUtility.systemCopyBuffer = $"http://localhost:{UnionAirSettings.Port}{endpoint.Path}";
+                var server = UnionAirInit.Server;
+                using (new EditorGUI.DisabledScope(!server.IsRunning))
+                {
+                    if (GUILayout.Button("Copy", EditorStyles.miniButton, GUILayout.Width(46)))
+                        GUIUtility.systemCopyBuffer = $"http://localhost:{server.Port}{endpoint.Path}";
+                }
             }
         }
 

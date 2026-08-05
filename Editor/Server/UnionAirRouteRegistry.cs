@@ -40,6 +40,39 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </summary>
         public static void Refresh()
         {
+            Scan();
+            RefreshState();
+        }
+
+        /// <summary>
+        /// Reapplies settings and collision state without rescanning loaded assemblies.
+        /// </summary>
+        internal static void RefreshState()
+        {
+            if (_descriptors == null || _categories == null)
+                Scan();
+
+            ApplyCategoryState(_categories);
+            ApplyRouteStateAndCollisions(_descriptors);
+        }
+
+        /// <summary>
+        /// Returns the custom category IDs from the current route discovery snapshot.
+        /// </summary>
+        internal static HashSet<string> GetKnownCustomCategoryIds()
+        {
+            if (_categories == null)
+                Scan();
+
+            var result = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var category in _categories)
+                if (category.Source == UnionAirRouteSource.Custom)
+                    result.Add(category.Id);
+            return result;
+        }
+
+        private static void Scan()
+        {
             var descriptors = new List<UnionAirEndpointDescriptor>();
             var categories = CreateBuiltInCategories();
             var order = 0;
@@ -92,8 +125,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
             }
 
-            ApplyCategoryState(categories);
-            ApplyRouteStateAndCollisions(descriptors);
             descriptors.Sort(CompareDescriptors);
             categories.Sort(CompareCategories);
             _descriptors = descriptors;

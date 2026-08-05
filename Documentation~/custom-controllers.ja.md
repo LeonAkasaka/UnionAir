@@ -36,7 +36,7 @@ public class MyToolController
 
 この例は `GET /api/custom/my-tool/status` を登録します。
 
-カスタムハンドラーは既定で無効です。**Window > UnionAir > REST Bridge > Custom Handlers** で有効化してください。カスタムカテゴリも個別に有効/無効を切り替えられます。
+カスタムハンドラーは既定で無効です。**Window > UnionAir > REST Bridge > Custom Handlers** で有効化してください。その後、カスタムカテゴリを個別に有効/無効へ切り替えられます。Custom Handlersのmaster switchがオフの間、カテゴリのcheckboxは操作できません。
 
 `Category` は文字列であり、カスタム拡張は `/api/help` と EditorWindow に表示される独自のグループ名を定義できます。built-in エンドポイントは `UnionAirEndpointCategories.Read`、`SceneWrite`、`AssetWrite`、`PlayMode`、`EditorActions`、`Profiling`、任意機能の `TestRunner` を使用します。カテゴリメタデータは有効化状態と既定のリスク報告を制御します。`Risk` はツールや LLM 向けの説明用メタデータであり、リクエストを受け付けるかどうかはカテゴリの有効化状態が決めます。ルートがカテゴリより狭いリスクプロファイルを持つ場合、エンドポイントは `UseRiskOverride = true` と `Risk = ...` を設定できます。
 
@@ -192,7 +192,7 @@ if (!UnionAirReferenceResolver.TryResolveAssetReference(
 
 ## Play モードとセキュリティ
 
-カスタムコントローラは、それを定義する Editor アセンブリの権限で Unity Editor プロセス内で実行されます。UnionAir はカスタムコントローラのコードをサンドボックス化しません。
+カスタムコントローラは、それを定義する Editor アセンブリの権限で Unity Editor プロセス内で実行されます。UnionAir はカスタムコントローラのコードをサンドボックス化しません。Custom Handlersを無効化してもHTTP routeが削除されるだけであり、assemblyのloadや別のEditor entry pointからのcode実行は防ぎません。categoryとhandlerのtoggleはAPI露出範囲と誤操作を制御するもので、悪意あるproject codeへの防御ではありません。
 
 カテゴリメタデータと `PlayModePolicy` は意図を持って設定してください:
 

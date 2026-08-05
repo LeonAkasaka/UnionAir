@@ -6,9 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-05
+
+### Upgrade Notes
+
+- Console-log `timestamp` values are now UTC ISO 8601 with a `Z` suffix. Clients that interpreted the previous offset-free values as local time must update their parser.
+- The configured port now defaults to Automatic. Clients should read `.unionair/endpoint.txt` at connection time and reread it after a refused connection instead of assuming port `8765`.
+- A valid `.unionair/settings.json` takes precedence over EditorPrefs and directly controls the exposed API surface; there is no separate local-approval step. The file is not ignored by `.unionair/.gitignore`, so a category enabled in a committed document is enabled for everyone who opens that project. Review it before sharing a project, and use **Disable All Sensitive APIs...** to clear every optional category, custom handlers, and Play Mode scene changes. When the file is absent the legacy EditorPrefs behavior is unchanged, and an invalid document fails closed rather than partially applying values.
+
 ### Added
 
 - Added project-local API discovery through `.unionair/endpoint.txt`. A successful listener start atomically publishes the concrete Base URL; clean and observed stop paths remove only the current instance's value, startup clears crash debris, and `.unionair/.gitignore` keeps the runtime file and replacement temporaries out of Git. `GET /api/health` now reports `projectPath`, so clients can reject stale discovery that points at another project's Editor before discovering routes through `GET /api/help?detail=full`. Endpoint publication retries one transient atomic replacement and remains independent of best-effort ignore-file maintenance.
+- Added strict versioned project configuration through `.unionair/settings.json`. Schema-backed EditorWindow controls update an in-memory working document and atomically save the complete UTF-8-without-BOM v1 file after every change; failed writes remain dirty and retry automatically. Domain reloads restore the working document through SessionState instead of rereading external edits. Built-in categories, custom handlers, and Play Mode scene changes use one authoritative set of UI controls, with a convenience action that disables every sensitive API while preserving server settings. The file remains visible to Git while runtime discovery files stay ignored.
 
 - `POST /api/test-runs` now returns `500` without handing anything to the Unity Test Framework when the run record cannot be written, bringing the Test Runner in line with compilation, builds, and target switches. It previously dispatched the run first and wrote the record afterwards, so a failed write escaped as an unhandled exception with a real run already in flight and the armed profiling session orphaned. Attaching a profiling session, which writes to disk the same way, moved ahead of the dispatch for the same reason.
 - The run id in `POST /api/test-runs` is now issued by UnionAir rather than taken from the Unity Test Framework. The framework returns its own id only once the run has been dispatched, which is exactly what made recording the run first impossible; its id is kept privately as the handle cancellation needs. The value is still an opaque GUID string and no response changed shape, so clients see no difference. `DELETE /api/test-runs/{id}` gains one `409` case, for a run the framework accepted without naming.
@@ -59,6 +68,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Breaking:** The configured server port now defaults to Automatic (`0`) instead of fixed port `8765`. Automatic mode resolves a concrete loopback port before starting `HttpListener`, retains that assignment across domain reloads in the same Editor process when possible, and republishes `.unionair/endpoint.txt` when a conflict forces reassignment. Fixed ports `1..65535` remain available through the EditorWindow.
+- **Breaking:** A valid `.unionair/settings.json` takes precedence over EditorPrefs for port, auto-start, categories, custom handlers, and Play Mode scene changes. Its API values directly control the exposed routes; there is no separate local-approval layer. An invalid document is never partially applied: auto-start is disabled, only Read remains enabled, custom handlers are disabled, and Play Mode scene changes are denied. Projects without the file retain the previous EditorPrefs/default behavior.
+
 - **Breaking:** a script compilation started by a player build is now recorded with `source: "build"` and a `buildId` naming the build, instead of being adopted as an unrelated `external` cycle. `GET /api/compile/records?source=` accepts `build` alongside `unionAir` and `external`, and every compile record now carries a `buildId` field that is `null` for cycles no build owns. A client that treated `source` as a two-value field must be updated.
 - `POST /api/editor/play` is now rejected with `409` while a script compilation is active. Entering Play mode during a compilation loses the request: Unity reloads the domain when the cycle finishes and discards the mode change with it. `POST /api/editor/stop`, `pause`, and `step` are deliberately unaffected — stopping a running game is exactly what a client needs to be able to do while something else is in flight.
 - **Breaking:** `POST /api/compile` now returns `500` when the compile record cannot be written, instead of starting a compilation whose result it could not report. The response promises an id to poll and a compilation ends in a domain reload that discards the in-memory copy, so a record that never reached disk makes that promise unkeepable.
@@ -67,8 +79,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added a Design Philosophy section to `README.md` stating why UnionAir mediates Editor operations rather than file access, what qualifies an endpoint, and what is deliberately left to direct file operations. `AGENTS.md` and `CONTRIBUTING.md` now refer to it as the criterion for adding an endpoint and for judging feature requests.
 - Corrected the Undo note in `README.md`: scene edits are registered with `Undo`, while asset writes do not uniformly support it and should not be assumed to be reversible. The previous wording claimed Undo support for all Edit mode writes. The behavior is unchanged; only the documentation was wrong.
+- Documented the Test Runner filter contract in `Documentation~/api/testing.md`: the matching rule, case sensitivity, and suite behavior of each of the four filter fields, the OR-within-field and AND-across-fields combination, and the `!` exclusion prefix. A filter that matches no test is now documented as completing with `result: "passed"` and `progress.completed: 0`, because nothing ran and so nothing failed — a client that filters compares an expected count against `progress.completed`. `progress.total` is the size of the whole test tree for the mode and never narrows with the filters; the previous response example showed it equal to `completed`, which read as the selected count. `GET /api/tests` is now documented as listing leaf tests only, so suite names valid in `testNames` and `groupNames` do not appear there. The behavior is unchanged; only the documentation was wrong.
 
 ### Fixed
+
+- Automatic port startup now contains probe-allocation exceptions, counts only distinct ports against its eight-candidate budget, skips port-specific listener rejections, and gives a retained port one delayed retry before reassignment. Fatal listener failures still stop immediately and produce one concise error instead of escaping through the Editor update callback.
+- Project settings no longer make their EditorWindow controls read-only. Port mode and fixed-port values remain editable while the listener is running, save immediately, and apply to the listener on Restart; category, custom-handler, and Play Mode safety settings are likewise editable without manual Save or Reload actions. Duplicate local-approval controls were removed: the existing Built-in API and Custom Handlers checkboxes are authoritative. Documentation now states explicitly that enablement prevents accidental operations and limits API exposure, but does not defend against malicious Editor code or settings tampering.
+- Project settings now commit a valid `settings.json` even when best-effort `.gitignore` maintenance fails, and report the ignore failure separately. Fixed-port editing waits for the completed field value, route enablement changes reuse the existing discovery snapshot instead of rescanning every loaded assembly, and custom category checkboxes remain subordinate to the Custom Handlers master switch rather than enabling it implicitly.
 
 - A player build no longer leaves loaded scenes reported as externally changed. `BuildPipeline.BuildPlayer` raises `sceneClosed` for the loaded scene without a matching `sceneOpened`, which dropped the disk baseline and made every later refresh or compile request return `409` with `reason: "untracked"` until the scene was saved or reopened by hand. Baselines are now captured before the build and restored afterwards, but only for scenes whose file is byte-identical — a scene changed on disk during the build still trips the guard.
 - Classified Unity 6 Bee Player compilation outputs under `Library/Bee/PlayerScriptAssemblies` as `player`, while preserving conservative handling of mixed and unrelated output directories.
@@ -305,5 +322,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 <!-- 0.1.0 and 0.2.0 predate this repository being published and were never tagged,
      so they have no release page to link to. -->
-[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.4.0
 [0.3.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.3.0

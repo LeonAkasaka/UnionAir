@@ -12,7 +12,7 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         public RestRouter()
         {
-            UnionAirRouteRegistry.Refresh();
+            UnionAirRouteRegistry.RefreshState();
         }
 
         /// <summary>

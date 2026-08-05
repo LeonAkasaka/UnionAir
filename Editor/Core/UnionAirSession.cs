@@ -20,6 +20,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private const string SessionIdKey = "UnionAir.SessionId";
         private const string NextLogSequenceKey = "UnionAir.Log.NextSequence";
         private const string PreviousLogSameSessionKey = "UnionAir.Log.PreviousSameSession";
+        private const string AutomaticPortKey = "UnionAir.AutomaticPort";
 
         /// <summary>
         /// Monotonic assembly-domain counter for the current Editor process, starting at 1.
@@ -91,6 +92,15 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (value) SessionState.SetBool(PreviousLogSameSessionKey, true);
             else SessionState.EraseBool(PreviousLogSameSessionKey);
+        }
+
+        internal static int LoadAutomaticPort()
+            => SessionState.GetInt(AutomaticPortKey, 0);
+
+        internal static void SaveAutomaticPort(int port)
+        {
+            if (UnionAirPortAllocator.IsValidConcretePort(port))
+                SessionState.SetInt(AutomaticPortKey, port);
         }
     }
 }
