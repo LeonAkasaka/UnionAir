@@ -90,7 +90,7 @@ EditMode または PlayMode の非同期 run を1件開始し、`202 Accepted` �
 
 同一 field 内の複数値は OR、異なる field 同士は AND で結合されます。先頭が `!` の値は、選択ではなく除外として扱われます。category を宣言していないテストは `Uncategorized` として照合されます。
 
-`testNames` と `groupNames` は test case だけでなく suite にも当たります。namespace、class、パラメータ化 method はいずれも test tree の node であり、これらを指定すると配下のテストがすべて実行されます。これらの名前は leaf test のみを返す [GET /api/tests](#get-apitests) には含まれないため、class や namespace で絞り込む場合は呼び出し側が名前を組み立てることになります。パラメータ化 method の node 名は開き括弧の手前までであり、その配下の leaf 名は引数リストを含みます。引数リスト自体が `.` や `(` を含むことがあります。
+`testNames` と `groupNames` は test case だけでなく suite にも当たります。namespace、class、パラメータ化 method はいずれも test tree の node であり、これらを指定すると配下のテストがすべて実行されます。これらの名前は leaf test のみを返す [GET /api/tests](#get-apitests) には含まれないため、class や namespace で絞り込む場合は呼び出し側が名前を組み立てることになります。パラメータ化 method の node 名は開き括弧の直前までであり、開き括弧自体を含めてはいけません。`Example.EditorTests.Rounds` は `Example.EditorTests.Rounds(1,2)` のすべての case を選択しますが、`Example.EditorTests.Rounds(` は何にも一致しません。method 配下の leaf 名は引数リストを含み、引数リスト自体が `.` や `(` を含むことがあります。
 
 ### 何にも一致しない run
 
@@ -154,7 +154,7 @@ current run または最後に完了した UnionAir run を返します。それ
 
 `state` は `queued`、`running`、`canceling`、`completed`、`aborted` です。完了前の `result` は `null`、完了後は `passed`、`failed`、`skipped`、`inconclusive`、`canceled`、`aborted` のいずれかです。時刻は UTC ISO 8601 文字列です。
 
-`progress.completed` は実行された test case の件数です。`progress.total` は当該 mode の test tree 全体の件数であり、filter によって絞り込まれません。したがって filter が選択した件数ではなく上限値です。1つの assembly に絞った run は、選択されたテストがすべて成功しても `completed` が `total` を大きく下回ったまま終了します。期待件数と突き合わせるのは `total` ではなく `completed` です。[何にも一致しない run](#何にも一致しない-run) を参照してください。
+`progress.completed` は terminal result が報告された test case の件数、すなわち `summary` の4項目の合計です。body が実行されない skipped や inconclusive の case も計上されるため、テストが実際に実行されたことを確認する場合は `summary.skipped` も併せて参照してください。`progress.total` は当該 mode の test tree 全体の件数であり、filter によって絞り込まれません。したがって filter が選択した件数ではなく上限値です。1つの assembly に絞った run は、選択されたテストがすべて成功しても `completed` が `total` を大きく下回ったまま終了します。期待件数と突き合わせるのは `total` ではなく `completed` です。[何にも一致しない run](#何にも一致しない-run) を参照してください。
 
 current metadata は domain reload を越えて保持されます。Editor 再起動後に未完了 metadata が残っている場合、UnionAir は以前の latest XML を置き換えずに `aborted` と確定します。
 

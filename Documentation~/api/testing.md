@@ -87,7 +87,7 @@ The four filter fields are optional arrays of non-empty strings and reach the Un
 
 Values within one field are combined with OR, and different fields are combined with AND. A value starting with `!` excludes what it matches instead of selecting it. A test that declares no category is matched as `Uncategorized`.
 
-`testNames` and `groupNames` also match suites: a namespace, a class, and a parameterized method are each a node in the test tree, and selecting one runs every test under it. Those names are not returned by [GET /api/tests](#get-apitests), which lists leaf tests only, so a caller filtering by class or namespace derives the name itself. A parameterized method's node name ends at its opening parenthesis, while the leaf names below it carry the argument list, which can contain `.` and `(` of its own.
+`testNames` and `groupNames` also match suites: a namespace, a class, and a parameterized method are each a node in the test tree, and selecting one runs every test under it. Those names are not returned by [GET /api/tests](#get-apitests), which lists leaf tests only, so a caller filtering by class or namespace derives the name itself. A parameterized method's node name ends immediately before the opening parenthesis and must not include it: `Example.EditorTests.Rounds` selects every case of `Example.EditorTests.Rounds(1,2)`, while `Example.EditorTests.Rounds(` matches nothing. The leaf names below the method carry the argument list, which can contain `.` and `(` of its own.
 
 ### Runs that match nothing
 
@@ -151,7 +151,7 @@ Returns the current run or the latest completed UnionAir run. Older IDs return `
 
 `state` is `queued`, `running`, `canceling`, `completed`, or `aborted`. Before completion, `result` is `null`; afterwards it is `passed`, `failed`, `skipped`, `inconclusive`, `canceled`, or `aborted`. Timestamps are UTC ISO 8601 strings.
 
-`progress.completed` is the number of test cases that have run. `progress.total` is the size of the test tree for the mode and does not narrow with the filters, so it is an upper bound rather than the number of tests the filters selected — a run filtered to one assembly reaches a terminal state with `completed` well below `total` even when every selected test passed. Compare an expected count against `completed`, not against `total`. See [Runs that match nothing](#runs-that-match-nothing).
+`progress.completed` is the number of test cases that reported a terminal result — the sum of the four `summary` counts. A skipped or inconclusive case is counted even though its body never ran, so a caller confirming that tests actually executed reads `summary.skipped` alongside it. `progress.total` is the size of the test tree for the mode and does not narrow with the filters, so it is an upper bound rather than the number of tests the filters selected — a run filtered to one assembly reaches a terminal state with `completed` well below `total` even when every selected test passed. Compare an expected count against `completed`, not against `total`. See [Runs that match nothing](#runs-that-match-nothing).
 
 Current metadata survives domain reload. If incomplete metadata remains after an Editor restart, UnionAir marks it `aborted` without replacing the previous latest XML.
 
