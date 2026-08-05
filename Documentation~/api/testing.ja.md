@@ -154,7 +154,7 @@ current run または最後に完了した UnionAir run を返します。それ
 
 `state` は `queued`、`running`、`canceling`、`completed`、`aborted` です。完了前の `result` は `null`、完了後は `passed`、`failed`、`skipped`、`inconclusive`、`canceled`、`aborted` のいずれかです。時刻は UTC ISO 8601 文字列です。
 
-`progress.completed` は terminal result が報告された test case の件数、すなわち `summary` の4項目の合計です。body が実行されない skipped や inconclusive の case も計上されるため、テストが実際に実行されたことを確認する場合は `summary.skipped` も併せて参照してください。`progress.total` は当該 mode の test tree 全体の件数であり、filter によって絞り込まれません。したがって filter が選択した件数ではなく上限値です。1つの assembly に絞った run は、選択されたテストがすべて成功しても `completed` が `total` を大きく下回ったまま終了します。期待件数と突き合わせるのは `total` ではなく `completed` です。[何にも一致しない run](#何にも一致しない-run) を参照してください。
+`progress.completed` は terminal result が報告された test case の件数、すなわち `summary` の4項目の合計であり、body が実行された件数ではありません。skipped の case は body が実行されないまま計上されます。inconclusive の case は pass でも fail でもない terminal result として計上されるもので、`Assert.Inconclusive` は test body や setup の実行中に報告されるため、case 自体は実行されています。run を解釈する際は `summary.skipped` と `summary.inconclusive` をそれぞれ確認してください。`progress.total` は当該 mode の test tree 全体の件数であり、filter によって絞り込まれません。したがって filter が選択した件数ではなく上限値です。1つの assembly に絞った run は、選択されたテストがすべて成功しても `completed` が `total` を大きく下回ったまま終了します。期待件数と突き合わせるのは `total` ではなく `completed` です。[何にも一致しない run](#何にも一致しない-run) を参照してください。
 
 current metadata は domain reload を越えて保持されます。Editor 再起動後に未完了 metadata が残っている場合、UnionAir は以前の latest XML を置き換えずに `aborted` と確定します。
 
