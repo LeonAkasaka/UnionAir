@@ -13,6 +13,8 @@ UnionAir retains only the current run metadata and the latest completed UnionAir
 
 Discovers leaf tests and returns a flat, paged list. Discovery is asynchronous inside the Editor; only one discovery request may be active at a time.
 
+Suite nodes — namespaces, classes, and parameterized methods — are not listed, even though they are valid `testNames` and `groupNames` values for [POST /api/test-runs](#post-apitest-runs).
+
 ### Query Parameters
 
 | Parameter | Required | Default | Description |
@@ -51,7 +53,7 @@ Invalid parameters return `400`. Concurrent discovery returns `409`. A pending d
 
 ## POST /api/test-runs
 
-Starts one asynchronous EditMode or PlayMode test run and returns `202 Accepted`. Omit every filter to run all tests in the selected mode. Filter fields use Unity Test Framework `Filter` semantics; fields are combined by that framework.
+Starts one asynchronous EditMode or PlayMode test run and returns `202 Accepted`. Omit every filter to run all tests in the selected mode; see [Filters](#filters) for how the four filter fields select tests.
 
 ### Request
 
@@ -70,7 +72,28 @@ Starts one asynchronous EditMode or PlayMode test run and returns `202 Accepted`
 }
 ```
 
-`mode` is required. The four filters are optional arrays of non-empty strings. `groupNames` entries are regular expressions and are validated before execution. `profiling` is optional and uses the [Profiling session configuration](profiling.md#post-apiprofilingsessions). Both the Test Runner and Profiling categories must be enabled when it is present.
+`mode` is required. `profiling` is optional and uses the [Profiling session configuration](profiling.md#post-apiprofilingsessions). Both the Test Runner and Profiling categories must be enabled when it is present.
+
+### Filters
+
+The four filter fields are optional arrays of non-empty strings and reach the Unity Test Framework unchanged. `groupNames` entries are validated as regular expressions before execution; beyond that, no field is checked against the tests that actually exist.
+
+| Field | Matching | Case | Selects suites |
+|-------|----------|------|----------------|
+| `testNames` | Exact full name; not a regular expression | Sensitive | Yes |
+| `groupNames` | Unanchored regular expression over the full name | Per pattern | Yes |
+| `categoryNames` | Unanchored regular expression over each category | Per pattern | — |
+| `assemblyNames` | Exact assembly name, without `.dll` | Insensitive | — |
+
+Values within one field are combined with OR, and different fields are combined with AND. A value starting with `!` excludes what it matches instead of selecting it. A test that declares no category is matched as `Uncategorized`.
+
+`testNames` and `groupNames` also match suites: a namespace, a class, and a parameterized method are each a node in the test tree, and selecting one runs every test under it. Those names are not returned by [GET /api/tests](#get-apitests), which lists leaf tests only, so a caller filtering by class or namespace derives the name itself. A parameterized method's node name ends immediately before the opening parenthesis and must not include it: `Example.EditorTests.Rounds` selects every case of `Example.EditorTests.Rounds(1,2)`, while `Example.EditorTests.Rounds(` matches nothing. The leaf names below the method carry the argument list, which can contain `.` and `(` of its own.
+
+### Runs that match nothing
+
+A filter that matches no test is not an error. The run completes with `result: "passed"`, `progress.completed: 0`, and an all-zero summary, because nothing ran and so nothing failed. A misspelled assembly, a renamed test assembly, a category that no longer exists, and a `groupNames` pattern that stopped matching all end here.
+
+`result` reports whether anything failed, not whether the filters selected what the caller meant. A client that filters should compare `progress.completed` against the number of tests it expected the filter to select. `progress.total` is not that number; see [GET /api/test-runs/{id}](#get-apitest-runsid).
 
 ### Response — 202
 
@@ -110,7 +133,7 @@ Returns the current run or the latest completed UnionAir run. Older IDs return `
   "startedAt": "2026-07-18T05:00:00.0000000Z",
   "finishedAt": "2026-07-18T05:00:01.0000000Z",
   "currentTest": null,
-  "progress": { "completed": 1, "total": 1 },
+  "progress": { "completed": 1, "total": 128 },
   "summary": {
     "passed": 1,
     "failed": 0,
@@ -127,6 +150,8 @@ Returns the current run or the latest completed UnionAir run. Older IDs return `
 ```
 
 `state` is `queued`, `running`, `canceling`, `completed`, or `aborted`. Before completion, `result` is `null`; afterwards it is `passed`, `failed`, `skipped`, `inconclusive`, `canceled`, or `aborted`. Timestamps are UTC ISO 8601 strings.
+
+`progress.completed` is the number of test cases that reported a terminal result — the sum of the four `summary` counts — and not the number of test bodies that executed. A skipped case is counted without its body running. An inconclusive case is counted as a terminal result that is neither a pass nor a failure; `Assert.Inconclusive` reports it from inside a test body or its setup, so the case did run. A caller interpreting a run therefore reads `summary.skipped` and `summary.inconclusive` alongside `completed`. `progress.total` is the size of the test tree for the mode and does not narrow with the filters, so it is an upper bound rather than the number of tests the filters selected — a run filtered to one assembly reaches a terminal state with `completed` well below `total` even when every selected test passed. Compare an expected count against `completed`, not against `total`. See [Runs that match nothing](#runs-that-match-nothing).
 
 Current metadata survives domain reload. If incomplete metadata remains after an Editor restart, UnionAir marks it `aborted` without replacing the previous latest XML.
 

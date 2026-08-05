@@ -16,6 +16,8 @@ UnionAir が保持するのは current run の metadata と、最後に完了し
 
 leaf test を発見し、フラットなページング済み一覧を返します。Editor 内での発見は非同期であり、同時に実行できる discovery request は1件だけです。
 
+namespace、class、パラメータ化 method といった suite node は一覧に含まれません。これらは [POST /api/test-runs](#post-apitest-runs) の `testNames` および `groupNames` に指定できる正当な値です。
+
 ### クエリパラメータ
 
 | パラメータ | 必須 | 既定 | 説明 |
@@ -54,7 +56,7 @@ leaf test を発見し、フラットなページング済み一覧を返しま�
 
 ## POST /api/test-runs
 
-EditMode または PlayMode の非同期 run を1件開始し、`202 Accepted` を返します。filter をすべて省略すると、指定 mode の全テストを実行します。filter field は Unity Test Framework の `Filter` semantics に従い、field の組み合わせも同 framework が処理します。
+EditMode または PlayMode の非同期 run を1件開始し、`202 Accepted` を返します。filter をすべて省略すると、指定 mode の全テストを実行します。4つの filter field がテストをどう選択するかは [フィルタ](#フィルタ) を参照してください。
 
 ### リクエスト
 
@@ -73,7 +75,28 @@ EditMode または PlayMode の非同期 run を1件開始し、`202 Accepted` �
 }
 ```
 
-`mode` は必須です。4つの filter は空でない文字列の配列として任意指定できます。`groupNames` は正規表現であり、実行前に検証されます。`profiling`は任意で、[Profiling session設定](profiling.ja.md#post-apiprofilingsessions)を使用します。指定時はTest RunnerとProfilingの両カテゴリを有効にする必要があります。
+`mode` は必須です。`profiling`は任意で、[Profiling session設定](profiling.ja.md#post-apiprofilingsessions)を使用します。指定時はTest RunnerとProfilingの両カテゴリを有効にする必要があります。
+
+### フィルタ
+
+4つの filter field は空でない文字列の配列として任意指定でき、そのまま Unity Test Framework に渡されます。`groupNames` は実行前に正規表現として構文検証されますが、それ以外に「その名前のテストが実在するか」を検査する field はありません。
+
+| Field | 照合 | 大文字小文字 | suite に当たる |
+|-------|----------|------|----------------|
+| `testNames` | full name との完全一致。正規表現ではない | 区別する | あり |
+| `groupNames` | full name に対する非アンカー正規表現 | パターン次第 | あり |
+| `categoryNames` | 各 category に対する非アンカー正規表現 | パターン次第 | — |
+| `assemblyNames` | `.dll` を除いた assembly 名との完全一致 | 区別しない | — |
+
+同一 field 内の複数値は OR、異なる field 同士は AND で結合されます。先頭が `!` の値は、選択ではなく除外として扱われます。category を宣言していないテストは `Uncategorized` として照合されます。
+
+`testNames` と `groupNames` は test case だけでなく suite にも当たります。namespace、class、パラメータ化 method はいずれも test tree の node であり、これらを指定すると配下のテストがすべて実行されます。これらの名前は leaf test のみを返す [GET /api/tests](#get-apitests) には含まれないため、class や namespace で絞り込む場合は呼び出し側が名前を組み立てることになります。パラメータ化 method の node 名は開き括弧の直前までであり、開き括弧自体を含めてはいけません。`Example.EditorTests.Rounds` は `Example.EditorTests.Rounds(1,2)` のすべての case を選択しますが、`Example.EditorTests.Rounds(` は何にも一致しません。method 配下の leaf 名は引数リストを含み、引数リスト自体が `.` や `(` を含むことがあります。
+
+### 何にも一致しない run
+
+filter が1件も一致しないことはエラーではありません。実行されたテストがなく、したがって失敗したテストもないため、run は `result: "passed"`、`progress.completed: 0`、すべて 0 の summary で完了します。assembly 名の綴り違い、rename された test assembly、存在しなくなった category、一致しなくなった `groupNames` パターンは、いずれもこの状態に至ります。
+
+`result` が報告するのは「何かが失敗したか」であって、「filter が呼び出し側の意図通りに選択したか」ではありません。filter を使うクライアントは、`progress.completed` を、その filter で選択されるはずのテスト件数と突き合わせてください。`progress.total` はその件数ではありません。[GET /api/test-runs/{id}](#get-apitest-runsid) を参照してください。
 
 ### レスポンス — 202
 
@@ -113,7 +136,7 @@ current run または最後に完了した UnionAir run を返します。それ
   "startedAt": "2026-07-18T05:00:00.0000000Z",
   "finishedAt": "2026-07-18T05:00:01.0000000Z",
   "currentTest": null,
-  "progress": { "completed": 1, "total": 1 },
+  "progress": { "completed": 1, "total": 128 },
   "summary": {
     "passed": 1,
     "failed": 0,
@@ -130,6 +153,8 @@ current run または最後に完了した UnionAir run を返します。それ
 ```
 
 `state` は `queued`、`running`、`canceling`、`completed`、`aborted` です。完了前の `result` は `null`、完了後は `passed`、`failed`、`skipped`、`inconclusive`、`canceled`、`aborted` のいずれかです。時刻は UTC ISO 8601 文字列です。
+
+`progress.completed` は terminal result が報告された test case の件数、すなわち `summary` の4項目の合計であり、body が実行された件数ではありません。skipped の case は body が実行されないまま計上されます。inconclusive の case は pass でも fail でもない terminal result として計上されるもので、`Assert.Inconclusive` は test body や setup の実行中に報告されるため、case 自体は実行されています。run を解釈する際は `summary.skipped` と `summary.inconclusive` をそれぞれ確認してください。`progress.total` は当該 mode の test tree 全体の件数であり、filter によって絞り込まれません。したがって filter が選択した件数ではなく上限値です。1つの assembly に絞った run は、選択されたテストがすべて成功しても `completed` が `total` を大きく下回ったまま終了します。期待件数と突き合わせるのは `total` ではなく `completed` です。[何にも一致しない run](#何にも一致しない-run) を参照してください。
 
 current metadata は domain reload を越えて保持されます。Editor 再起動後に未完了 metadata が残っている場合、UnionAir は以前の latest XML を置き換えずに `aborted` と確定します。
 
