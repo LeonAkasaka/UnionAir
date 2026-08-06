@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -13,7 +12,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal static class PlayModeScreenHandler
     {
-        public static void HandleHitTest(HttpListenerRequest request, HttpListenerResponse response)
+        public static void HandleHitTest(UnionAirRequest request, UnionAirResponse response)
         {
             if (!EditorApplication.isPlaying)
             {

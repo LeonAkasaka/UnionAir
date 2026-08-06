@@ -1,4 +1,3 @@
-using System.Net;
 using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -8,7 +7,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class EditorMenuItemHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var path = RequestBodyReader.GetString(body, "path");

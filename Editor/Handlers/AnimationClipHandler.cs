@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -16,7 +15,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class AnimationClipHandler
     {
-        public void HandleCreate(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleCreate(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var assetPath = RequestBodyReader.GetString(body, "assetPath");
@@ -52,7 +51,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 201);
         }
 
-        public void HandleRead(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleRead(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var assetPath = AssetDatabase.GUIDToAssetPath(guid);
             if (string.IsNullOrEmpty(assetPath))
@@ -148,7 +147,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString());
         }
 
-        public void HandleAddCurves(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleAddCurves(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var assetPath = AssetDatabase.GUIDToAssetPath(guid);
             if (string.IsNullOrEmpty(assetPath))
@@ -281,7 +280,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString(), errors.Count > 0 && allAdded.Count == 0 ? 400 : 200);
         }
 
-        public void HandleDeleteCurves(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleDeleteCurves(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var assetPath = AssetDatabase.GUIDToAssetPath(guid);
             if (string.IsNullOrEmpty(assetPath))

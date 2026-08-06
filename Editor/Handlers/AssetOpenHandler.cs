@@ -1,11 +1,10 @@
-using System.Net;
 using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
     internal class AssetOpenHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             if (!EditorTargetUtils.TryResolveAssetPath(

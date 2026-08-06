@@ -1,4 +1,3 @@
-using System.Net;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -13,7 +12,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class GameObjectReparentHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
 

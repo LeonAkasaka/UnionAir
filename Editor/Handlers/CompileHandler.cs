@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Text;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -14,7 +13,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// a cycle that has already finished moved from <c>current</c> to <c>latest</c> between
         /// two separate requests.
         /// </remarks>
-        public void HandleCollection(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleCollection(UnionAirRequest request, UnionAirResponse response)
         {
             var current = CompileService.Current;
             var latest = CompileService.Latest;
@@ -31,7 +30,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Requests a script compilation and returns the record to poll.
         /// </summary>
-        public void HandleStart(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleStart(UnionAirRequest request, UnionAirResponse response)
         {
             // PlayModePolicy only covers isPlaying, and recompiling during the transition loses the
             // cycle. Asked of the coordinator rather than EditorApplication so the rejection names
@@ -134,7 +133,7 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>Lists retained terminal records as bounded summaries.</summary>
-        public void HandleRecords(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleRecords(UnionAirRequest request, UnionAirResponse response)
         {
             CompileRecordQuery query;
             string error;

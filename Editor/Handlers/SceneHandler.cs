@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using UnityEngine;
 
@@ -6,7 +5,7 @@ namespace LeonAkasaka.UnionAir.Editor
 {
     internal class SceneHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             if (request.Url.AbsolutePath == "/api/scene/hierarchy")
                 HandleHierarchy(request, response);
@@ -14,7 +13,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 HandleSceneInfo(request, response);
         }
 
-        private static void HandleSceneInfo(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleSceneInfo(UnionAirRequest request, UnionAirResponse response)
         {
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
@@ -31,7 +30,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString());
         }
 
-        private static void HandleHierarchy(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleHierarchy(UnionAirRequest request, UnionAirResponse response)
         {
             var qs = request.QueryString;
 

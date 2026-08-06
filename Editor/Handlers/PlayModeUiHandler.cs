@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Net;
 using System.Reflection;
 using System.Text;
 using UnityEditor;
@@ -15,19 +14,19 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class PlayModeUiHandler
     {
-        public void HandleElements(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleElements(UnionAirRequest request, UnionAirResponse response)
             => UnityUiInteractionBackend.HandleElements(request, response);
 
-        public void HandleClick(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleClick(UnionAirRequest request, UnionAirResponse response)
             => UnityUiInteractionBackend.HandleClick(request, response);
 
-        public void HandleText(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleText(UnionAirRequest request, UnionAirResponse response)
             => UnityUiInteractionBackend.HandleText(request, response);
 
-        public void HandleScroll(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleScroll(UnionAirRequest request, UnionAirResponse response)
             => UnityUiInteractionBackend.HandleScroll(request, response);
 
-        public void HandleValue(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleValue(UnionAirRequest request, UnionAirResponse response)
             => UnityUiInteractionBackend.HandleValue(request, response);
     }
 
@@ -42,7 +41,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private static Type ResolveTmpType(string fullName)
             => Type.GetType(fullName + ", Unity.TextMeshPro") ?? ObjectRefUtils.ResolveType(fullName, typeof(Component));
 
-        public static void HandleElements(HttpListenerRequest request, HttpListenerResponse response)
+        public static void HandleElements(UnionAirRequest request, UnionAirResponse response)
         {
             if (!EnsurePlaying(response)) return;
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene)) return;
@@ -62,7 +61,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString());
         }
 
-        public static void HandleClick(HttpListenerRequest request, HttpListenerResponse response)
+        public static void HandleClick(UnionAirRequest request, UnionAirResponse response)
         {
             if (!EnsurePlaying(response)) return;
             var body = RequestBodyReader.ReadString(request);
@@ -98,7 +97,7 @@ namespace LeonAkasaka.UnionAir.Editor
             SendInteractionResponse(response, "click", targetComponent, "\"clicked\":true");
         }
 
-        public static void HandleText(HttpListenerRequest request, HttpListenerResponse response)
+        public static void HandleText(UnionAirRequest request, UnionAirResponse response)
         {
             if (!EnsurePlaying(response)) return;
             var body = RequestBodyReader.ReadString(request);
@@ -164,7 +163,7 @@ namespace LeonAkasaka.UnionAir.Editor
             SendInteractionResponse(response, "text", tmpInput, $"\"text\":\"{RestResponse.EscapeJson(currentText)}\"");
         }
 
-        public static void HandleScroll(HttpListenerRequest request, HttpListenerResponse response)
+        public static void HandleScroll(UnionAirRequest request, UnionAirResponse response)
         {
             if (!EnsurePlaying(response)) return;
             var body = RequestBodyReader.ReadString(request);
@@ -216,7 +215,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 $"\"normalizedPosition\":{{\"x\":{RestResponse.FormatFloat(scrollRect.horizontalNormalizedPosition)},\"y\":{RestResponse.FormatFloat(scrollRect.verticalNormalizedPosition)}}}");
         }
 
-        public static void HandleValue(HttpListenerRequest request, HttpListenerResponse response)
+        public static void HandleValue(UnionAirRequest request, UnionAirResponse response)
         {
             if (!EnsurePlaying(response)) return;
             var body = RequestBodyReader.ReadString(request);
@@ -327,14 +326,14 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.SendError(response, $"target does not resolve to a Toggle, Slider, Dropdown, or TMP_Dropdown: {GameObjectUtils.GetPath(go)}", 422);
         }
 
-        private static bool EnsurePlaying(HttpListenerResponse response)
+        private static bool EnsurePlaying(UnionAirResponse response)
         {
             if (EditorApplication.isPlaying) return true;
             RestResponse.SendError(response, "Not in Play mode.", 409);
             return false;
         }
 
-        private static bool EnsureBackend(string body, HttpListenerResponse response)
+        private static bool EnsureBackend(string body, UnionAirResponse response)
         {
             var backend = RequestBodyReader.GetString(body, "backend");
             if (string.IsNullOrEmpty(backend) || string.Equals(backend, UnityUiBackend, StringComparison.OrdinalIgnoreCase))
@@ -344,7 +343,7 @@ namespace LeonAkasaka.UnionAir.Editor
             return false;
         }
 
-        private static bool EnsureEventSystem(HttpListenerResponse response)
+        private static bool EnsureEventSystem(UnionAirResponse response)
         {
             if (EventSystem.current != null) return true;
             RestResponse.SendError(response, "No active EventSystem exists in the scene.", 409);
@@ -352,8 +351,8 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         private static bool TryResolveTarget(
-            HttpListenerRequest request,
-            HttpListenerResponse response,
+            UnionAirRequest request,
+            UnionAirResponse response,
             string body,
             string operation,
             out GameObject go,
@@ -484,7 +483,7 @@ namespace LeonAkasaka.UnionAir.Editor
             return canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
         }
 
-        private static void SendInteractionResponse(HttpListenerResponse response, string action, Component component, string fields)
+        private static void SendInteractionResponse(UnionAirResponse response, string action, Component component, string fields)
         {
             var go = component.gameObject;
             RestResponse.Send(response,

@@ -1,5 +1,4 @@
 using System;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -16,7 +15,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class GameObjectPrimitiveHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var body     = RequestBodyReader.ReadString(request);
             var typeName = RequestBodyReader.GetString(body, "type");

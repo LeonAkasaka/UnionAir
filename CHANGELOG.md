@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Upgrade Notes
+
+- Custom controllers receive `UnionAirRequest` and `UnionAirResponse` instead of `System.Net.HttpListenerRequest` and `HttpListenerResponse`. A controller that only passes `ctx.Request` and `ctx.Response` to `RequestBodyReader` and `RestResponse` compiles unchanged. A controller that declares its own helper typed against the framework types must change those parameter types. The `HttpListenerResponse` overloads of `RestResponse.Send`, `SendBinary`, `SendError`, and `SendNotFound` are removed rather than retained as obsolete.
+
+### Changed
+
+- The handler-facing request and response are now UnionAir's own abstract types, implemented by adapters over `HttpListener`. Both are `abstract class` with an `internal` constructor rather than interfaces, so members can be added later without breaking anyone, while `InternalsVisibleTo` still lets the test assemblies supply substitutes. The transport is no longer part of the contract, and a handler can no longer reach a stream that nothing else can observe: the request body stream is internal to `RequestBodyReader`, which is what makes a single cached read the rule rather than a convention.
+- `RestRouter.Handle` now takes a request and a response instead of an `HttpListenerContext`, and the server wraps each dequeued context once before dispatching it.
+
+### Added
+
+- `RestRouter` gained tests. The framework request and response types are sealed with no public constructor, so nothing that accepted them could be exercised without a live server, and the suite had been shaped around that limitation since the beginning: handlers were tested through extracted pure helpers, and `RequestBodyReaderTests` documented that its request overloads were unreachable. Origin rejection, the `OPTIONS` answer, the not-found response, and the method-not-allowed response are now covered directly, as are the request overloads of `RequestBodyReader` including the single-read guarantee. The gates that depend on Editor state -- the Play Mode opt-in, the test-run rejection, and the disabled-category response -- still require that state to be arranged and remain uncovered.
+
 ## [0.4.0] - 2026-08-05
 
 ### Upgrade Notes

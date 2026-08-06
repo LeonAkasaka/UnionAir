@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using UnityEditor;
 
@@ -8,7 +7,7 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         private const int MaxResults = 500;
 
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var absPath = request.Url.AbsolutePath;
 
@@ -21,7 +20,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
-        private static void HandleList(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleList(UnionAirRequest request, UnionAirResponse response)
         {
             var filterPath   = request.QueryString["path"]   ?? "";
             var filterType   = request.QueryString["type"]   ?? "";
@@ -66,7 +65,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString());
         }
 
-        private static void HandleDetail(string guid, HttpListenerResponse response)
+        private static void HandleDetail(string guid, UnionAirResponse response)
         {
             if (string.IsNullOrEmpty(guid))
             {

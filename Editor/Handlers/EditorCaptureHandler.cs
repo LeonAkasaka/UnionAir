@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Specialized;
-using System.Net;
 using System.Reflection;
 using System.Text;
 using UnityEditor;
@@ -13,7 +12,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private const int MaxWidth  = 1920;
         private const int MaxHeight = 1080;
 
-        public void HandleCapture(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleCapture(UnionAirRequest request, UnionAirResponse response)
         {
             if (!TryCapture(request, response,
                     out var source, out var cameraName,
@@ -36,7 +35,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString());
         }
 
-        public void HandleCaptureImage(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleCaptureImage(UnionAirRequest request, UnionAirResponse response)
         {
             if (!TryCapture(request, response,
                     out _, out _, out _, out _, out var format, out _, out var bytes))
@@ -47,7 +46,7 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         private static bool TryCapture(
-            HttpListenerRequest request, HttpListenerResponse response,
+            UnionAirRequest request, UnionAirResponse response,
             out string source, out string cameraName,
             out int width, out int height, out string format, out int quality, out byte[] bytes)
         {
@@ -72,7 +71,7 @@ namespace LeonAkasaka.UnionAir.Editor
         // frame including Screen Space Overlay Canvas.
         // Falls back to ScreenCapture.CaptureScreenshotAsTexture() if reflection fails.
         private static bool TryCapturePlayMode(
-            HttpListenerResponse response, NameValueCollection query,
+            UnionAirResponse response, NameValueCollection query,
             string format, int quality,
             ref string source, ref string cameraName,
             ref int width, ref int height, ref byte[] bytes)
@@ -201,7 +200,7 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         private static bool TryCaptureEditMode(
-            HttpListenerResponse response, NameValueCollection query,
+            UnionAirResponse response, NameValueCollection query,
             string format, int quality,
             ref string source, ref string cameraName,
             ref int width, ref int height, ref byte[] bytes)

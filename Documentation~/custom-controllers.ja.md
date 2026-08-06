@@ -44,6 +44,8 @@ public class MyToolController
 
 受信リクエストの確認には `UnionAirRequestContext.Request`、ルートテンプレートのパラメータには `UnionAirRequestContext.RouteValues`、レスポンスの書き込みには `UnionAirRequestContext.Response` を使用します。
 
+これらの型は `System.Net.HttpListenerRequest` / `HttpListenerResponse` ではなく、UnionAir 自身の `UnionAirRequest` / `UnionAirResponse` です。transport は実装の詳細のままとなり、ハンドラーが書き込むバイトは必ず UnionAir が所有する型を通ります。リクエストは `HttpMethod`、`Url`、`QueryString`、`Headers`、`HasEntityBody`、`ContentType`、`ContentLength64` を、レスポンスは `StatusCode`、`ContentType`、`ContentLength64`、`OutputStream`、`AddHeader`、`Close` を公開します。リクエストボディはストリームからではなく `RequestBodyReader` 経由で読んでください。読み取り結果をキャッシュするため、同じリクエストを読むすべての箇所が同一のボディを見ます。
+
 カスタムエンドポイントには UnionAir の transport policy が適用されます。`Origin` ヘッダーを持つリクエストは controller 実行前に拒否されるため、ブラウザの `fetch` と XMLHttpRequest は既定で非対応です。空でないボディを持つリクエストには `Content-Type: application/json` が必要です。空のリクエストに Content-Type は不要です。
 
 `RequestBodyReader` は、UnionAir の built-in ハンドラーと同じ軽量 JSON ヘルパーを提供します:

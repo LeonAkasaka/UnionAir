@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using UnityEditor;
@@ -150,7 +149,7 @@ namespace LeonAkasaka.UnionAir.Editor
             return conflicts;
         }
 
-        internal static bool SendConflictIfAny(HttpListenerResponse response)
+        internal static bool SendConflictIfAny(UnionAirResponse response)
         {
             var conflicts = FindConflicts();
             if (conflicts.Count == 0)

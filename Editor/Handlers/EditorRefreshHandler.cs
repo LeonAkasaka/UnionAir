@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -19,7 +18,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class EditorRefreshHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             if (LoadedSceneDiskChangeGuard.SendConflictIfAny(response))
                 return;

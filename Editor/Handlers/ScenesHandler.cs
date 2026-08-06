@@ -1,5 +1,4 @@
 using System;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -12,7 +11,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal sealed class ScenesHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/scenes")
             {
@@ -46,7 +45,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
-        private static void HandleList(HttpListenerResponse response)
+        private static void HandleList(UnionAirResponse response)
         {
             var active = EditorSceneManager.GetActiveScene();
             var sb = new StringBuilder();
@@ -66,7 +65,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString());
         }
 
-        private static void HandleNew(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleNew(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var mode = RequestBodyReader.GetString(body, "mode") ?? "single";
@@ -97,7 +96,7 @@ namespace LeonAkasaka.UnionAir.Editor
             SendSceneResponse(response, "created", scene, 201);
         }
 
-        private static void HandleOpen(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleOpen(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var path = RequestBodyReader.GetString(body, "path");
@@ -140,7 +139,7 @@ namespace LeonAkasaka.UnionAir.Editor
             SendSceneResponse(response, "opened", scene, 200);
         }
 
-        private static void HandleUnload(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleUnload(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var identifier = RequestBodyReader.GetString(body, "path") ?? RequestBodyReader.GetString(body, "name");
@@ -174,7 +173,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, $"{{\"unloaded\":\"{RestResponse.EscapeJson(id)}\"}}");
         }
 
-        private static void HandleActive(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleActive(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var identifier = RequestBodyReader.GetString(body, "path") ?? RequestBodyReader.GetString(body, "name");
@@ -197,7 +196,7 @@ namespace LeonAkasaka.UnionAir.Editor
             SendSceneResponse(response, "active", scene, 200);
         }
 
-        private static void SendSceneResponse(HttpListenerResponse response, string key, Scene scene, int status)
+        private static void SendSceneResponse(UnionAirResponse response, string key, Scene scene, int status)
         {
             var sb = new StringBuilder();
             sb.Append("{");

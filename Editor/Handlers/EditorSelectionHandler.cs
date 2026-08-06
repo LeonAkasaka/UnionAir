@@ -1,12 +1,11 @@
 using System.Collections.Generic;
-using System.Net;
 using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
     internal class EditorSelectionHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             if (request.HttpMethod == "GET")
             {
@@ -17,7 +16,7 @@ namespace LeonAkasaka.UnionAir.Editor
             HandlePost(request, response);
         }
 
-        private static void HandlePost(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandlePost(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             if (RequestBodyReader.GetBool(body, "clear") == true)

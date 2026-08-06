@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Specialized;
-using System.Net;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -112,7 +111,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Resolves the optional <c>scenePath</c> selector from a request query string or JSON body.
         /// </summary>
         public static bool TryResolveSceneFromRequest(
-            HttpListenerRequest request,
+            UnionAirRequest request,
             string body,
             out Scene scene,
             out string error,

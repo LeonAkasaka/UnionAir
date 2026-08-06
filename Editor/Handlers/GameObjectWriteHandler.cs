@@ -1,5 +1,4 @@
 using System;
-using System.Net;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -15,7 +14,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class GameObjectWriteHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             switch (request.HttpMethod)
             {
@@ -30,7 +29,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── POST /api/gameobjects ─────────────────────────────────────────────
 
-        private static void HandleCreate(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleCreate(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var name = RequestBodyReader.GetString(body, "name");
@@ -87,7 +86,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── DELETE /api/gameobjects?path= ─────────────────────────────────────
 
-        private static void HandleDelete(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleDelete(UnionAirRequest request, UnionAirResponse response)
         {
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
@@ -116,7 +115,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── PATCH /api/gameobjects?path= ──────────────────────────────────────
 
-        private static void HandleUpdate(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleUpdate(UnionAirRequest request, UnionAirResponse response)
         {
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;

@@ -41,6 +41,8 @@ Custom handlers are disabled by default. Enable them in **Window > UnionAir > RE
 
 Use `UnionAirRequestContext.Request` to inspect the incoming request, `UnionAirRequestContext.RouteValues` for route template parameters, and `UnionAirRequestContext.Response` to write the response.
 
+These are `UnionAirRequest` and `UnionAirResponse`, UnionAir's own types rather than `System.Net.HttpListenerRequest` and `HttpListenerResponse`. The transport stays an implementation detail, and every byte a handler writes passes through a type UnionAir owns. The request exposes `HttpMethod`, `Url`, `QueryString`, `Headers`, `HasEntityBody`, `ContentType`, and `ContentLength64`; the response exposes `StatusCode`, `ContentType`, `ContentLength64`, `OutputStream`, `AddHeader`, and `Close`. Read the request body through `RequestBodyReader` rather than a stream: it caches what it reads, so every reader of a given request sees the same body.
+
 Custom endpoints inherit UnionAir's transport policy. Requests carrying an `Origin` header are rejected before the controller runs, so browser `fetch` and XMLHttpRequest clients are unsupported by default. A request with a non-empty body must use `Content-Type: application/json`; an empty request does not require a content type.
 
 `RequestBodyReader` provides the same lightweight JSON helpers used by UnionAir's built-in handlers:

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -14,7 +13,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class MaterialWriteHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             if (request.HttpMethod == "POST")
                 HandleCreate(request, response);
@@ -24,7 +23,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── POST /api/assets/materials ───────────────────────────────────────
 
-        private static void HandleCreate(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleCreate(UnionAirRequest request, UnionAirResponse response)
         {
             var body       = RequestBodyReader.ReadString(request);
             var assetPath  = RequestBodyReader.GetString(body, "assetPath");
@@ -63,7 +62,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── PATCH /api/assets/materials?guid= ───────────────────────────────
 
-        private static void HandleUpdate(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleUpdate(UnionAirRequest request, UnionAirResponse response)
         {
             var guid = request.QueryString["guid"];
             if (string.IsNullOrEmpty(guid))

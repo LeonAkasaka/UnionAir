@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -12,7 +11,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private const int MaxWidth  = 1920;
         private const int MaxHeight = 1080;
 
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             switch (request.Url.AbsolutePath)
             {
@@ -24,7 +23,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── Camera list ────────────────────────────────────────────────────────
 
-        private static void HandleList(HttpListenerResponse response)
+        private static void HandleList(UnionAirResponse response)
         {
             var cameras = new List<(Camera cam, string path)>();
 
@@ -64,7 +63,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── Capture ────────────────────────────────────────────────────────────
 
-        private static void HandleCapture(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleCapture(UnionAirRequest request, UnionAirResponse response)
         {
             if (!TryResolveCaptureContext(request, response,
                     out var camera, out var width, out var height, out var format, out var quality, out var bytes))
@@ -88,7 +87,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString());
         }
 
-        private static void HandleCaptureImage(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleCaptureImage(UnionAirRequest request, UnionAirResponse response)
         {
             if (!TryResolveCaptureContext(request, response,
                     out _, out _, out _, out var format, out _, out var bytes))
@@ -99,8 +98,8 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         private static bool TryResolveCaptureContext(
-            HttpListenerRequest request,
-            HttpListenerResponse response,
+            UnionAirRequest request,
+            UnionAirResponse response,
             out Camera camera,
             out int width, out int height,
             out string format, out int quality,

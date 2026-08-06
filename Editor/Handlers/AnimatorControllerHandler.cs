@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -25,7 +24,7 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         // ── POST /api/assets/animator-controllers ────────────────────────────
 
-        public void HandleCreate(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleCreate(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var assetPath = RequestBodyReader.GetString(body, "assetPath");
@@ -54,7 +53,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── GET /api/assets/animator-controllers/{guid} ──────────────────────
 
-        public void HandleRead(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleRead(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var controller = LoadController(guid, response, out var assetPath);
             if (controller == null) return;
@@ -157,7 +156,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── POST /api/assets/animator-controllers/{guid}/parameters ──────────
 
-        public void HandleAddParameter(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleAddParameter(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
@@ -229,7 +228,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── DELETE /api/assets/animator-controllers/{guid}/parameters ────────
 
-        public void HandleDeleteParameter(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleDeleteParameter(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
@@ -258,7 +257,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── POST /api/assets/animator-controllers/{guid}/layers ──────────────
 
-        public void HandleAddLayer(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleAddLayer(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
@@ -291,7 +290,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── POST /api/assets/animator-controllers/{guid}/states ──────────────
 
-        public void HandleAddState(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleAddState(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
@@ -347,7 +346,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── PATCH /api/assets/animator-controllers/{guid}/states ─────────────
 
-        public void HandleUpdateState(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleUpdateState(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
@@ -410,7 +409,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── DELETE /api/assets/animator-controllers/{guid}/states ────────────
 
-        public void HandleDeleteState(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleDeleteState(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
@@ -447,7 +446,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── POST /api/assets/animator-controllers/{guid}/transitions ─────────
 
-        public void HandleAddTransition(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleAddTransition(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
@@ -524,7 +523,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── PATCH /api/assets/animator-controllers/{guid}/transitions ────────
 
-        public void HandleUpdateTransition(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleUpdateTransition(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
@@ -565,7 +564,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── DELETE /api/assets/animator-controllers/{guid}/transitions ───────
 
-        public void HandleDeleteTransition(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleDeleteTransition(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
@@ -633,7 +632,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── Helpers ──────────────────────────────────────────────────────────
 
-        private static AnimatorController LoadController(string guid, HttpListenerResponse response, out string assetPath)
+        private static AnimatorController LoadController(string guid, UnionAirResponse response, out string assetPath)
         {
             assetPath = AssetDatabase.GUIDToAssetPath(guid);
             if (string.IsNullOrEmpty(assetPath))

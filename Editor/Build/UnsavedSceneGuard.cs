@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
@@ -66,7 +65,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Writes the <c>409</c> body when any loaded scene is unsaved.
         /// </summary>
         /// <returns><c>true</c> when the request was rejected.</returns>
-        internal static bool SendConflictIfAny(HttpListenerResponse response)
+        internal static bool SendConflictIfAny(UnionAirResponse response)
         {
             var conflicts = FindConflicts();
             if (conflicts.Count == 0)

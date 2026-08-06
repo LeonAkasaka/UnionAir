@@ -1,4 +1,3 @@
-using System.Net;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 
@@ -9,7 +8,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class SceneSaveHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var assetPath = RequestBodyReader.GetString(body, "assetPath");
