@@ -316,9 +316,12 @@ namespace LeonAkasaka.UnionAir.Editor
             while (state.Pending.TryDequeue(out var ctx))
             {
                 // Wrapped once, here, so that everything downstream - the router, the handlers,
-                // and RestResponse - only ever sees the types UnionAir owns.
+                // and RestResponse - only ever sees the types UnionAir owns. The log entry is
+                // opened before dispatch and closed by the response itself, which is what lets a
+                // deferred response report the duration through to its actual close.
                 var request = new HttpListenerRequestAdapter(ctx.Request);
-                var response = new HttpListenerResponseAdapter(ctx.Response);
+                var entry = RequestLogStore.Instance.Begin(request);
+                var response = new HttpListenerResponseAdapter(ctx.Response, entry);
 
                 var completed = true;
                 try

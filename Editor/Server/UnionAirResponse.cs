@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Threading;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -51,11 +52,16 @@ namespace LeonAkasaka.UnionAir.Editor
     internal sealed class HttpListenerResponseAdapter : UnionAirResponse
     {
         private readonly HttpListenerResponse _response;
+        private readonly RequestLogEntry _entry;
+        private RequestCaptureStream _capture;
+        private int _closed;
 
-        internal HttpListenerResponseAdapter(HttpListenerResponse response)
+        internal HttpListenerResponseAdapter(
+            HttpListenerResponse response, RequestLogEntry entry = null)
         {
             if (response == null) throw new ArgumentNullException("response");
             _response = response;
+            _entry = entry;
         }
 
         public override int StatusCode
@@ -76,11 +82,36 @@ namespace LeonAkasaka.UnionAir.Editor
             set { _response.ContentLength64 = value; }
         }
 
-        public override Stream OutputStream => _response.OutputStream;
+        public override Stream OutputStream
+        {
+            get
+            {
+                if (_entry == null) return _response.OutputStream;
+
+                // One writer per response in every path UnionAir has, so this is not guarded:
+                // a handler either writes on the main thread or owns the response after
+                // deferring it, never both.
+                if (_capture == null)
+                    _capture = new RequestCaptureStream(
+                        _response.OutputStream,
+                        () => _response.ContentType,
+                        RequestLogStore.MaxResponseBodyBytes);
+                return _capture;
+            }
+        }
 
         public override void AddHeader(string name, string value)
             => _response.AddHeader(name, value);
 
-        public override void Close() => _response.Close();
+        public override void Close()
+        {
+            // The status and content type have to be read before the underlying response is
+            // closed, and only the first Close may record: an artifact transfer closes from a
+            // thread pool thread while the stop path may be discarding the same context.
+            if (Interlocked.Exchange(ref _closed, 1) == 0 && _entry != null)
+                _entry.Complete(_response.StatusCode, _response.ContentType, _capture);
+
+            _response.Close();
+        }
     }
 }
