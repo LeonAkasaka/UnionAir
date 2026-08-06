@@ -9,7 +9,6 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     public class UnionAirWindow : EditorWindow
     {
-        private const int MaxLogLines = 100;
         private const string PrefKeyTab = "UnionAir.UI.Tab";
         private const string PrefKeyCategoryExpandedPrefix = "UnionAir.UI.CategoryExpanded.";
         private static readonly string[] CoreBuiltInCategoryIds =
@@ -23,12 +22,12 @@ namespace LeonAkasaka.UnionAir.Editor
             UnionAirEndpointCategories.Build
         };
 
-        private readonly List<string> _log = new List<string>();
         private Vector2 _scroll;
         private Vector2 _logScroll;
         private int _portInput;
         private int _portMode;
         private int _tab;
+        private int _lastLogVersion = -1;
 
         /// <summary>
         /// Opens the UnionAir REST Bridge window.
@@ -45,19 +44,15 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             SyncPortInputs();
             _tab = EditorPrefs.GetInt(PrefKeyTab, 0);
-            UnionAirInit.Server.OnRequest += AddLog;
         }
 
-        private void OnDisable()
+        private void OnInspectorUpdate()
         {
-            UnionAirInit.Server.OnRequest -= AddLog;
-        }
-
-        private void AddLog(string message)
-        {
-            _log.Add($"[{System.DateTime.Now:HH:mm:ss}] {message}");
-            if (_log.Count > MaxLogLines)
-                _log.RemoveAt(0);
+            // The log is polled rather than pushed. A deferred response completes on a thread pool
+            // thread, and an EditorWindow may only repaint from the main thread.
+            var version = RequestLogStore.Instance.Version;
+            if (version == _lastLogVersion) return;
+            _lastLogVersion = version;
             Repaint();
         }
 
@@ -294,17 +289,33 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private void DrawRequestLog()
         {
+            var entries = RequestLogStore.Instance.Snapshot();
+
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUILayout.LabelField("Request Log", EditorStyles.boldLabel);
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button("Clear", GUILayout.Width(60)))
-                    _log.Clear();
+                using (new EditorGUI.DisabledScope(entries.Count == 0))
+                {
+                    if (GUILayout.Button("Clear", GUILayout.Width(60)))
+                    {
+                        RequestLogStore.Instance.Clear();
+                        return;
+                    }
+                }
             }
 
             _logScroll = EditorGUILayout.BeginScrollView(_logScroll, GUILayout.ExpandHeight(true));
-            foreach (var line in _log)
-                EditorGUILayout.LabelField(line, EditorStyles.miniLabel);
+            foreach (var entry in entries)
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField(
+                        RequestLogFormatter.SummaryLine(entry), EditorStyles.miniLabel);
+                    if (GUILayout.Button("Details", EditorStyles.miniButton, GUILayout.Width(56)))
+                        UnionAirRequestDetailWindow.ShowEntry(entry.Id);
+                }
+            }
             EditorGUILayout.EndScrollView();
         }
 
