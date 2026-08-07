@@ -116,7 +116,46 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         [Test]
         public void Quote_ClosesAndReopensAroundAnEmbeddedSingleQuote()
         {
-            Assert.AreEqual("'it'\\''s'", RequestLogFormatter.Quote("it's"));
+            Assert.AreEqual("'it'\\''s'", RequestLogFormatter.Quote("it's", CurlShell.Posix));
+        }
+
+        [Test]
+        public void Quote_DoublesTheSingleQuoteForWindowsPowerShell()
+        {
+            Assert.AreEqual(
+                "'it''s'", RequestLogFormatter.Quote("it's", CurlShell.WindowsPowerShell));
+        }
+
+        [Test]
+        public void Quote_EscapesInnerDoubleQuotesForWindowsPowerShell()
+        {
+            // Verified against a running server: Windows PowerShell 5.1 rebuilds the command line
+            // for a native executable and drops bare double quotes, so a plain JSON body arrives
+            // unparseable without this. PowerShell 7 and bash do not need it and would pass the
+            // backslashes through, which is why the two forms cannot be merged.
+            Assert.AreEqual(
+                "'{\\\"name\\\":\\\"Cube\\\"}'",
+                RequestLogFormatter.Quote("{\"name\":\"Cube\"}", CurlShell.WindowsPowerShell));
+        }
+
+        [Test]
+        public void Quote_LeavesInnerDoubleQuotesAloneForPosix()
+        {
+            Assert.AreEqual(
+                "'{\"name\":\"Cube\"}'",
+                RequestLogFormatter.Quote("{\"name\":\"Cube\"}", CurlShell.Posix));
+        }
+
+        [Test]
+        public void BuildCurl_QuotesTheWholeCommandForWindowsPowerShell()
+        {
+            var command = RequestLogFormatter.BuildCurl(
+                Completed("POST", "/api/gameobjects", requestBody: "{\"name\":\"Cube\"}"),
+                "http://localhost:51801",
+                CurlShell.WindowsPowerShell);
+
+            StringAssert.Contains("-d '{\\\"name\\\":\\\"Cube\\\"}'", command);
+            StringAssert.Contains("-H 'Content-Type: application/json'", command);
         }
 
         // ── Bodies ──────────────────────────────────────────────────────────
@@ -188,6 +227,72 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         // ── Summaries ───────────────────────────────────────────────────────
+
+        [Test]
+        public void RequestSummary_CarriesTheRequestLineAndHeaders()
+        {
+            var entry = Completed("POST", "/api/gameobjects", "?scenePath=Main");
+            entry.RequestHeaders = "User-Agent: curl/8.0\nAccept: */*";
+
+            var summary = RequestLogFormatter.RequestSummary(entry);
+
+            StringAssert.Contains("POST /api/gameobjects?scenePath=Main", summary);
+            StringAssert.Contains("User-Agent: curl/8.0", summary);
+            StringAssert.Contains("Accept: */*", summary);
+        }
+
+        [Test]
+        public void RequestSummary_OmitsTheQueryAndHeaderBlockWhenThereAreNone()
+        {
+            var summary = RequestLogFormatter.RequestSummary(Completed());
+
+            Assert.AreEqual("GET /api/health\n", summary);
+        }
+
+        [Test]
+        public void ResponseSummary_CarriesStatusContentTypeDurationAndSize()
+        {
+            var summary = RequestLogFormatter.ResponseSummary(Completed());
+
+            StringAssert.Contains("200", summary);
+            StringAssert.Contains("application/json; charset=utf-8", summary);
+            StringAssert.Contains("12.3 ms", summary);
+            StringAssert.Contains("15 B", summary);
+        }
+
+        [Test]
+        public void ResponseSummary_OmitsAnAbsentContentType()
+        {
+            var entry = Completed(status: 204, responseContentType: null, responseBody: null);
+
+            var summary = RequestLogFormatter.ResponseSummary(entry);
+
+            StringAssert.Contains("204", summary);
+            StringAssert.Contains("0 B", summary);
+        }
+
+        [Test]
+        public void ResponseSummary_ReportsAnIncompleteExchange()
+        {
+            Assert.AreEqual(
+                "In progress",
+                RequestLogFormatter.ResponseSummary(
+                    new RequestLogEntry { Method = "GET", Path = "/api/slow" }));
+        }
+
+        [Test]
+        public void RequestBodyText_SeparatesAnUnreadableBodyFromAnOversizedOne()
+        {
+            var entry = Completed("POST", "/api/test");
+            entry.RequestBodyUnreadable = true;
+
+            bool clipped;
+            var text = RequestLogFormatter.RequestBodyText(entry, out clipped);
+
+            StringAssert.Contains("could not be read", text);
+            StringAssert.DoesNotContain("cap", text,
+                "A body that was never too large must not be blamed on the cap.");
+        }
 
         [Test]
         public void SummaryLine_CarriesStatusMethodPathAndDuration()

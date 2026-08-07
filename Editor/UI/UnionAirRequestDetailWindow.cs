@@ -99,9 +99,10 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 using (new EditorGUI.DisabledScope(!RequestLogFormatter.CanBuildCurl(entry)))
                 {
+                    // A menu rather than one button: no single quoting form works in every
+                    // shell, so which one is wanted has to be asked rather than guessed.
                     if (GUILayout.Button("Copy as curl", EditorStyles.miniButton, GUILayout.Width(90)))
-                        GUIUtility.systemCopyBuffer =
-                            RequestLogFormatter.BuildCurl(entry, BaseUrl());
+                        ShowCurlMenu(entry);
                 }
             }
 
@@ -162,13 +163,34 @@ namespace LeonAkasaka.UnionAir.Editor
                     MessageType.Info);
         }
 
+        private static void ShowCurlMenu(RequestLogEntry entry)
+        {
+            var menu = new GenericMenu();
+            menu.AddItem(
+                new GUIContent("bash, Git Bash, WSL, macOS, Linux"),
+                false,
+                () => GUIUtility.systemCopyBuffer =
+                    RequestLogFormatter.BuildCurl(entry, BaseUrl(), CurlShell.Posix));
+            menu.AddItem(
+                new GUIContent("Windows PowerShell"),
+                false,
+                () => GUIUtility.systemCopyBuffer =
+                    RequestLogFormatter.BuildCurl(entry, BaseUrl(), CurlShell.WindowsPowerShell));
+            menu.ShowAsContext();
+        }
+
         private static void SaveBody(RequestLogEntry entry, string body, bool response)
         {
+            // A concrete extension rather than a wildcard: Unity appends the filter to the name
+            // it is given, and "*" produces a file the OS does not associate with anything.
+            var suggested = RequestLogFormatter.SuggestFileName(entry, response);
+            var extension = System.IO.Path.GetExtension(suggested).TrimStart('.');
+
             var path = EditorUtility.SaveFilePanel(
                 response ? "Save Response Body" : "Save Request Body",
                 "",
-                RequestLogFormatter.SuggestFileName(entry, response),
-                "*");
+                System.IO.Path.GetFileNameWithoutExtension(suggested),
+                extension);
             if (string.IsNullOrEmpty(path)) return;
 
             try

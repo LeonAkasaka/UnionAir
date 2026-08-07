@@ -5,6 +5,34 @@ using System.Text;
 namespace LeonAkasaka.UnionAir.Editor
 {
     /// <summary>
+    /// Shell a generated command is quoted for.
+    /// </summary>
+    /// <remarks>
+    /// There is no single form that works everywhere, which is why this is a choice rather than a
+    /// detail. Verified against a running server on Windows:
+    /// <list type="bullet">
+    /// <item>Single quotes reach curl intact in bash-family shells and in PowerShell 7, but
+    /// Windows PowerShell 5.1 strips the inner double quotes while re-quoting arguments for a
+    /// native executable, so even a plain JSON body arrives unparseable.</item>
+    /// <item>Escaping the inner double quotes as <c>\"</c> is what survives that re-quoting, but
+    /// PowerShell 7 and bash pass the backslashes through literally and curl then sees invalid
+    /// JSON.</item>
+    /// <item>A literal single quote is written <c>'\''</c> in bash and <c>''</c> in PowerShell.</item>
+    /// </list>
+    /// </remarks>
+    internal enum CurlShell
+    {
+        /// <summary>
+        /// bash, zsh, Git Bash, WSL, macOS, and Linux. PowerShell 7 accepts this too, except
+        /// when the body contains a single quote, which it escapes differently.
+        /// </summary>
+        Posix,
+
+        /// <summary>Windows PowerShell 5.1, the <c>powershell.exe</c> shipped with Windows.</summary>
+        WindowsPowerShell,
+    }
+
+    /// <summary>
     /// Turns a captured exchange into the text the request log and its detail window display.
     /// </summary>
     /// <remarks>
@@ -48,7 +76,7 @@ namespace LeonAkasaka.UnionAir.Editor
             return sb.ToString();
         }
 
-        /// <summary>Request line, headers, and body length, without the body itself.</summary>
+        /// <summary>Request line and headers, without the body.</summary>
         internal static string RequestSummary(RequestLogEntry entry)
         {
             if (entry == null) return "";
@@ -88,6 +116,9 @@ namespace LeonAkasaka.UnionAir.Editor
             if (entry.RequestBodyTruncated)
                 return "(request body not captured: " + FormatBytes(entry.RequestBodyLength) +
                        " exceeds the " + FormatBytes(RequestLogStore.MaxRequestBodyBytes) + " cap)";
+
+            if (entry.RequestBodyUnreadable)
+                return "(request body could not be read)";
 
             if (string.IsNullOrEmpty(entry.RequestBody))
                 return "(no request body)";
@@ -146,18 +177,19 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </summary>
         /// <param name="entry">Captured exchange.</param>
         /// <param name="baseUrl">Origin of the running server, such as <c>http://localhost:8765</c>.</param>
+        /// <param name="shell">Shell the command will be pasted into. See <see cref="CurlShell"/>.</param>
         /// <remarks>
         /// <c>curl.exe</c> rather than <c>curl</c>: in Windows PowerShell 5.1 the bare name is an
         /// alias for <c>Invoke-WebRequest</c>, so a pasted command would silently run a different
-        /// program with different flags. The explicit name resolves correctly there, in
-        /// PowerShell 7, and in Git Bash and WSL.
+        /// program with different flags. The explicit name resolves correctly in every shell.
         /// <para>
         /// Only <c>Content-Type</c> is emitted. It is required - UnionAir answers <c>415</c>
         /// without it - while the headers a client happened to send are noise, and an
         /// <c>Origin</c> header would make the request fail with <c>403</c>.
         /// </para>
         /// </remarks>
-        internal static string BuildCurl(RequestLogEntry entry, string baseUrl)
+        internal static string BuildCurl(
+            RequestLogEntry entry, string baseUrl, CurlShell shell = CurlShell.Posix)
         {
             if (!CanBuildCurl(entry)) return "";
 
@@ -169,29 +201,39 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append(" -X ").Append(entry.Method);
 
             sb.Append(' ').Append(Quote(
-                (baseUrl == null ? "" : baseUrl.TrimEnd('/')) + entry.Path + entry.Query));
+                (baseUrl == null ? "" : baseUrl.TrimEnd('/')) + entry.Path + entry.Query, shell));
 
             if (hasBody)
             {
-                sb.Append(" -H ").Append(Quote("Content-Type: application/json"));
-                sb.Append(" -d ").Append(Quote(entry.RequestBody));
+                sb.Append(" -H ").Append(Quote("Content-Type: application/json", shell));
+                sb.Append(" -d ").Append(Quote(entry.RequestBody, shell));
             }
             else if (entry.Method == "POST" || entry.Method == "PATCH")
             {
                 // Windows HttpListener answers 411 for a POST with neither Content-Length nor
                 // Transfer-Encoding, so an empty one has to be framed explicitly.
-                sb.Append(" -H ").Append(Quote("Content-Length: 0"));
+                sb.Append(" -H ").Append(Quote("Content-Length: 0", shell));
             }
 
             return sb.ToString();
         }
 
         /// <summary>
-        /// Wraps a value in single quotes, which every shell but <c>cmd.exe</c> accepts.
+        /// Wraps a value in single quotes, escaped for the target shell.
         /// </summary>
-        internal static string Quote(string value)
+        /// <remarks>
+        /// Neither form is universal; see <see cref="CurlShell"/> for what was measured.
+        /// </remarks>
+        internal static string Quote(string value, CurlShell shell = CurlShell.Posix)
         {
             if (value == null) return "''";
+
+            if (shell == CurlShell.WindowsPowerShell)
+                // Windows PowerShell rebuilds the command line for a native executable and drops
+                // bare double quotes on the way; escaping them is what survives that pass. A
+                // literal single quote is doubled, the way PowerShell escapes one.
+                return "'" + value.Replace("'", "''").Replace("\"", "\\\"") + "'";
+
             // A single quote cannot appear inside a single-quoted string, so the string is closed,
             // an escaped quote is emitted, and the string is reopened.
             return "'" + value.Replace("'", "'\\''") + "'";
