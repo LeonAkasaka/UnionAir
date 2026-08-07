@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Globalization;
-using System.Net;
 using System.Text;
 using UnityEditor;
 
@@ -11,7 +10,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Requests a switch of the active build target.
         /// </summary>
-        public void HandleSwitch(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleSwitch(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var requested = RequestBodyReader.GetString(body, "buildTarget");
@@ -114,7 +113,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Returns the active target, the in-flight switch, and the retained switch records.
         /// </summary>
-        public void HandleCollection(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleCollection(UnionAirRequest request, UnionAirResponse response)
         {
             bool scanCompleted;
             var records = BuildTargetSwitchService.ListRetained(out scanCompleted);

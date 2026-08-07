@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -8,7 +7,7 @@ namespace LeonAkasaka.UnionAir.Editor
 {
     internal class EditorStatusHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var isCompiling = EditorApplication.isCompiling;
             var isUpdating = EditorApplication.isUpdating;

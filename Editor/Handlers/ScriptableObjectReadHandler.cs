@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -14,7 +13,7 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         private const int MaxResults = 500;
 
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var absPath = request.Url.AbsolutePath;
             if (absPath == "/api/assets/scriptableobjects")
@@ -28,7 +27,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── GET /api/assets/scriptableobjects ────────────────────────────────
 
-        private static void HandleList(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleList(UnionAirRequest request, UnionAirResponse response)
         {
             var filterType  = request.QueryString["type"]   ?? "";
             var filterPath  = request.QueryString["path"]   ?? "";
@@ -78,7 +77,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── GET /api/assets/scriptableobjects/{guid} ─────────────────────────
 
-        private static void HandleDetail(string guid, HttpListenerResponse response)
+        private static void HandleDetail(string guid, UnionAirResponse response)
         {
             if (string.IsNullOrEmpty(guid))
             {

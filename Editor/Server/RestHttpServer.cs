@@ -315,23 +315,31 @@ namespace LeonAkasaka.UnionAir.Editor
 
             while (state.Pending.TryDequeue(out var ctx))
             {
+                // Wrapped once, here, so that everything downstream - the router, the handlers,
+                // and RestResponse - only ever sees the types UnionAir owns. The log entry is
+                // opened before dispatch and closed by the response itself, which is what lets a
+                // deferred response report the duration through to its actual close.
+                var request = new HttpListenerRequestAdapter(ctx.Request);
+                var entry = RequestLogStore.Instance.Begin(request);
+                var response = new HttpListenerResponseAdapter(ctx.Response, entry);
+
                 var completed = true;
                 try
                 {
-                    var requestLine = $"{ctx.Request.HttpMethod} {ctx.Request.Url.AbsolutePath}";
+                    var requestLine = $"{request.HttpMethod} {request.Url.AbsolutePath}";
                     OnRequest?.Invoke(requestLine);
-                    completed = state.Router.Handle(ctx);
+                    completed = state.Router.Handle(request, response);
                 }
                 catch (Exception ex)
                 {
                     Debug.LogError($"[UnionAir] Error processing request: {ex.Message}");
-                    try { RestResponse.SendError(ctx.Response, ex.Message); } catch { /* ignored */ }
+                    try { RestResponse.SendError(response, ex.Message); } catch { /* ignored */ }
                 }
                 finally
                 {
                     if (completed)
                     {
-                        try { ctx.Response.Close(); } catch { /* ignored */ }
+                        try { response.Close(); } catch { /* ignored */ }
                     }
                 }
             }

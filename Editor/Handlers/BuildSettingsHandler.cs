@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEditor.Build;
@@ -11,7 +10,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Returns the build configuration for one named build target.
         /// </summary>
-        public void HandleSettings(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleSettings(UnionAirRequest request, UnionAirResponse response)
         {
             var requested = request.QueryString["namedBuildTarget"] ?? "";
             if (!BuildTargetCatalog.TryResolveNamedBuildTarget(requested, out var namedBuildTarget, out var error))
@@ -26,7 +25,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Returns the build targets this Editor knows about and whether each module is installed.
         /// </summary>
-        public void HandleTargets(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleTargets(UnionAirRequest request, UnionAirResponse response)
         {
             var installedRaw = request.QueryString["installed"];
             if (installedRaw != null &&
@@ -45,7 +44,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Changes scripting settings and build flags for one named build target.
         /// </summary>
-        public void HandlePatchSettings(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandlePatchSettings(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
 
@@ -81,7 +80,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Replaces the build scene list.
         /// </summary>
-        public void HandleSetScenes(HttpListenerRequest request, HttpListenerResponse response)
+        public void HandleSetScenes(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
 
@@ -117,7 +116,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// least wants to guess it from the outcomes.
         /// </remarks>
         private static void SendWriteResult(
-            HttpListenerResponse response,
+            UnionAirResponse response,
             List<BuildSettingsChangeResult> results,
             bool compilationExpected,
             NamedBuildTarget namedBuildTarget)

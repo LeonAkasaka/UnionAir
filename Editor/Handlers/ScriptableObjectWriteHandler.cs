@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -14,7 +13,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class ScriptableObjectWriteHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             switch (request.HttpMethod)
             {
@@ -29,7 +28,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── POST /api/assets/scriptableobjects ───────────────────────────────
 
-        private static void HandleCreate(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleCreate(UnionAirRequest request, UnionAirResponse response)
         {
             var body      = RequestBodyReader.ReadString(request);
             var typeName  = RequestBodyReader.GetString(body, "typeName");
@@ -117,7 +116,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── PATCH /api/assets/scriptableobjects?guid= ────────────────────────
 
-        private static void HandleUpdate(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleUpdate(UnionAirRequest request, UnionAirResponse response)
         {
             var guid = request.QueryString["guid"];
             if (string.IsNullOrEmpty(guid))
@@ -179,7 +178,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── DELETE /api/assets/scriptableobjects/{guid} ──────────────────────
 
-        private static void HandleDelete(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleDelete(UnionAirRequest request, UnionAirResponse response)
         {
             var absPath = request.Url.AbsolutePath;
             var guid = absPath.Substring("/api/assets/scriptableobjects/".Length);
@@ -230,7 +229,7 @@ namespace LeonAkasaka.UnionAir.Editor
             ScriptableObject instance,
             string propertiesJson,
             List<string> updated,
-            HttpListenerResponse response,
+            UnionAirResponse response,
             out bool earlyExit)
         {
             earlyExit = false;

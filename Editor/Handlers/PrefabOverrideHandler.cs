@@ -1,4 +1,3 @@
-using System.Net;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -13,7 +12,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class PrefabOverrideHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var body   = RequestBodyReader.ReadString(request);
             if (!SceneResolver.TryResolveFromRequest(request, response, body, out var scene))
@@ -44,7 +43,7 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         private static void HandleApply(
-            GameObject go, string goPath, string prefabAssetPath, UnityEngine.SceneManagement.Scene scene, HttpListenerResponse response)
+            GameObject go, string goPath, string prefabAssetPath, UnityEngine.SceneManagement.Scene scene, UnionAirResponse response)
         {
             PrefabUtility.ApplyPrefabInstance(go, InteractionMode.AutomatedAction);
             EditorSceneManager.MarkSceneDirty(scene);
@@ -56,7 +55,7 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         private static void HandleRevert(
-            GameObject go, string goPath, string prefabAssetPath, UnityEngine.SceneManagement.Scene scene, HttpListenerResponse response)
+            GameObject go, string goPath, string prefabAssetPath, UnityEngine.SceneManagement.Scene scene, UnionAirResponse response)
         {
             PrefabUtility.RevertPrefabInstance(go, InteractionMode.AutomatedAction);
             EditorSceneManager.MarkSceneDirty(scene);

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Reflection;
 using System.Text;
 using UnityEditor;
@@ -12,7 +11,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private const int DefaultLimit = 1000;
         private const int MaxLimit = 5000;
 
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var root = NormalizePath(request.QueryString["root"]);
             var search = request.QueryString["search"] ?? "";

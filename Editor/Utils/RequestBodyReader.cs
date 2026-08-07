@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.IO;
-using System.Net;
 using System.Runtime.CompilerServices;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -14,15 +13,15 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </remarks>
     public static class RequestBodyReader
     {
-        private static readonly ConditionalWeakTable<HttpListenerRequest, BodyCache> CachedBodies =
-            new ConditionalWeakTable<HttpListenerRequest, BodyCache>();
+        private static readonly ConditionalWeakTable<UnionAirRequest, BodyCache> CachedBodies =
+            new ConditionalWeakTable<UnionAirRequest, BodyCache>();
 
         /// <summary>
         /// Reads the entire request body as a string using the request encoding.
         /// </summary>
         /// <param name="request">HTTP request whose body should be read.</param>
         /// <returns>The request body, or an empty string when the request has no body.</returns>
-        public static string ReadString(HttpListenerRequest request)
+        public static string ReadString(UnionAirRequest request)
         {
             BodyCache cached;
             if (CachedBodies.TryGetValue(request, out cached))
@@ -72,37 +71,37 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <param name="request">HTTP request whose body should be read.</param>
         /// <param name="key">Field name to read.</param>
         /// <returns>The string value, or null when absent/null.</returns>
-        public static string GetString(HttpListenerRequest request, string key)
+        public static string GetString(UnionAirRequest request, string key)
             => GetString(ReadString(request), key);
 
         /// <summary>
         /// Extracts a bool value directly from a request body, combining ReadString and GetBool.
         /// </summary>
-        public static bool? GetBool(HttpListenerRequest request, string key)
+        public static bool? GetBool(UnionAirRequest request, string key)
             => GetBool(ReadString(request), key);
 
         /// <summary>
         /// Extracts an int value directly from a request body, combining ReadString and GetInt.
         /// </summary>
-        public static int? GetInt(HttpListenerRequest request, string key)
+        public static int? GetInt(UnionAirRequest request, string key)
             => GetInt(ReadString(request), key);
 
         /// <summary>
         /// Extracts a float value directly from a request body, combining ReadString and GetFloat.
         /// </summary>
-        public static float? GetFloat(HttpListenerRequest request, string key)
+        public static float? GetFloat(UnionAirRequest request, string key)
             => GetFloat(ReadString(request), key);
 
         /// <summary>
         /// Extracts a nested JSON object directly from a request body, combining ReadString and GetObject.
         /// </summary>
-        public static string GetObject(HttpListenerRequest request, string key)
+        public static string GetObject(UnionAirRequest request, string key)
             => GetObject(ReadString(request), key);
 
         /// <summary>
         /// Extracts a JSON array directly from a request body, combining ReadString and GetArray.
         /// </summary>
-        public static List<string> GetArray(HttpListenerRequest request, string key)
+        public static List<string> GetArray(UnionAirRequest request, string key)
             => GetArray(ReadString(request), key);
 
         /// <summary>

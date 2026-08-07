@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -7,7 +6,7 @@ namespace LeonAkasaka.UnionAir.Editor
 {
     internal class GameObjectHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;

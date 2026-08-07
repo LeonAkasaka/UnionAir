@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEngine;
 
@@ -11,7 +10,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class SceneStatsHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;

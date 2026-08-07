@@ -1,5 +1,4 @@
 using System;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -13,8 +12,8 @@ namespace LeonAkasaka.UnionAir.Editor
     internal static class SceneResolver
     {
         public static bool TryResolveFromRequest(
-            HttpListenerRequest request,
-            HttpListenerResponse response,
+            UnionAirRequest request,
+            UnionAirResponse response,
             string body,
             out Scene scene)
         {
@@ -27,7 +26,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         public static bool TryResolveOptional(
             string scenePathOrName,
-            HttpListenerResponse response,
+            UnionAirResponse response,
             out Scene scene)
         {
             if (string.IsNullOrEmpty(scenePathOrName))
@@ -41,7 +40,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         public static bool TryResolveRequired(
             string pathOrName,
-            HttpListenerResponse response,
+            UnionAirResponse response,
             out Scene scene)
         {
             var status = ResolveLoaded(pathOrName, out scene, out var error);

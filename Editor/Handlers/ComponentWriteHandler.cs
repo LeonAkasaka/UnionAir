@@ -1,5 +1,4 @@
 using System;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -15,7 +14,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class ComponentWriteHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             switch (request.HttpMethod)
             {
@@ -30,7 +29,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── POST /api/gameobjects/components ─────────────────────────────────
 
-        private static void HandleAdd(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleAdd(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var typeName = RequestBodyReader.GetString(body, "type");
@@ -90,7 +89,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── DELETE /api/gameobjects/components?path=&type= ───────────────────
 
-        private static void HandleRemove(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleRemove(UnionAirRequest request, UnionAirResponse response)
         {
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
@@ -120,7 +119,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── PATCH /api/gameobjects/components?path=&type= ────────────────────
 
-        private static void HandleUpdate(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandleUpdate(UnionAirRequest request, UnionAirResponse response)
         {
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;
@@ -206,7 +205,7 @@ namespace LeonAkasaka.UnionAir.Editor
         // Accepts componentPath or a component's globalObjectId directly.
         // Also accepts hierarchyPath / GameObject globalObjectId when ?type=ComponentName is provided.
         private static bool TryResolveComponentForWrite(
-            HttpListenerRequest request,
+            UnionAirRequest request,
             UnityEngine.SceneManagement.Scene scene,
             out GameObject go,
             out Component comp,

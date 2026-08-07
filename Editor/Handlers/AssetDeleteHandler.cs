@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor;
 
@@ -11,7 +10,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class AssetDeleteHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var guid = request.Url.AbsolutePath.Substring("/api/assets/".Length);
             if (string.IsNullOrEmpty(guid))

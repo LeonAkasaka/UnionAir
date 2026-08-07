@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -19,7 +18,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </summary>
         private static EditorApplication.CallbackFunction _scheduledPlay;
 
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             switch (request.Url.AbsolutePath)
             {
@@ -30,7 +29,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
-        private static void HandlePlay(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandlePlay(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
 
@@ -63,7 +62,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// a domain reload and this response has already been sent by the time the replay would
         /// run, so a problem found later could not be reported to the caller at all.
         /// </remarks>
-        private static void StartReplay(List<InputReplayEventSpec> inputs, HttpListenerResponse response)
+        private static void StartReplay(List<InputReplayEventSpec> inputs, UnionAirResponse response)
         {
             if (!InputReplayService.HasDriver)
             {
@@ -155,7 +154,7 @@ namespace LeonAkasaka.UnionAir.Editor
             _scheduledPlay = null;
         }
 
-        private static void HandleStop(HttpListenerResponse response)
+        private static void HandleStop(UnionAirResponse response)
         {
             // Withdraw a Play mode request that has not run yet, and abandon the replay it was
             // going to start; otherwise stop would be undone a tick later.
@@ -167,7 +166,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, "{\"playing\":false}");
         }
 
-        private static void HandlePause(HttpListenerRequest request, HttpListenerResponse response)
+        private static void HandlePause(UnionAirRequest request, UnionAirResponse response)
         {
             // Body is optional; if omitted, toggle current pause state
             var body = RequestBodyReader.ReadString(request);
@@ -185,7 +184,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, $"{{\"paused\":{(targetPaused ? "true" : "false")}}}");
         }
 
-        private static void HandleStep(HttpListenerResponse response)
+        private static void HandleStep(UnionAirResponse response)
         {
             if (!EditorApplication.isPaused)
             {

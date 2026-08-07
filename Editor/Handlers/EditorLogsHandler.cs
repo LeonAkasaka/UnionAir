@@ -1,12 +1,11 @@
 using System.Globalization;
-using System.Net;
 using System.Text;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
     internal class EditorLogsHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var query  = request.QueryString;
             var type   = (query["type"] ?? "all").Trim().ToLowerInvariant();

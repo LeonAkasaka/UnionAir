@@ -1,4 +1,3 @@
-using System.Net;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -11,7 +10,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class GameObjectDuplicateHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             if (!SceneResolver.TryResolveFromRequest(request, response, null, out var scene))
                 return;

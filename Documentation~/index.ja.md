@@ -160,7 +160,7 @@ curl "${BASE_URL}assets?path=Assets/UI"
 | **Disable All Sensitive APIs...** | server設定を維持したまま、任意API category、Custom Handlers、Play Mode scene changeをすべて無効化 |
 | **Diagnostic Lifecycle Logging** | listener の詳細なライフサイクルイベントを Console へ逐次出力するかどうか(デフォルトでは無効) |
 | **Start / Stop / Restart** | サーバの手動制御 |
-| **Request Log** | 受信リクエストのログ(最新100件) |
+| **Request Log** | 受信リクエストのログ(最新200件)。**Details** で専用ウィンドウが開き、リクエストのメソッド・パス・ヘッダー・ボディと、レスポンスのステータス・Content-Type・所要時間・ボディを表示します。ボディのコピーと保存、リクエストを実行可能な `curl` コマンドとしてコピーする操作が可能です。記録は現在の Editor セッション限りで、ドメインリロードで失われます。 |
 
 ---
 

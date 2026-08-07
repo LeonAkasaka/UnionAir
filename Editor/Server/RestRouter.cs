@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using System.Reflection;
 using UnityEditor;
 
@@ -16,18 +15,16 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// Dispatches an HTTP listener context to the matching route descriptor.
+        /// Dispatches a request to the matching route descriptor.
         /// </summary>
-        /// <param name="context">HTTP listener context received by the server.</param>
+        /// <param name="request">Incoming request received by the server.</param>
+        /// <param name="response">Response the matched handler writes to.</param>
         /// <returns>
         /// <c>true</c> when the response is complete and the server should close it;
         /// <c>false</c> when the handler deferred the response and owns its lifetime.
         /// </returns>
-        public bool Handle(HttpListenerContext context)
+        public bool Handle(UnionAirRequest request, UnionAirResponse response)
         {
-            var request = context.Request;
-            var response = context.Response;
-
             if (!RestRequestPolicy.IsOriginAllowed(request.Headers.GetValues("Origin")))
             {
                 RestResponse.SendError(response,
@@ -123,7 +120,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </remarks>
         private static bool CanCallDuringTestRun(
             UnionAirEndpointDescriptor descriptor,
-            HttpListenerResponse response)
+            UnionAirResponse response)
         {
             if (!UnionAirTestRunGate.IsActive ||
                 descriptor.TestRunPolicy == UnionAirTestRunPolicy.Allowed)
@@ -154,7 +151,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </remarks>
         private static bool CanCallDuringCurrentActivity(
             UnionAirEndpointDescriptor descriptor,
-            HttpListenerResponse response)
+            UnionAirResponse response)
         {
             var blockedDuring = descriptor.DeclaredBlockedDuring & UnionAirActivityDecision.RouterMask;
             if (blockedDuring == UnionAirActivity.None)
@@ -170,8 +167,8 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static bool CanCallInCurrentPlayModeState(
             UnionAirEndpointDescriptor descriptor,
-            HttpListenerRequest request,
-            HttpListenerResponse response)
+            UnionAirRequest request,
+            UnionAirResponse response)
         {
             if (!EditorApplication.isPlaying ||
                 descriptor.PlayModePolicy == UnionAirPlayModePolicy.Allowed)
@@ -205,7 +202,7 @@ namespace LeonAkasaka.UnionAir.Editor
             return false;
         }
 
-        private static bool HasPlayModeOptIn(HttpListenerRequest request)
+        private static bool HasPlayModeOptIn(UnionAirRequest request)
         {
             if (request.HttpMethod == "POST" || request.HttpMethod == "PATCH")
             {
@@ -224,7 +221,8 @@ namespace LeonAkasaka.UnionAir.Editor
 
     /// <summary>
     /// Defines transport-level request rules that are enforced before an endpoint handler runs.
-    /// Kept independent from <see cref="HttpListenerRequest"/> so the policy can be unit tested.
+    /// Stated over plain values rather than over <see cref="UnionAirRequest"/>, so each rule can
+    /// be exercised directly against the header shapes that matter.
     /// </summary>
     internal static class RestRequestPolicy
     {

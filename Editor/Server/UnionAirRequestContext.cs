@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -13,8 +12,8 @@ namespace LeonAkasaka.UnionAir.Editor
     public sealed class UnionAirRequestContext
     {
         internal UnionAirRequestContext(
-            HttpListenerRequest request,
-            HttpListenerResponse response,
+            UnionAirRequest request,
+            UnionAirResponse response,
             Dictionary<string, string> routeValues,
             UnionAirEndpointDescriptor endpoint)
         {
@@ -27,12 +26,12 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Incoming HTTP request.
         /// </summary>
-        public HttpListenerRequest Request { get; }
+        public UnionAirRequest Request { get; }
 
         /// <summary>
         /// HTTP response that the endpoint should write to.
         /// </summary>
-        public HttpListenerResponse Response { get; }
+        public UnionAirResponse Response { get; }
 
         /// <summary>
         /// Values captured from route template parameters.

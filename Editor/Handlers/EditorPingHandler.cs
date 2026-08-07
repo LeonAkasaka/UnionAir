@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using UnityEditor;
 
@@ -6,7 +5,7 @@ namespace LeonAkasaka.UnionAir.Editor
 {
     internal class EditorPingHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var body = RequestBodyReader.ReadString(request);
             var targetJson = RequestBodyReader.GetObject(body, "target");

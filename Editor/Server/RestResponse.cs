@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Net;
 using System.Text;
 using System.Threading;
 
@@ -18,7 +17,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <param name="response">HTTP response to write to.</param>
         /// <param name="json">Complete JSON payload to send.</param>
         /// <param name="statusCode">HTTP status code to set before writing the body.</param>
-        public static void Send(HttpListenerResponse response, string json, int statusCode = 200)
+        public static void Send(UnionAirResponse response, string json, int statusCode = 200)
         {
             response.StatusCode = statusCode;
             response.ContentType = "application/json; charset=utf-8";
@@ -34,7 +33,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <param name="response">HTTP response to write to.</param>
         /// <param name="data">Binary response body.</param>
         /// <param name="mimeType">Response MIME type, such as <c>image/png</c>.</param>
-        public static void SendBinary(HttpListenerResponse response, byte[] data, string mimeType)
+        public static void SendBinary(UnionAirResponse response, byte[] data, string mimeType)
         {
             response.StatusCode = 200;
             response.ContentType = mimeType;
@@ -200,7 +199,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <param name="response">HTTP response to write to.</param>
         /// <param name="message">Error message to include in the response body.</param>
         /// <param name="statusCode">HTTP status code for the error.</param>
-        public static void SendError(HttpListenerResponse response, string message, int statusCode = 500)
+        public static void SendError(UnionAirResponse response, string message, int statusCode = 500)
         {
             Send(response, $"{{\"error\":\"{EscapeJson(message)}\"}}", statusCode);
         }
@@ -210,7 +209,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </summary>
         /// <param name="response">HTTP response to write to.</param>
         /// <param name="message">Optional not-found message.</param>
-        public static void SendNotFound(HttpListenerResponse response, string message = "Not found")
+        public static void SendNotFound(UnionAirResponse response, string message = "Not found")
         {
             SendError(response, message, 404);
         }
@@ -221,7 +220,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <param name="response">HTTP response left unchanged.</param>
         [System.Obsolete(
             "UnionAir no longer emits CORS headers. Browser-originated requests are rejected by the server.")]
-        public static void AddCorsHeaders(HttpListenerResponse response)
+        public static void AddCorsHeaders(UnionAirResponse response)
         {
         }
 

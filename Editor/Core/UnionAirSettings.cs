@@ -15,6 +15,30 @@ namespace LeonAkasaka.UnionAir.Editor
         private const string DiagnosticLifecycleLoggingKey = "UnionAir.DiagnosticLifecycleLogging";
         private const string EnabledCategoriesKey = "UnionAir.EnabledCategories";
         private const string DisabledCategoriesKey = "UnionAir.DisabledCategories";
+        private const string CurlShellKey = "UnionAir.CurlShell";
+
+        /// <summary>
+        /// Shell the request log quotes a copied <c>curl</c> command for.
+        /// </summary>
+        /// <remarks>
+        /// Stored in <see cref="EditorPrefs"/> rather than in <c>.unionair/settings.json</c>,
+        /// alongside the window's tab and foldout state. Which shell someone pastes into is a
+        /// property of their machine, not of the project: the project file is meant to be
+        /// committed, so a value there would push one developer's shell onto everyone who opens
+        /// the project. It also carries no API surface, which is what that file governs.
+        /// </remarks>
+        internal static CurlShell CurlShell
+        {
+            get
+            {
+                var stored = EditorPrefs.GetInt(CurlShellKey, (int)Editor.CurlShell.Bash);
+                return stored == (int)Editor.CurlShell.PowerShell7 ||
+                       stored == (int)Editor.CurlShell.WindowsPowerShell
+                    ? (CurlShell)stored
+                    : Editor.CurlShell.Bash;
+            }
+            set => EditorPrefs.SetInt(CurlShellKey, (int)value);
+        }
 
         /// <summary>
         /// Gets or sets the configured TCP port used by the local HTTP server.

@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using UnityEditor;
 
@@ -11,7 +10,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class AssetDependentsHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var guid = request.QueryString["guid"] ?? "";
             if (string.IsNullOrEmpty(guid))

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
@@ -9,7 +8,7 @@ namespace LeonAkasaka.UnionAir.Editor
 {
     internal static class TestDiscoveryHandler
     {
-        private static HttpListenerResponse _pendingResponse;
+        private static UnionAirResponse _pendingResponse;
 
         internal static bool IsPending => _pendingResponse != null;
 

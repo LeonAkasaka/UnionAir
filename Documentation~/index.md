@@ -159,7 +159,7 @@ curl "${BASE_URL}assets?path=Assets/UI"
 | **Disable All Sensitive APIs...** | Clears optional API categories, Custom Handlers, and Play Mode scene changes without changing server settings |
 | **Diagnostic Lifecycle Logging** | Streams detailed listener lifecycle events to the Console; disabled by default |
 | **Start / Stop / Restart** | Manual control of the server |
-| **Request Log** | Log of received requests (latest 100 entries) |
+| **Request Log** | Received requests (latest 200 exchanges). **Details** opens a window showing the request line, headers, and body alongside the response status, content type, duration, and body, with actions to copy or save a body and to copy the request as an executable `curl` command. Entries are held for the current Editor session and are lost on a domain reload. |
 
 ---
 

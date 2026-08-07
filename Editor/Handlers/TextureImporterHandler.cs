@@ -1,4 +1,3 @@
-using System.Net;
 using UnityEditor;
 
 namespace LeonAkasaka.UnionAir.Editor
@@ -9,7 +8,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class TextureImporterHandler
     {
-        public void HandleUpdate(HttpListenerRequest request, HttpListenerResponse response, string guid)
+        public void HandleUpdate(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var assetPath = AssetDatabase.GUIDToAssetPath(guid);
             if (string.IsNullOrEmpty(assetPath))

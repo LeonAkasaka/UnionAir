@@ -1,11 +1,10 @@
-using System.Net;
 using UnityEngine;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
     internal class HealthHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var json = BuildResponseJson(
                 Application.unityVersion,

@@ -9,8 +9,9 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
     /// The reader is a substring scanner rather than a real parser, so its edge cases are where
     /// request handling silently misreads a body: a value that a client pretty-printed onto the
     /// next line, a key that also appears inside a nested object, or a bracket inside a string
-    /// literal. Only the string overloads are covered — the HttpListenerRequest ones cannot be
-    /// exercised without a live server.
+    /// literal. The request overloads are covered through a fake request; until the request type
+    /// became one UnionAir owns they could not be exercised without a live server, because the
+    /// framework type is sealed with no public constructor.
     /// </remarks>
     internal sealed class RequestBodyReaderTests
     {
@@ -281,6 +282,50 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         public void HasSupportedContentType_RejectsOtherTypesForANonEmptyBody(string contentType)
         {
             Assert.IsFalse(RestRequestPolicy.HasSupportedContentType(true, contentType));
+        }
+        // ── Request overloads ───────────────────────────────────────
+
+        [Test]
+        public void ReadString_ReturnsTheBody()
+        {
+            var request = new FakeRequest("POST", "/api/test")
+                .WithJsonBody("{\"name\":\"Cube\"}");
+
+            Assert.AreEqual("{\"name\":\"Cube\"}", RequestBodyReader.ReadString(request));
+        }
+
+        [Test]
+        public void ReadString_ReturnsEmptyWhenThereIsNoBody()
+        {
+            var request = new FakeRequest("GET", "/api/test");
+
+            Assert.AreEqual(string.Empty, RequestBodyReader.ReadString(request));
+            Assert.AreEqual(0, request.InputStreamReads);
+        }
+
+        [Test]
+        public void ReadString_ReadsTheStreamOnlyOnce()
+        {
+            // The body stream can only be consumed once, so every later reader - including the
+            // ones a handler calls after the router already looked at the body - depends on this.
+            var request = new FakeRequest("POST", "/api/test")
+                .WithJsonBody("{\"allowWhilePlaying\":true}");
+
+            var first = RequestBodyReader.ReadString(request);
+            var second = RequestBodyReader.ReadString(request);
+
+            Assert.AreEqual(first, second);
+            Assert.AreEqual(1, request.InputStreamReads);
+        }
+
+        [Test]
+        public void GetBool_ReadsThroughFromTheRequest()
+        {
+            var request = new FakeRequest("POST", "/api/test")
+                .WithJsonBody("{\"allowWhilePlaying\":true}");
+
+            Assert.IsTrue(RequestBodyReader.GetBool(request, "allowWhilePlaying"));
+            Assert.IsNull(RequestBodyReader.GetBool(request, "absent"));
         }
     }
 }

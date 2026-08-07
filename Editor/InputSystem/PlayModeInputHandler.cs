@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -40,7 +39,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// running scene, collected from <c>InputSystem.ListEnabledActions()</c> and any
         /// <c>PlayerInput</c> components. Responds with 409 when not in Play mode.
         /// </summary>
-        public static void HandleActions(HttpListenerRequest request, HttpListenerResponse response)
+        public static void HandleActions(UnionAirRequest request, UnionAirResponse response)
         {
             if (!EditorApplication.isPlaying)
             {
@@ -85,7 +84,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <c>tap</c>, <c>press</c>, <c>release</c>.
         /// Responds with 409 when not in Play mode, 404 when the action is not found.
         /// </summary>
-        public static void HandlePerform(HttpListenerRequest request, HttpListenerResponse response)
+        public static void HandlePerform(UnionAirRequest request, UnionAirResponse response)
         {
             if (!EditorApplication.isPlaying)
             {
@@ -169,7 +168,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// value on a virtual device. Gamepad values remain active until the next set or cleanup;
         /// Mouse scroll values are one-shot deltas.
         /// </summary>
-        public static void HandleSet(HttpListenerRequest request, HttpListenerResponse response)
+        public static void HandleSet(UnionAirRequest request, UnionAirResponse response)
         {
             if (!EditorApplication.isPlaying)
             {
@@ -459,7 +458,7 @@ namespace LeonAkasaka.UnionAir.Editor
         // A pointer sequence and a replay both rely on the player loop consuming their queued
         // events on specific frames; perform/set call InputSystem.Update() directly, which would
         // flush those events outside the player loop and destroy the timing. Reject until done.
-        static bool EnsureInputAvailable(HttpListenerResponse response)
+        static bool EnsureInputAvailable(UnionAirResponse response)
         {
             if (_activeSequence != null)
             {
@@ -516,7 +515,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         sealed class PointerSequence
         {
-            public HttpListenerResponse Response;
+            public UnionAirResponse Response;
             public string Mode;
             public MouseButton Button;
             public string ButtonName;
@@ -627,7 +626,7 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         static void SendActionLookupError(
-            HttpListenerResponse response,
+            UnionAirResponse response,
             string identifier,
             List<string> candidates)
         {

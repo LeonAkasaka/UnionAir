@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
 using System.Reflection;
 using System.Text;
 using UnityEditor.PackageManager;
@@ -8,7 +7,7 @@ namespace LeonAkasaka.UnionAir.Editor
 {
     internal class HelpHandler
     {
-        public void Handle(HttpListenerRequest request, HttpListenerResponse response)
+        public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             var packageInfo = PackageInfo.FindForAssembly(Assembly.GetExecutingAssembly());
             var packageName = packageInfo?.name ?? "com.leonakasaka.unionair";
@@ -36,7 +35,7 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString());
         }
 
-        private static void AppendCategories(StringBuilder sb, HttpListenerRequest request)
+        private static void AppendCategories(StringBuilder sb, UnionAirRequest request)
         {
             var includeDisabled = IsTrue(request.QueryString["includeDisabled"]);
             var source = (request.QueryString["source"] ?? "all").ToLowerInvariant();
@@ -92,7 +91,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("}");
         }
 
-        private static void AppendEndpoints(StringBuilder sb, HttpListenerRequest request)
+        private static void AppendEndpoints(StringBuilder sb, UnionAirRequest request)
         {
             var includeDisabled = IsTrue(request.QueryString["includeDisabled"]);
             var source = (request.QueryString["source"] ?? "all").ToLowerInvariant();
