@@ -35,7 +35,9 @@ namespace LeonAkasaka.UnionAir.Editor
         internal string RequestHeaders;
 
         /// <summary>
-        /// Request body, or null when there was none or it exceeded the cap.
+        /// Request body, or null when there was none, it exceeded the cap
+        /// (<see cref="RequestBodyTruncated"/>), or it could not be read
+        /// (<see cref="RequestBodyUnreadable"/>).
         /// </summary>
         /// <remarks>
         /// Text rather than bytes, unlike <see cref="ResponseBody"/>: a request with a body must
@@ -49,6 +51,17 @@ namespace LeonAkasaka.UnionAir.Editor
 
         /// <summary>Whether the body was not captured because it exceeded the cap.</summary>
         internal bool RequestBodyTruncated;
+
+        /// <summary>
+        /// Whether the body was within the cap but could not be read.
+        /// </summary>
+        /// <remarks>
+        /// Distinct from <see cref="RequestBodyTruncated"/> so that a display can say which
+        /// happened. Both mean there is no body to show, but only one of them is explained by
+        /// the size, and telling a reader their body was too large when it was not would send
+        /// them looking in the wrong place.
+        /// </remarks>
+        internal bool RequestBodyUnreadable;
 
         internal int StatusCode;
         internal string ResponseContentType;
@@ -174,7 +187,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     {
                         // A body that cannot be read is the handler's problem to report; the log
                         // records that it has nothing rather than failing the request.
-                        entry.RequestBodyTruncated = true;
+                        entry.RequestBodyUnreadable = true;
                     }
                 }
             }
@@ -321,9 +334,9 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     /// <remarks>
     /// The inner write happens first and its result is never affected by capture: a response must
-    /// not fail because something was watching it. Whether to keep the bytes is decided on the
-    /// first write rather than at construction, because the content type is set after the stream
-    /// is obtained.
+    /// not fail because something was watching it, so a failure on the capture side abandons
+    /// capture rather than propagating. Whether to keep the bytes is decided on the first write
+    /// rather than at construction, because the content type is set after the stream is obtained.
     /// </remarks>
     internal sealed class RequestCaptureStream : Stream
     {
@@ -332,6 +345,7 @@ namespace LeonAkasaka.UnionAir.Editor
         private readonly int _maxBytes;
         private MemoryStream _buffer;
         private bool _decided;
+        private bool _captureFailed;
 
         internal RequestCaptureStream(Stream inner, Func<string> contentType, int maxBytes)
         {
@@ -357,6 +371,26 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             _inner.Write(buffer, offset, count);
             WrittenBytes += count;
+
+            // Everything past the inner write is observation. If any of it throws - reading the
+            // content type from a response the client already abandoned, or allocating the buffer -
+            // the client's bytes have been sent and the handler must not see a failure for it, so
+            // capture is abandoned instead.
+            try
+            {
+                Capture(buffer, offset, count);
+            }
+            catch (Exception)
+            {
+                IsCapturing = false;
+                _buffer = null;
+                _captureFailed = true;
+            }
+        }
+
+        private void Capture(byte[] buffer, int offset, int count)
+        {
+            if (_captureFailed) return;
 
             if (!_decided)
             {
@@ -393,6 +427,30 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         public override void Flush() => _inner.Flush();
+
+        /// <summary>Whether capture was abandoned because observing the write threw.</summary>
+        internal bool CaptureFailed => _captureFailed;
+
+        /// <summary>
+        /// Disposes the underlying response stream, as disposing the real one would.
+        /// </summary>
+        /// <remarks>
+        /// Without this a handler that wraps the output in a <c>using</c> - a
+        /// <see cref="StreamWriter"/> over <c>ctx.Response.OutputStream</c>, say - would dispose
+        /// this wrapper and silently leave the real stream open, which is not what the same code
+        /// did before the response became a UnionAir type. The buffer is deliberately not
+        /// released: the entry is completed afterwards, from the response's own Close, and reads
+        /// the captured bytes then.
+        /// </remarks>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                try { _inner.Dispose(); }
+                catch (Exception) { /* The listener may already have aborted the response. */ }
+            }
+            base.Dispose(disposing);
+        }
 
         public override bool CanRead => false;
 

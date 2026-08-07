@@ -71,6 +71,23 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void Begin_DistinguishesAnUnreadableBodyFromAnOversizedOne()
+        {
+            // Both leave nothing to show, but only one is explained by the size, and saying a
+            // body was too large when it was not sends a reader looking in the wrong place.
+            var store = new RequestLogStore();
+
+            var entry = store.Begin(
+                new FakeRequest("POST", "/api/test")
+                    .WithJsonBody("{\"a\":1}")
+                    .WithUnreadableBody());
+
+            Assert.IsTrue(entry.RequestBodyUnreadable);
+            Assert.IsFalse(entry.RequestBodyTruncated);
+            Assert.IsNull(entry.RequestBody);
+        }
+
+        [Test]
         public void Complete_RecordsTheResponseAndClosesTheEntry()
         {
             var store = new RequestLogStore();
@@ -225,6 +242,68 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.IsNull(capture.CapturedBytes());
             Assert.AreEqual(512, capture.WrittenBytes);
             Assert.AreEqual(512, inner.Length, "The payload still has to reach the client.");
+        }
+
+        [Test]
+        public void CaptureStream_DoesNotFailTheResponseWhenCaptureThrows()
+        {
+            // The bytes have already reached the client by the time capture runs, so a failure
+            // there must not surface to the handler as a failed write.
+            var inner = new MemoryStream();
+            var capture = new RequestCaptureStream(
+                inner,
+                () => { throw new System.InvalidOperationException("response is gone"); },
+                1024);
+
+            Assert.DoesNotThrow(() => Write(capture, "{\"a\":1}"));
+            Assert.AreEqual("{\"a\":1}", Encoding.UTF8.GetString(inner.ToArray()));
+            Assert.IsTrue(capture.CaptureFailed);
+            Assert.IsFalse(capture.IsCapturing);
+            Assert.AreEqual(7, capture.WrittenBytes, "The write must still be counted.");
+        }
+
+        [Test]
+        public void CaptureStream_KeepsWritingThroughAfterCaptureHasFailed()
+        {
+            var inner = new MemoryStream();
+            var capture = new RequestCaptureStream(
+                inner,
+                () => { throw new System.InvalidOperationException("response is gone"); },
+                1024);
+
+            Write(capture, "abc");
+            Write(capture, "def");
+
+            Assert.AreEqual("abcdef", Encoding.UTF8.GetString(inner.ToArray()));
+            Assert.AreEqual(6, capture.WrittenBytes);
+        }
+
+        [Test]
+        public void CaptureStream_DisposesTheUnderlyingStream()
+        {
+            // A handler that wraps the output in a using block - a StreamWriter over
+            // ctx.Response.OutputStream - must still dispose the real stream.
+            var inner = new MemoryStream();
+            var capture = new RequestCaptureStream(inner, () => "application/json", 1024);
+
+            Write(capture, "{\"a\":1}");
+            capture.Dispose();
+
+            Assert.Throws<System.ObjectDisposedException>(() => inner.WriteByte(1));
+        }
+
+        [Test]
+        public void CaptureStream_KeepsTheCapturedBytesAfterDisposal()
+        {
+            // The entry is completed from the response's own Close, which happens after a
+            // handler's using block has already disposed the stream.
+            var capture = new RequestCaptureStream(
+                new MemoryStream(), () => "application/json", 1024);
+
+            Write(capture, "{\"a\":1}");
+            capture.Dispose();
+
+            Assert.AreEqual("{\"a\":1}", Encoding.UTF8.GetString(capture.CapturedBytes()));
         }
 
         [TestCase("application/json", true)]

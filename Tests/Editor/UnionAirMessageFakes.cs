@@ -20,6 +20,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         private readonly string _method;
         private string _contentType;
         private byte[] _body = new byte[0];
+        private bool _inputStreamThrows;
 
         internal FakeRequest(string method = "GET", string pathAndQuery = "/api/health")
         {
@@ -49,8 +50,17 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             get
             {
                 InputStreamReads++;
+                if (_inputStreamThrows)
+                    throw new IOException("The client abandoned the request.");
                 return new MemoryStream(_body, false);
             }
+        }
+
+        /// <summary>Makes reading the body fail, as a dropped connection would.</summary>
+        internal FakeRequest WithUnreadableBody()
+        {
+            _inputStreamThrows = true;
+            return this;
         }
 
         /// <summary>
