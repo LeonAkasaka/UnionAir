@@ -42,6 +42,17 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         // ── curl ────────────────────────────────────────────────────────────
 
         [Test]
+        public void BuildCurl_OmitsTheStopParsingTokenForEveryShellThatDoesNotNeedIt()
+        {
+            var entry = Completed("POST", "/api/test", requestBody: "{\"a\":\"x y\"}");
+
+            StringAssert.DoesNotContain(
+                "--%", RequestLogFormatter.BuildCurl(entry, "http://x", CurlShell.Bash));
+            StringAssert.DoesNotContain(
+                "--%", RequestLogFormatter.BuildCurl(entry, "http://x", CurlShell.PowerShell7));
+        }
+
+        [Test]
         public void BuildCurl_UsesCurlExeSoPowerShellDoesNotResolveTheAlias()
         {
             var command = RequestLogFormatter.BuildCurl(Completed(), "http://localhost:51801");
@@ -116,34 +127,58 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         [Test]
         public void Quote_ClosesAndReopensAroundAnEmbeddedSingleQuote()
         {
-            Assert.AreEqual("'it'\\''s'", RequestLogFormatter.Quote("it's", CurlShell.Posix));
+            Assert.AreEqual("'it'\\''s'", RequestLogFormatter.Quote("it's", CurlShell.Bash));
         }
 
         [Test]
-        public void Quote_DoublesTheSingleQuoteForWindowsPowerShell()
+        public void Quote_LeavesASingleQuoteAloneForWindowsPowerShell()
         {
+            // Past --% the value is Windows' to parse, not PowerShell's.
             Assert.AreEqual(
-                "'it''s'", RequestLogFormatter.Quote("it's", CurlShell.WindowsPowerShell));
+                "\"it's\"", RequestLogFormatter.Quote("it's", CurlShell.WindowsPowerShell));
         }
 
         [Test]
         public void Quote_EscapesInnerDoubleQuotesForWindowsPowerShell()
         {
-            // Verified against a running server: Windows PowerShell 5.1 rebuilds the command line
-            // for a native executable and drops bare double quotes, so a plain JSON body arrives
-            // unparseable without this. PowerShell 7 and bash do not need it and would pass the
-            // backslashes through, which is why the two forms cannot be merged.
             Assert.AreEqual(
-                "'{\\\"name\\\":\\\"Cube\\\"}'",
+                "\"{\\\"name\\\":\\\"Cube\\\"}\"",
                 RequestLogFormatter.Quote("{\"name\":\"Cube\"}", CurlShell.WindowsPowerShell));
         }
 
         [Test]
-        public void Quote_LeavesInnerDoubleQuotesAloneForPosix()
+        public void EscapeForWindowsArgv_UsesTwoNPlusOneBackslashesBeforeAQuote()
+        {
+            // The case the obvious implementation gets wrong: a JSON body carrying an escaped
+            // quote. One backslash reaches the quote, so three are written plus the escape.
+            // Verbatim strings: a backslash is literal and a quote is written twice.
+            Assert.AreEqual(
+                @"said \\\""hi\\\""",
+                RequestLogFormatter.EscapeForWindowsArgv(@"said \""hi\"""));
+        }
+
+        [Test]
+        public void EscapeForWindowsArgv_LeavesBackslashesNotBeforeAQuoteAlone()
+        {
+            // A Windows path in a JSON body, where JSON has already doubled each separator.
+            Assert.AreEqual(
+                @"C:\\Assets\\My Prefab.prefab",
+                RequestLogFormatter.EscapeForWindowsArgv(@"C:\\Assets\\My Prefab.prefab"));
+        }
+
+        [Test]
+        public void EscapeForWindowsArgv_DoublesTrailingBackslashes()
+        {
+            // The closing quote follows them, so they would otherwise escape it.
+            Assert.AreEqual("x\\\\", RequestLogFormatter.EscapeForWindowsArgv("x\\"));
+        }
+
+        [Test]
+        public void Quote_LeavesInnerDoubleQuotesAloneForBash()
         {
             Assert.AreEqual(
                 "'{\"name\":\"Cube\"}'",
-                RequestLogFormatter.Quote("{\"name\":\"Cube\"}", CurlShell.Posix));
+                RequestLogFormatter.Quote("{\"name\":\"Cube\"}", CurlShell.Bash));
         }
 
         [Test]
@@ -154,8 +189,45 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
                 "http://localhost:51801",
                 CurlShell.WindowsPowerShell);
 
-            StringAssert.Contains("-d '{\\\"name\\\":\\\"Cube\\\"}'", command);
-            StringAssert.Contains("-H 'Content-Type: application/json'", command);
+            StringAssert.StartsWith("curl.exe --% ", command,
+                "Without the stop-parsing token 5.1 splits the body at its first space.");
+            StringAssert.Contains("-d \"{\\\"name\\\":\\\"Cube\\\"}\"", command);
+            StringAssert.Contains("-H \"Content-Type: application/json\"", command);
+        }
+
+
+        [Test]
+        public void Quote_DoublesTheSingleQuoteForPowerShell7()
+        {
+            Assert.AreEqual("'it''s'", RequestLogFormatter.Quote("it's", CurlShell.PowerShell7));
+        }
+
+        [Test]
+        public void Quote_LeavesInnerDoubleQuotesAloneForPowerShell7()
+        {
+            // 7 passes a single-quoted argument through intact. Escaping the double quotes the
+            // way 5.1 needs would reach curl literally and make the body invalid JSON.
+            Assert.AreEqual(
+                "'{\"name\":\"Cube\"}'",
+                RequestLogFormatter.Quote("{\"name\":\"Cube\"}", CurlShell.PowerShell7));
+        }
+
+        [Test]
+        public void BuildCurl_DefaultsToBash()
+        {
+            var entry = Completed("POST", "/api/test", requestBody: "{\"a\":\"it's\"}");
+
+            Assert.AreEqual(
+                RequestLogFormatter.BuildCurl(entry, "http://x", CurlShell.Bash),
+                RequestLogFormatter.BuildCurl(entry, "http://x"));
+        }
+
+        [TestCase(CurlShell.Bash)]
+        [TestCase(CurlShell.PowerShell7)]
+        [TestCase(CurlShell.WindowsPowerShell)]
+        public void ShellLabel_NamesEveryMode(CurlShell shell)
+        {
+            Assert.IsNotEmpty(RequestLogFormatter.ShellLabel(shell));
         }
 
         // ── Bodies ──────────────────────────────────────────────────────────

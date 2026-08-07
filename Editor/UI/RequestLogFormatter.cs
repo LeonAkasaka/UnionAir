@@ -9,27 +9,27 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     /// <remarks>
     /// There is no single form that works everywhere, which is why this is a choice rather than a
-    /// detail. Verified against a running server on Windows:
+    /// detail. Each was settled by dumping the argument vector a native program actually received:
     /// <list type="bullet">
-    /// <item>Single quotes reach curl intact in bash-family shells and in PowerShell 7, but
-    /// Windows PowerShell 5.1 strips the inner double quotes while re-quoting arguments for a
-    /// native executable, so even a plain JSON body arrives unparseable.</item>
-    /// <item>Escaping the inner double quotes as <c>\"</c> is what survives that re-quoting, but
-    /// PowerShell 7 and bash pass the backslashes through literally and curl then sees invalid
-    /// JSON.</item>
-    /// <item>A literal single quote is written <c>'\''</c> in bash and <c>''</c> in PowerShell.</item>
+    /// <item>bash and PowerShell 7 both take a single-quoted argument verbatim, differing only in
+    /// how a literal single quote is written: <c>'\''</c> against <c>''</c>.</item>
+    /// <item>Windows PowerShell 5.1 cannot be served by ordinary argument syntax at all. It hands
+    /// a value containing <c>\"</c> to the process without quoting it, so the body splits at its
+    /// first space, and it strips delimiter quotes written by hand. Only the stop-parsing token
+    /// <c>--%</c> gets a JSON body through intact, after which Windows' own command-line rules
+    /// apply and the quoting is ours to get right.</item>
     /// </list>
     /// </remarks>
     internal enum CurlShell
     {
-        /// <summary>
-        /// bash, zsh, Git Bash, WSL, macOS, and Linux. PowerShell 7 accepts this too, except
-        /// when the body contains a single quote, which it escapes differently.
-        /// </summary>
-        Posix,
+        /// <summary>bash, zsh, Git Bash, WSL, macOS, and Linux.</summary>
+        Bash = 0,
+
+        /// <summary>PowerShell 7, the cross-platform <c>pwsh</c>.</summary>
+        PowerShell7 = 1,
 
         /// <summary>Windows PowerShell 5.1, the <c>powershell.exe</c> shipped with Windows.</summary>
-        WindowsPowerShell,
+        WindowsPowerShell = 2,
     }
 
     /// <summary>
@@ -189,7 +189,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </para>
         /// </remarks>
         internal static string BuildCurl(
-            RequestLogEntry entry, string baseUrl, CurlShell shell = CurlShell.Posix)
+            RequestLogEntry entry, string baseUrl, CurlShell shell = CurlShell.Bash)
         {
             if (!CanBuildCurl(entry)) return "";
 
@@ -197,6 +197,11 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var sb = new StringBuilder(256);
             sb.Append("curl.exe");
+
+            // Everything after this token is handed to the process as written. Without it
+            // Windows PowerShell 5.1 splits a JSON body at its first space.
+            if (shell == CurlShell.WindowsPowerShell) sb.Append(" --%");
+
             if (entry.Method != "GET")
                 sb.Append(" -X ").Append(entry.Method);
 
@@ -224,19 +229,79 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <remarks>
         /// Neither form is universal; see <see cref="CurlShell"/> for what was measured.
         /// </remarks>
-        internal static string Quote(string value, CurlShell shell = CurlShell.Posix)
+        internal static string Quote(string value, CurlShell shell = CurlShell.Bash)
         {
             if (value == null) return "''";
 
-            if (shell == CurlShell.WindowsPowerShell)
-                // Windows PowerShell rebuilds the command line for a native executable and drops
-                // bare double quotes on the way; escaping them is what survives that pass. A
-                // literal single quote is doubled, the way PowerShell escapes one.
-                return "'" + value.Replace("'", "''").Replace("\"", "\\\"") + "'";
+            switch (shell)
+            {
+                case CurlShell.WindowsPowerShell:
+                    // Past --% the value is Windows' to parse, not PowerShell's, so a single
+                    // quote needs nothing and the double quotes carry the whole weight.
+                    return "\"" + EscapeForWindowsArgv(value) + "\"";
 
-            // A single quote cannot appear inside a single-quoted string, so the string is closed,
-            // an escaped quote is emitted, and the string is reopened.
-            return "'" + value.Replace("'", "'\\''") + "'";
+                case CurlShell.PowerShell7:
+                    // 7 passes a single-quoted argument through intact, so only the quote itself
+                    // needs escaping. Escaping the double quotes as 5.1 needs would reach curl
+                    // literally here and make the body invalid JSON.
+                    return "'" + value.Replace("'", "''") + "'";
+
+                default:
+                    // A single quote cannot appear inside a single-quoted string, so the string is
+                    // closed, an escaped quote is emitted, and the string is reopened.
+                    return "'" + value.Replace("'", "'\\''") + "'";
+            }
+        }
+
+        /// <summary>
+        /// Escapes a value for the rules <c>CommandLineToArgvW</c> applies to a quoted argument.
+        /// </summary>
+        /// <remarks>
+        /// A backslash is ordinary until it precedes a double quote, where each one has to be
+        /// doubled and the quote escaped on top - so a quote reached through <c>n</c> backslashes
+        /// is written with <c>2n+1</c> of them. Replacing every quote with <c>\"</c> and leaving
+        /// the backslashes alone is the obvious version and is wrong for exactly the bodies that
+        /// matter: a JSON string containing a quote arrives with the quote reading as a delimiter.
+        /// Trailing backslashes are doubled because the closing quote follows them.
+        /// </remarks>
+        internal static string EscapeForWindowsArgv(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+
+            var sb = new StringBuilder(value.Length + 16);
+            var backslashes = 0;
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                if (c == '\\')
+                {
+                    backslashes++;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    sb.Append('\\', backslashes * 2 + 1).Append('"');
+                    backslashes = 0;
+                    continue;
+                }
+
+                sb.Append('\\', backslashes).Append(c);
+                backslashes = 0;
+            }
+
+            return sb.Append('\\', backslashes * 2).ToString();
+        }
+
+        /// <summary>Menu label naming the shells a mode was verified in.</summary>
+        internal static string ShellLabel(CurlShell shell)
+        {
+            switch (shell)
+            {
+                case CurlShell.WindowsPowerShell: return "Windows PowerShell 5.1";
+                case CurlShell.PowerShell7:       return "PowerShell 7";
+                default:                          return "bash (Git Bash, WSL, macOS, Linux)";
+            }
         }
 
         /// <summary>Formats a byte count for display.</summary>

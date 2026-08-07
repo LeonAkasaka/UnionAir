@@ -99,10 +99,22 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 using (new EditorGUI.DisabledScope(!RequestLogFormatter.CanBuildCurl(entry)))
                 {
-                    // A menu rather than one button: no single quoting form works in every
-                    // shell, so which one is wanted has to be asked rather than guessed.
-                    if (GUILayout.Button("Copy as curl", EditorStyles.miniButton, GUILayout.Width(90)))
-                        ShowCurlMenu(entry);
+                    // Split button: the main half copies for whichever shell is selected, and the
+                    // arrow changes the selection. No quoting form works in every shell, so the
+                    // choice has to exist, but it is made once rather than on every copy.
+                    var shell = UnionAirSettings.CurlShell;
+                    var copy = new GUIContent(
+                        "Copy as curl",
+                        "Quoted for " + RequestLogFormatter.ShellLabel(shell));
+                    if (GUILayout.Button(copy, EditorStyles.miniButtonLeft, GUILayout.Width(90)))
+                        GUIUtility.systemCopyBuffer =
+                            RequestLogFormatter.BuildCurl(entry, BaseUrl(), shell);
+
+                    // Escaped rather than written literally: sources here are UTF-8 without a BOM,
+                    // which a Shift-JIS machine reads as mojibake.
+                    var arrow = new GUIContent("\u25BE", "Choose the shell to quote for");
+                    if (GUILayout.Button(arrow, EditorStyles.miniButtonRight, GUILayout.Width(18)))
+                        ShowCurlMenu();
                 }
             }
 
@@ -163,20 +175,22 @@ namespace LeonAkasaka.UnionAir.Editor
                     MessageType.Info);
         }
 
-        private static void ShowCurlMenu(RequestLogEntry entry)
+        private static void ShowCurlMenu()
         {
+            var current = UnionAirSettings.CurlShell;
             var menu = new GenericMenu();
-            menu.AddItem(
-                new GUIContent("bash, Git Bash, WSL, macOS, Linux"),
-                false,
-                () => GUIUtility.systemCopyBuffer =
-                    RequestLogFormatter.BuildCurl(entry, BaseUrl(), CurlShell.Posix));
-            menu.AddItem(
-                new GUIContent("Windows PowerShell"),
-                false,
-                () => GUIUtility.systemCopyBuffer =
-                    RequestLogFormatter.BuildCurl(entry, BaseUrl(), CurlShell.WindowsPowerShell));
+            AddShellItem(menu, current, CurlShell.Bash);
+            AddShellItem(menu, current, CurlShell.PowerShell7);
+            AddShellItem(menu, current, CurlShell.WindowsPowerShell);
             menu.ShowAsContext();
+        }
+
+        private static void AddShellItem(GenericMenu menu, CurlShell current, CurlShell shell)
+        {
+            menu.AddItem(
+                new GUIContent(RequestLogFormatter.ShellLabel(shell)),
+                current == shell,
+                () => UnionAirSettings.CurlShell = shell);
         }
 
         private static void SaveBody(RequestLogEntry entry, string body, bool response)
