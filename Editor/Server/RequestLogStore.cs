@@ -28,6 +28,10 @@ namespace LeonAkasaka.UnionAir.Editor
         internal long StartTimestamp;
 
         internal string Method;
+
+        /// <summary>Scheme and authority that received the request.</summary>
+        internal string RequestOrigin;
+
         internal string Path;
         internal string Query;
 
@@ -163,6 +167,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 StartedUtc = DateTime.UtcNow,
                 StartTimestamp = Stopwatch.GetTimestamp(),
                 Method = request.HttpMethod,
+                RequestOrigin = request.Url.GetLeftPart(UriPartial.Authority),
                 Path = request.Url.AbsolutePath,
                 Query = request.Url.Query,
                 RequestHeaders = FormatHeaders(request.Headers),

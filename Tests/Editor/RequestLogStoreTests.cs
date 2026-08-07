@@ -30,11 +30,15 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         {
             var store = new RequestLogStore();
             var entry = store.Begin(
-                new FakeRequest("POST", "/api/gameobjects?scenePath=Main")
+                new FakeRequest(
+                        "POST",
+                        "/api/gameobjects?scenePath=Main",
+                        "http://localhost:51801")
                     .WithHeader("User-Agent", "curl/8.0")
                     .WithJsonBody("{\"name\":\"Cube\"}"));
 
             Assert.AreEqual("POST", entry.Method);
+            Assert.AreEqual("http://localhost:51801", entry.RequestOrigin);
             Assert.AreEqual("/api/gameobjects", entry.Path);
             Assert.AreEqual("?scenePath=Main", entry.Query);
             StringAssert.Contains("User-Agent: curl/8.0", entry.RequestHeaders);
