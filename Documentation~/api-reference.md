@@ -1,7 +1,7 @@
 # API Reference
 **English** | [日本語](api-reference.ja.md)
 
-Base URL: `http://localhost:<port>/api/` (default port: **8765**)
+Base URL: read it from `<project>/.unionair/endpoint.txt` at connection time. The port mode defaults to Automatic, so there is no fixed default port, and the file must be reread after a refused connection. [Check the server](index.md#2-check-the-server) describes the handshake.
 
 Responses are returned with `Content-Type: application/json; charset=utf-8` unless an endpoint documents another media type. NUnit result downloads use `application/xml`. Responses do not include CORS opt-in headers. Requests carrying an `Origin` header are rejected with `403`, so browser `fetch` and XMLHttpRequest clients are unsupported by default; local CLI and integration clients must omit `Origin`.
 String fields in JSON responses are escaped consistently, including control characters.

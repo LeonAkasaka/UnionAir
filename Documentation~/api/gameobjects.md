@@ -1,7 +1,9 @@
 # API Reference — GameObjects & Components
 **English** | [日本語](gameobjects.ja.md)
 
-Base URL: `http://localhost:<port>/api/` (default port: **8765**). See the [API Reference index](../api-reference.md) for response conventions and category/security notes.
+Base URL: read it from `<project>/.unionair/endpoint.txt` at connection time. The port mode defaults to Automatic, so there is no fixed default port, and the file must be reread after a refused connection. [Check the server](../index.md#2-check-the-server) describes the handshake. See the [API Reference index](../api-reference.md) for response conventions and category/security notes.
+
+Shell examples on this page assume `BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"`, so `${BASE_URL}` already ends with `/api/`.
 
 ---
 
@@ -107,13 +109,13 @@ Searches GameObjects in the scene using multiple AND conditions. All parameters 
 
 ```bash
 # GameObjects whose name contains "Enemy"
-curl "http://localhost:8765/api/search/gameobjects?name=Enemy"
+curl "${BASE_URL}search/gameobjects?name=Enemy"
 
 # GameObjects with Camera component (include component list)
-curl "http://localhost:8765/api/search/gameobjects?component=Camera&includeComponents=true"
+curl "${BASE_URL}search/gameobjects?component=Camera&includeComponents=true"
 
 # References a specific asset + inactive only
-curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false"
+curl "${BASE_URL}search/gameobjects?assetGuid=abc123&active=false"
 ```
 
 ---

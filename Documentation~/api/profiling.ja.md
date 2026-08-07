@@ -1,7 +1,7 @@
 # API リファレンス - Profiling
 [English](profiling.md) | **日本語**
 
-ベース URL: `http://localhost:<port>/api/`(デフォルトポート: **8765**)。
+ベース URL: 接続時に `<project>/.unionair/endpoint.txt` から読み取ってください。port mode の既定は Automatic であり、固定のデフォルトポートは存在しません。接続を拒否された場合はファイルを読み直してください。手順は [サーバの確認](../index.ja.md#2-サーバの確認) にあります。
 
 **Profiling** カテゴリは既定で無効です。キャプチャは大容量になる場合があり、メモリスナップショットにはプロジェクトやmanaged heapのデータが含まれるため、信頼できるローカルクライアントに対してのみ **Window > UnionAir > REST Bridge** で有効化してください。
 

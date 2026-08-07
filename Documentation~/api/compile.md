@@ -1,7 +1,9 @@
 # API Reference — Compile
 **English** | [日本語](compile.ja.md)
 
-Base URL: `http://localhost:<port>/api/` (default port: **8765**). See the [API Reference index](../api-reference.md) for response conventions and category/security notes.
+Base URL: read it from `<project>/.unionair/endpoint.txt` at connection time. The port mode defaults to Automatic, so there is no fixed default port, and the file must be reread after a refused connection. [Check the server](../index.md#2-check-the-server) describes the handshake. See the [API Reference index](../api-reference.md) for response conventions and category/security notes.
+
+Shell examples on this page assume `BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"`, so `${BASE_URL}` already ends with `/api/`.
 
 UnionAir records every script compilation cycle as a structured result with per-message `file`, `line`, `column`, and `code`. Cycles started outside UnionAir are recorded too — saving a file in an IDE and letting Unity auto-refresh on focus is the most common way a project recompiles.
 
@@ -78,7 +80,7 @@ The guard runs again immediately before the scheduled refresh. If a scene change
 `409` when the Editor is entering or in Play mode, or while assets are updating. Both carry an `activeActivity` object naming what is blocking; see [Editor Activities](activities.md). `400` when `requestId` contains unsupported characters or is a reserved Windows device name.
 
 ```bash
-curl -X POST http://localhost:8765/api/compile \
+curl -X POST "${BASE_URL}compile" \
   -H "Content-Type: application/json" \
   -d '{"refresh":true}'
 ```
@@ -210,7 +212,7 @@ See [`GET /api/editor/status`](editor.md#detecting-domain-reloads) for `lifecycl
 ### Example
 
 ```bash
-curl http://localhost:8765/api/compile
+curl "${BASE_URL}compile"
 ```
 
 ---
@@ -257,7 +259,7 @@ Filters are applied before pagination. Records are ordered by `finishedAt` desce
 Invalid filter or pagination values return `400`. An empty history returns `total: 0` and an empty `records` array. If the retained-record directory cannot be enumerated, the endpoint returns `500` rather than presenting a partial scan as complete.
 
 ```bash
-curl "http://localhost:8765/api/compile/records?target=player&offset=0&limit=20"
+curl "${BASE_URL}compile/records?target=player&offset=0&limit=20"
 ```
 
 ---
@@ -273,7 +275,7 @@ UnionAir retains the 20 most recent records under `Library/UnionAir/Compile/reco
 The response body is the same record object shown above, without the `current`/`latest` wrapper.
 
 ```bash
-curl http://localhost:8765/api/compile/c-20260728-040030-67c0fd
+curl "${BASE_URL}compile/c-20260728-040030-67c0fd"
 ```
 
 ---

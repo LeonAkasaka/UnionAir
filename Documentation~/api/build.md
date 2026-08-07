@@ -1,7 +1,9 @@
 # API Reference — Build
 **English** | [日本語](build.ja.md)
 
-Base URL: `http://localhost:<port>/api/` (default port: **8765**). See the [API Reference index](../api-reference.md) for response conventions and category/security notes.
+Base URL: read it from `<project>/.unionair/endpoint.txt` at connection time. The port mode defaults to Automatic, so there is no fixed default port, and the file must be reread after a refused connection. [Check the server](../index.md#2-check-the-server) describes the handshake. See the [API Reference index](../api-reference.md) for response conventions and category/security notes.
+
+Shell examples on this page assume `BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"`, so `${BASE_URL}` already ends with `/api/`.
 
 These endpoints report how the project is configured to build: which target is active, which scenes are enabled and what build index each one gets, which scripting backend and define symbols apply, and which platform modules the Editor actually has installed.
 
@@ -124,8 +126,8 @@ A value that this Editor cannot report for the requested target — which happen
 The set differs per Editor version and per installed modules, which is why the endpoint reports it instead of documenting a fixed list. Names containing spaces must be URL-encoded.
 
 ```bash
-curl http://localhost:8765/api/build/settings
-curl "http://localhost:8765/api/build/settings?namedBuildTarget=Android"
+curl "${BASE_URL}build/settings"
+curl "${BASE_URL}build/settings?namedBuildTarget=Android"
 ```
 
 ---
@@ -182,8 +184,8 @@ Several targets share one group and one named build target — `StandaloneWindow
 `Server` appears as a named build target in `GET /api/build/settings` but has no row here, because it is a subtarget of Standalone rather than a build target of its own. `standaloneBuildSubtarget` in the settings response is what selects it.
 
 ```bash
-curl http://localhost:8765/api/build/targets
-curl "http://localhost:8765/api/build/targets?installed=true"
+curl "${BASE_URL}build/targets"
+curl "${BASE_URL}build/targets?installed=true"
 ```
 
 ---
@@ -308,7 +310,7 @@ Afterwards the cycle is observable through the Compile API. It is recorded with 
 ```
 
 ```bash
-curl -X PATCH http://localhost:8765/api/build/settings \
+curl -X PATCH "${BASE_URL}build/settings" \
   -H "Content-Type: application/json" \
   -d '{"addDefineSymbols":["UNIONAIR_SAMPLE"]}'
 ```
@@ -361,7 +363,7 @@ Same shape as `PATCH /api/build/settings`, with one `scenes` change. `previous` 
 ```
 
 ```bash
-curl -X POST http://localhost:8765/api/build/scenes \
+curl -X POST "${BASE_URL}build/scenes" \
   -H "Content-Type: application/json" \
   -d '{"scenes":["Assets/Scenes/SampleScene.unity"]}'
 ```
@@ -456,7 +458,7 @@ This is a different check from the [loaded-scene external-change guard](editor.m
 `500` when the build record could not be written, in which case **no build was started**. Nothing is served while a build runs, so the id in the `202` is the caller's only handle; starting a minute of work whose result could not be reported would be worse than refusing it. The write is retried once immediately before the request fails.
 
 ```bash
-curl -X POST http://localhost:8765/api/builds \
+curl -X POST "${BASE_URL}builds" \
   -H "Content-Type: application/json" \
   -d '{"requestId":"nightly-1"}'
 ```
@@ -653,7 +655,7 @@ This is reported as its own condition rather than as a generic failure, because 
 `409` while a compilation, an asset import, or a build is active, carrying `activeActivity`.
 
 ```bash
-curl -X POST http://localhost:8765/api/build/target \
+curl -X POST "${BASE_URL}build/target" \
   -H "Content-Type: application/json" \
   -d '{"buildTarget":"StandaloneWindows64"}'
 ```

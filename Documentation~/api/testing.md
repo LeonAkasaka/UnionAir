@@ -1,7 +1,7 @@
 # API Reference — Test Runner
 **English** | [日本語](testing.ja.md)
 
-Base URL: `http://localhost:<port>/api/` (default port: **8765**). See the [API Reference index](../api-reference.md) for common response and security conventions.
+Base URL: read it from `<project>/.unionair/endpoint.txt` at connection time. The port mode defaults to Automatic, so there is no fixed default port, and the file must be reread after a refused connection. [Check the server](../index.md#2-check-the-server) describes the handshake. See the [API Reference index](../api-reference.md) for common response and security conventions.
 
 The Test Runner API is present only when `com.unity.test-framework` is installed. The **Test Runner** category is disabled by default and must be enabled in **Window > UnionAir > REST Bridge**.
 

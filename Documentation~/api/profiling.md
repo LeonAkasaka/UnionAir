@@ -1,7 +1,7 @@
 # API Reference - Profiling
 **English** | [日本語](profiling.ja.md)
 
-Base URL: `http://localhost:<port>/api/` (default port: **8765**).
+Base URL: read it from `<project>/.unionair/endpoint.txt` at connection time. The port mode defaults to Automatic, so there is no fixed default port, and the file must be reread after a refused connection. [Check the server](../index.md#2-check-the-server) describes the handshake.
 
 The **Profiling** category is disabled by default. Enable it in **Window > UnionAir > REST Bridge** only for trusted local clients. Captures can be large and memory snapshots can contain project and managed-heap data.
 

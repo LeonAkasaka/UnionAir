@@ -4,7 +4,9 @@
 
 > **注記**: 本ドキュメントは [英語版](gameobjects.md) の翻訳です。内容に乖離がある場合は英語版が優先されます。
 
-ベース URL: `http://localhost:<port>/api/`(デフォルトポート: **8765**)。レスポンスの規約とカテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+ベース URL: 接続時に `<project>/.unionair/endpoint.txt` から読み取ってください。port mode の既定は Automatic であり、固定のデフォルトポートは存在しません。接続を拒否された場合はファイルを読み直してください。手順は [サーバの確認](../index.ja.md#2-サーバの確認) にあります。レスポンスの規約とカテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+
+このページのシェル例は `BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"` を前提としています。`${BASE_URL}` は末尾の `/api/` まで含みます。
 
 ---
 
@@ -110,13 +112,13 @@
 
 ```bash
 # 名前に "Enemy" を含む GameObject
-curl "http://localhost:8765/api/search/gameobjects?name=Enemy"
+curl "${BASE_URL}search/gameobjects?name=Enemy"
 
 # Camera コンポーネントを持つ GameObject(コンポーネント一覧付き)
-curl "http://localhost:8765/api/search/gameobjects?component=Camera&includeComponents=true"
+curl "${BASE_URL}search/gameobjects?component=Camera&includeComponents=true"
 
 # 特定アセットを参照 + 非アクティブのみ
-curl "http://localhost:8765/api/search/gameobjects?assetGuid=abc123&active=false"
+curl "${BASE_URL}search/gameobjects?assetGuid=abc123&active=false"
 ```
 
 ---

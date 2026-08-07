@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Every API reference page opened by naming `8765` as the default port, which the same documentation set contradicts: the configured port has defaulted to Automatic since 0.4.0, and the Getting Started guide describes reading `.unionair/endpoint.txt` instead. A client implementer starting from an API page was told a fixed port and had no reason to look for the discovery file when the connection was refused. The pages now state the discovery rule and link to it, the shell examples on `api/editor.md`, `api/build.md`, `api/compile.md`, and `api/gameobjects.md` use `${BASE_URL}` rather than a hardcoded port, and the `GET /api/help` response sample shows an ephemeral port so it no longer reads as a default.
+
 ## [0.5.0] - 2026-08-07
 
 ### Upgrade Notes
