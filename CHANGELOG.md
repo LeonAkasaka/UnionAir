@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-07
+
 ### Upgrade Notes
 
 - Custom controllers receive `UnionAirRequest` and `UnionAirResponse` instead of `System.Net.HttpListenerRequest` and `HttpListenerResponse`. A controller that only passes `ctx.Request` and `ctx.Response` to `RequestBodyReader` and `RestResponse` compiles unchanged. A controller that declares its own helper typed against the framework types must change those parameter types. The `HttpListenerResponse` overloads of `RestResponse.Send`, `SendBinary`, `SendError`, and `SendNotFound` are removed rather than retained as obsolete.
@@ -337,6 +339,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 <!-- 0.1.0 and 0.2.0 predate this repository being published and were never tagged,
      so they have no release page to link to. -->
-[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.5.0
 [0.4.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.4.0
 [0.3.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.3.0

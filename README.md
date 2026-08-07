@@ -73,7 +73,7 @@ disabled by default and upgrading the package should stay the project's decision
 3. Enter:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git#v0.4.0
+https://github.com/LeonAkasaka/UnionAir.git#v0.5.0
 ```
 
 ### Via manifest.json
@@ -83,7 +83,7 @@ Add the dependency to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.4.0"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.5.0"
   }
 }
 ```
@@ -235,7 +235,8 @@ UnionAir does not provide a dedicated MCP server, and none is currently planned.
 
 ## Known Limitations
 
-- Automated coverage is limited to the EditMode tests in `Tests/Editor`, which exercise only Editor-independent logic; compilation, domain reloads, Play mode, and the HTTP server are verified by hand, and there is no CI. See [Tests](CONTRIBUTING.md#tests) for how to run them.
+- Automated coverage is limited to the EditMode tests in `Tests/Editor`. They exercise Editor-independent logic and, now that the request and response are types UnionAir owns, the routing gates that need no Editor state; the Play Mode opt-in, the test-run rejection, and the disabled-category response still need that state arranged and are verified by hand, as are compilation, domain reloads, and the HTTP server. There is no CI. See [Tests](CONTRIBUTING.md#tests) for how to run them.
+- The Request Log holds captured exchanges for the current Editor session only; a domain reload clears them. Request bodies are capped at 64 KB and response bodies at 256 KB, and binary responses are recorded by content type and size rather than kept.
 - Request-body JSON parsing is a lightweight custom reader; deeply nested or unusual JSON bodies may hit edge cases.
 - JSON response serialization is hand-written per endpoint; a shared serializer is a planned refactor.
 - Browser-originated `fetch` and XMLHttpRequest clients are not supported; there is currently no configurable Origin allowlist.
