@@ -75,7 +75,7 @@ UnionAir 自身はこの依存を宣言していません。Test Runner カテ�
 3. 次の URL を入力します:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git#v0.4.0
+https://github.com/LeonAkasaka/UnionAir.git#v0.5.0
 ```
 
 ### manifest.json から
@@ -85,7 +85,7 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.4.0
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.4.0"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.5.0"
   }
 }
 ```
@@ -235,7 +235,8 @@ UnionAir は専用の MCP サーバーを提供しておらず、現時点で実
 
 ## 既知の制限
 
-- 自動テストは `Tests/Editor` の EditMode テストのみで、Editor に依存しないロジックだけを対象としています。コンパイル、ドメインリロード、Play モード、HTTP サーバは手動で確認しており、CI は未整備です。実行方法は [テスト](CONTRIBUTING.ja.md#テスト) を参照してください。
+- 自動テストは `Tests/Editor` の EditMode テストのみです。Editor に依存しないロジックに加え、リクエストとレスポンスが UnionAir 自身の型になったことで、Editor の状態を必要としないルーティングのゲートも対象になりました。Play Mode のオプトイン、テスト実行中の拒否、無効カテゴリの応答は依然として Editor の状態を用意する必要があり、コンパイル、ドメインリロード、HTTP サーバと同様に手動で確認しています。CI は未整備です。実行方法は [テスト](CONTRIBUTING.ja.md#テスト) を参照してください。
+- Request Log が保持するのは現在の Editor セッション分のみで、ドメインリロードで失われます。リクエストボディは 64 KB、レスポンスボディは 256 KB が上限で、バイナリレスポンスは内容を保持せず Content-Type とサイズだけを記録します。
 - リクエストボディの JSON パースは軽量な独自リーダーであり、深くネストした JSON や特殊なケースにエッジケースがあります。
 - レスポンスの JSON シリアライズはエンドポイントごとの手書き実装であり、共有シリアライザへのリファクタリングを予定しています。
 - ブラウザ由来の `fetch` と XMLHttpRequest は非対応であり、設定可能な Origin 許可リストは現在ありません。
