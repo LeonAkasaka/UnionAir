@@ -528,6 +528,154 @@ AnimatorController にレイヤーを追加します。
 
 ---
 
+## ブレンドツリー
+
+ブレンドツリーは GUID を持ちません。コントローラーが所有するサブアセットなので、位置で指定します。
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "childPath": [1] }
+```
+
+| フィールド | 説明 |
+|-------|-------------|
+| `layerIndex` | ステートを含むレイヤー。既定は `0` |
+| `state` | ルートブレンドツリーをモーションに持つステート名 |
+| `childPath` | ルートからの子インデックス。`[]` または省略でルート自身、`[1]` で 2 番目の子、`[1, 0]` でそのさらに最初の子 |
+
+### `childPath` は位置指定です
+
+子を削除・並べ替えすると、クライアントが保持しているパスは無効になります。これはここでの設計判断ではなくアセットの性質です。Unity は `ChildMotion` にインデックス以外の同一性を与えておらず、鍵にできる名前も保持すべき id もありません。独自に発明すると、`.controller` が保持していない対応表を維持することになります。
+
+解決できない `childPath` は、失敗したインデックスと深さを名指しして `404` を返します。古くなったパスは、どこでずれたかが分かる形で失敗します。
+
+---
+
+## POST /api/assets/animator-controllers/{guid}/blend-trees
+
+既存ステートのモーションとしてブレンドツリーを作成するか、既存のツリーに子を追加します。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### ルートツリーの作成
+
+`addChild` を指定しない場合、ステートのルートブレンドツリーを作成します。
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "name": "Locomotion",
+  "blendType": "Simple1D", "blendParameter": "Speed",
+  "useAutomaticThresholds": false, "minThreshold": 0, "maxThreshold": 0.8 }
+```
+
+既にブレンドツリーを持つステートは `409` を返します。先に削除するか、`addChild` を使ってください。
+
+### 子の追加
+
+`addChild` を指定すると、`childPath` が指すツリーに子を追加します。既定では入れ子のブレンドツリー、`motion` に GUID があればクリップです。
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "childPath": [], "addChild": true,
+  "name": "Runs", "blendType": "Simple1D", "blendParameter": "Direction", "threshold": 0.8 }
+```
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "childPath": [0], "addChild": true,
+  "motion": { "guid": "a1b2c3..." }, "threshold": -1 }
+```
+
+入れ子ツリーの作成手段は `addChild` だけです。ツリーをリテラルとして渡す方法は用意していないため、サブアセットが生まれる経路はちょうど 1 つです。
+
+### フィールド
+
+| フィールド | 対象 | 説明 |
+|-------|-----------|-------------|
+| `name`、`blendType`、`blendParameter`、`blendParameterY`、`useAutomaticThresholds`、`minThreshold`、`maxThreshold` | ツリー | `blendType` は `Simple1D`、`SimpleDirectional2D`、`FreeformDirectional2D`、`FreeformCartesian2D`、`Direct` のいずれか |
+| `threshold`、`position`、`timeScale`、`cycleOffset`、`mirror`、`directBlendParameter` | 子エントリ | `addChild` 指定時のみ |
+| `motion` | 子エントリ | `AnimationClip` の `{guid}`。これが無いことが「子は入れ子ツリー」を意味します |
+
+### レスポンス(HTTP 201)
+
+```json
+{ "created": "BlendTree", "layerIndex": 0, "state": "Locomotion",
+  "childPath": [1], "name": "Runs", "ignored": [] }
+```
+
+`childPath` は作成されたツリーまたは子の位置で、そのまま次のリクエストの指定に使えます。
+
+---
+
+## PATCH /api/assets/animator-controllers/{guid}/blend-trees
+
+指定したツリーを更新します。`childPath` が空でない場合は、その子エントリも更新します。
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "childPath": [1], "threshold": 0.8 }
+```
+
+フィールドは `POST` と同じです。`childPath` が空のまま `threshold` を指定すると `400` を返します。ルートブレンドツリーは何かの子ではないためです。
+
+### 失敗したリクエストは何も適用しません
+
+最初の書き込みの前にすべての値をコントローラーに対して解決するため、複数フィールドを設定して 1 つが失敗したリクエストは、ツリーを元のまま残します。`name` と存在しない `blendParameter` を同時に指定した場合、どちらも変更されません。
+
+---
+
+## DELETE /api/assets/animator-controllers/{guid}/blend-trees
+
+指定したツリーまたは子を削除します。
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "childPath": [1] }
+```
+
+`childPath` が空または省略ならステートのモーションを解除し、空でなければその子を削除します。
+
+```json
+{ "removed": "child", "layerIndex": 0, "state": "Locomotion",
+  "childPath": [1], "destroyedSubTrees": 2 }
+```
+
+`destroyedSubTrees` は子とともに破棄したブレンドツリーの数です。このフィールドが必要な理由は次節のとおりです。
+
+---
+
+## サブアセットの後始末
+
+ブレンドツリーは `.controller` ファイルの中に存在するため、グラフから外すこととアセットから消えることは別です。Unity 6000.0.80f1 で、API 自身の読み取りではなくファイルに対して計測した結果:
+
+| 操作 | Unity の挙動 | UnionAir の対応 |
+|---|---|---|
+| ステートのモーション解除 | ツリーと**すべての子孫**を破棄する | 何もしません。ここに後始末を足すと何もしないコードになります |
+| 子の `DELETE` | エントリを外し、**部分木をファイルに残す** | エントリを外す前に部分木を収集し、外した後に破棄します |
+| ツリーを持つステートの `DELETE .../states` | ステート自身のツリーは破棄するが、**子孫は破棄しない** | 先に部分木を収集し、生き残ったものを破棄して `destroyedBlendTrees` で報告します |
+
+3 行目が `DELETE .../states` に件数を返すようになった理由です。平坦なブレンドツリーは Unity が正しく片付けるため、この漏れは入れ子にして初めて現れます。1 段のツリーだけでテストしていれば成功と報告されていました。
+
+作成するサブアセットには `HideFlags.HideInHierarchy` を設定します。Animator ウィンドウが生成するものと同じです。`BlendTree.CreateBlendTreeChild` は自動で設定しますが、既存ステートにルートツリーを作る唯一の経路である `AssetDatabase.AddObjectToAsset` は設定しないため、明示的に設定しています。
+
+---
+
+## 検証
+
+- `blendParameter` と `blendParameterY` は、コントローラーに存在する `Float` パラメータを指す必要があります。存在しないパラメータを指すツリーは壊れたコントローラーであり、読み取りでは正常なものと区別できないため、格納せず `400` を返します。
+- 未知の `blendType` は、受け付ける値を名指しして `400` を返します。
+- 解決できない `childPath` は `400` ではなく `404` です。
+
+### 格納されるが参照されないフィールド
+
+一部のフィールドは特定のブレンドタイプでのみ意味を持ちます。それらは格納したうえで(Unity も格納し、読み取りも返すため、拒否すると API がアセットより狭くなります)、黙って無視されないよう `ignored` に列挙します。
+
+```json
+{ "created": "AnimationClip", "childPath": [1, 0], "ignored": [
+  "position is stored but not consulted: the parent blendType is Simple1D, and position applies to the 2D types.",
+  "threshold is not kept because the parent has useAutomaticThresholds true; Unity recomputes it. Set the parent's useAutomaticThresholds to false to keep a threshold."
+] }
+```
+
+子の `position`、`directBlendParameter`、`threshold` は**親**を基準に判定します。それらが参照されるかどうかを決めるのは子ではなく、親が行うブレンドだからです。
+
+---
+
 ## POST /api/assets/animator-controllers/{guid}/states
 
 AnimatorController のレイヤーにステートを追加します。
