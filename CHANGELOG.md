@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Copy as curl** now uses the Base URL captured with the request log entry instead of substituting port `8765` when the server is stopped. Commands therefore preserve the actual host and port that received each request, including Automatic port assignments.
 - Every API reference page opened by naming `8765` as the default port, which the same documentation set contradicts: the configured port has defaulted to Automatic since 0.4.0, and the Getting Started guide describes reading `.unionair/endpoint.txt` instead. A client implementer starting from an API page was told a fixed port and had no reason to look for the discovery file when the connection was refused. Every page now gives the Base URL shape without a port and names the discovery file, with the full handshake stated once in the API Reference index that each page already links to. The shell examples on `api/editor.md`, `api/build.md`, `api/compile.md`, and `api/gameobjects.md` use `${BASE_URL}` rather than a hardcoded port, and the `GET /api/help` response sample shows an ephemeral port so it no longer reads as a default.
 
 ## [0.5.0] - 2026-08-07

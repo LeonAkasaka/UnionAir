@@ -22,10 +22,13 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         private byte[] _body = new byte[0];
         private bool _inputStreamThrows;
 
-        internal FakeRequest(string method = "GET", string pathAndQuery = "/api/health")
+        internal FakeRequest(
+            string method = "GET",
+            string pathAndQuery = "/api/health",
+            string origin = "http://localhost:8765")
         {
             _method = method;
-            Url = new Uri("http://localhost:8765" + pathAndQuery);
+            Url = new Uri(origin.TrimEnd('/') + pathAndQuery);
             ParseQuery(Url.Query, _query);
         }
 

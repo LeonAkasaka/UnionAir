@@ -167,16 +167,18 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </summary>
         /// <remarks>
         /// A request whose body was not captured would produce a command that runs but is not the
-        /// request that was recorded, which is worse than offering nothing.
+        /// request that was recorded, which is worse than offering nothing. The same is true when
+        /// the origin was not captured.
         /// </remarks>
         internal static bool CanBuildCurl(RequestLogEntry entry)
-            => entry != null && !entry.RequestBodyTruncated;
+            => entry != null &&
+               !entry.RequestBodyTruncated &&
+               !string.IsNullOrEmpty(entry.RequestOrigin);
 
         /// <summary>
         /// Builds a curl command that reproduces the captured request.
         /// </summary>
         /// <param name="entry">Captured exchange.</param>
-        /// <param name="baseUrl">Origin of the running server, such as <c>http://localhost:8765</c>.</param>
         /// <param name="shell">Shell the command will be pasted into. See <see cref="CurlShell"/>.</param>
         /// <remarks>
         /// <c>curl.exe</c> rather than <c>curl</c>: in Windows PowerShell 5.1 the bare name is an
@@ -189,7 +191,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </para>
         /// </remarks>
         internal static string BuildCurl(
-            RequestLogEntry entry, string baseUrl, CurlShell shell = CurlShell.Bash)
+            RequestLogEntry entry, CurlShell shell = CurlShell.Bash)
         {
             if (!CanBuildCurl(entry)) return "";
 
@@ -206,7 +208,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append(" -X ").Append(entry.Method);
 
             sb.Append(' ').Append(Quote(
-                (baseUrl == null ? "" : baseUrl.TrimEnd('/')) + entry.Path + entry.Query, shell));
+                entry.RequestOrigin.TrimEnd('/') + entry.Path + entry.Query, shell));
 
             if (hasBody)
             {
