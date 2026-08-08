@@ -69,8 +69,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             else
             {
-                Undo.SetCurrentGroupName("UnionAir: Add Component");
-                var group = Undo.GetCurrentGroup();
+                var group = UndoGroups.Begin("UnionAir: Add Component");
                 added = Undo.AddComponent(go, type);
                 Undo.CollapseUndoOperations(group);
             }
@@ -108,7 +107,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 UnityEngine.Object.Destroy(comp);
             else
             {
-                Undo.SetCurrentGroupName("UnionAir: Remove Component");
+                UndoGroups.Begin("UnionAir: Remove Component");
                 Undo.DestroyObjectImmediate(comp);
             }
             SceneUtils.MarkDirtyUnlessPlaying(scene);
@@ -145,8 +144,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = -1;
             if (useUndo)
             {
-                Undo.SetCurrentGroupName("UnionAir: Update Component");
-                group = Undo.GetCurrentGroup();
+                group = UndoGroups.Begin("UnionAir: Update Component");
             }
 
             var so = new SerializedObject(comp);

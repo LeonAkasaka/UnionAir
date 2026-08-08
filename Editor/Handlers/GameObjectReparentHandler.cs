@@ -47,8 +47,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = -1;
             if (useUndo)
             {
-                Undo.SetCurrentGroupName("UnionAir: Reparent GameObject");
-                group = Undo.GetCurrentGroup();
+                group = UndoGroups.Begin("UnionAir: Reparent GameObject");
                 Undo.SetTransformParent(go.transform, newParent, "UnionAir: Reparent GameObject");
             }
             else
