@@ -41,8 +41,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = -1;
             if (useUndo)
             {
-                Undo.SetCurrentGroupName($"UnionAir: Create {primitiveType} Primitive");
-                group = Undo.GetCurrentGroup();
+                group = UndoGroups.Begin($"UnionAir: Create {primitiveType} Primitive");
             }
 
             var go = GameObject.CreatePrimitive(primitiveType);

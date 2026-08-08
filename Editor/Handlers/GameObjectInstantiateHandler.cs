@@ -68,8 +68,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = -1;
             if (useUndo)
             {
-                Undo.SetCurrentGroupName($"UnionAir: Instantiate {prefab.name}");
-                group = Undo.GetCurrentGroup();
+                group = UndoGroups.Begin($"UnionAir: Instantiate {prefab.name}");
             }
 
             // InstantiatePrefab maintains the prefab connection (unlike Instantiate)
