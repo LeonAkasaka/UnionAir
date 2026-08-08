@@ -863,3 +863,229 @@ ScriptableObject アセットとその `.meta` ファイルを削除します。
 | 400 | 認識可能なフィールドがない、`textureType` の値が未知、またはアセットがテクスチャでない |
 | 404 | 指定 GUID のアセットが見つからない |
 | 403 | Asset Write カテゴリが無効 |
+
+---
+
+## GET /api/assets/audio-importer/{guid}
+
+オーディオアセットの `AudioImporter` 設定、この Editor 向けプラットフォーム
+override カタログ、およびインポート後の `AudioClip` メタデータを型付きで返します。
+
+> このエンドポイントは Read カテゴリに属します。
+
+### パスパラメータ
+
+| パラメータ | 説明 |
+|-----------|-------------|
+| `guid` | importer が `AudioImporter` であるアセットの GUID |
+
+### レスポンス
+
+```json
+{
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Audio/theme.ogg",
+  "forceToMono": false,
+  "normalize": true,
+  "ambisonic": false,
+  "loadInBackground": false,
+  "defaultSampleSettings": {
+    "loadType": "CompressedInMemory",
+    "compressionFormat": "Vorbis",
+    "quality": 0.7,
+    "preloadAudioData": true,
+    "sampleRateSetting": "PreserveSampleRate",
+    "sampleRateOverride": 0,
+    "conversionMode": 0
+  },
+  "defaultCompressionFormats": ["PCM", "Vorbis", "ADPCM"],
+  "supportedConversionModes": [0],
+  "platforms": [{
+    "platform": "WebGL",
+    "installed": false,
+    "compressionFormats": ["AAC"],
+    "override": false,
+    "inherited": {
+      "loadType": "CompressedInMemory",
+      "compressionFormat": "Vorbis",
+      "quality": 0.7,
+      "preloadAudioData": true,
+      "sampleRateSetting": "PreserveSampleRate",
+      "sampleRateOverride": 0,
+      "conversionMode": 0
+    },
+    "effective": {
+      "loadType": "CompressedInMemory",
+      "compressionFormat": "AAC",
+      "quality": 0.7,
+      "preloadAudioData": true,
+      "sampleRateSetting": "OverrideSampleRate",
+      "sampleRateOverride": 44100,
+      "conversionMode": 0
+    }
+  }],
+  "audioClip": {
+    "name": "theme",
+    "length": 12.5,
+    "channels": 2,
+    "frequency": 44100,
+    "samples": 551250,
+    "loadType": "CompressedInMemory",
+    "preloadAudioData": true,
+    "ambisonic": false,
+    "loadInBackground": false,
+    "loadState": "Loaded"
+  }
+}
+```
+
+現在の Editor が serialized normalization setting を公開している場合、`normalize` は
+bool です。公開していない場合、GET は `null` を返します。PATCH では引き続き bool が
+必要で、その Editor が設定を更新できない場合は `400` を返します。
+
+`defaultSampleSettings` と各プラットフォームの `inherited` は、保存されている
+default の基準値です。`effective` はそのプラットフォームに対して
+`AudioImporter.GetOverrideSampleSettings()` が返す値です。`override` が `false`
+でも Unity が継承値を変換することがあり、WebGL で default codec が `AAC` に
+変換されるケースがその例です。`override` が `true` の場合、`effective` は
+明示的な override です。
+
+`platforms` は、この Editor が認識する obsolete でない build target から生成されます。
+`installed` は、その group の platform module が1つ以上インストールされているかを
+示します。未インストールの platform も読み取り可能で、serialized override を持つ場合があります。
+
+### Compression Format の互換性
+
+現在のリクエストでは、レスポンスの `compressionFormats` 配列が正となります。
+互換性モデルは次のとおりです。
+
+| 設定 | 使用可能な format |
+|----------|------------------|
+| Default、`Standalone`、`WSA` | `PCM`、`Vorbis`、`ADPCM` |
+| `WebGL` | `AAC` |
+| `PS4`、`PS5` | `PCM`、`Vorbis`、`ADPCM`、`MP3`、`ATRAC9` |
+| `GameCoreScarlett`、`GameCoreXboxSeries`、`GameCoreXboxOne` | `PCM`、`Vorbis`、`ADPCM`、`MP3`、`XMA` |
+| この Editor が返すその他の platform | `PCM`、`Vorbis`、`ADPCM`、`MP3` |
+
+platform 名は従来の enum alias (`iPhone`、`Metro`) ではなく、現在の名称
+(`iOS`、`WSA`) を使います。
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | アセットが `AudioImporter` を使っていない |
+| 404 | 指定 GUID のアセットが見つからない |
+
+---
+
+## PATCH /api/assets/audio-importer/{guid}
+
+AudioImporter 設定を検証して更新し、変更がある場合だけ `SaveAndReimport()` を
+1回呼び出して、上記 GET と同じ最終状態を返します。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中または競合する Editor activity の実行中は `409 Conflict` を返します。
+
+### リクエストボディ(JSON)
+
+```json
+{
+  "forceToMono": true,
+  "normalize": true,
+  "defaultSampleSettings": {
+    "loadType": "CompressedInMemory",
+    "compressionFormat": "Vorbis",
+    "quality": 0.7,
+    "preloadAudioData": true,
+    "sampleRateSetting": "OptimizeSampleRate"
+  },
+  "platformOverrides": [{
+    "platform": "Android",
+    "override": true,
+    "sampleSettings": {
+      "compressionFormat": "Vorbis",
+      "quality": 0.5,
+      "preloadAudioData": false
+    }
+  }, {
+    "platform": "WebGL",
+    "override": false
+  }]
+}
+```
+
+トップレベルフィールド:
+
+| フィールド | 型 | 説明 |
+|-------|------|-------------|
+| `forceToMono` | bool | インポートする音源を mono に変換 |
+| `normalize` | bool | force-to-mono 後の音源を normalize |
+| `ambisonic` | bool | clip を ambisonic audio として扱う |
+| `loadInBackground` | bool | main thread を block せず clip data を load |
+| `defaultSampleSettings` | object | 保存されている default sample settings への部分 patch |
+| `platformOverrides` | array | platform override の作成、更新、または削除 |
+
+sample settings は部分 patch です。
+
+| フィールド | 型 | 使用可能な値 |
+|-------|------|-----------------|
+| `loadType` | string | `DecompressOnLoad`、`CompressedInMemory`、`Streaming` |
+| `compressionFormat` | string | 対応する `compressionFormats` 配列の値 |
+| `quality` | number | `0` から `1` の有限値 |
+| `preloadAudioData` | bool | default/platform sample settings ごとに保存する preload policy |
+| `sampleRateSetting` | string | `PreserveSampleRate`、`OptimizeSampleRate`、`OverrideSampleRate` |
+| `sampleRateOverride` | integer | `OverrideSampleRate` では `1..192000`、それ以外では `0` |
+| `conversionMode` | integer | `0` のみ。Unity はフィールドを公開していますが、0 以外の public flag は定義していません |
+
+`sampleRateSetting` を `OverrideSampleRate` 以外へ変更したとき、
+`sampleRateOverride` を省略すると `0` にクリアされます。他の mode とともに0以外の
+override を指定した場合は拒否されます。
+
+Unity 6 では preload policy は global な `AudioImporter` property ではなく sample
+settings の一部です。nested object 内に置くことで、Unity 2022.3 と Unity 6 に共通の
+contract となり、platform ごとの preload override にも対応します。
+
+各 platform entry には `platform` と bool の `override` が必要です。
+`override: true` では、空でない `sampleSettings` も必要です。現在の effective
+settings に patch を適用し、その結果を明示的な override として登録します。
+`override: false` では `sampleSettings` を指定できず、override を clear します。
+すでに継承状態の platform を clear した場合は unchanged request になります。
+
+reimport 前にリクエスト全体を検証します。未知または重複した field、JSON type の
+不一致、未知の enum/platform、重複した platform entry、互換性のない codec、
+不正な range/combination は、reimport せずに `400` を返します。Unity が staged
+platform override の1つを拒否した場合は、staged override をすべて復元して失敗します。
+
+### レスポンス
+
+GET と同じ importer、platform、`audioClip` field に、次の field が加わります。
+
+```json
+{
+  "...": "...",
+  "reimported": true,
+  "diagnostics": [{
+    "severity": "warning",
+    "message": "Import message",
+    "file": "Assets/Audio/theme.ogg",
+    "line": 0
+  }]
+}
+```
+
+`diagnostics` は最終 import に対する Unity import log の warning/error entry です。
+unchanged request は `reimported: false` と空の diagnostics 配列を返し、
+`SaveAndReimport()` を呼び出しません。
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | リクエスト、設定の組み合わせ、platform が不正、Unity が override を拒否、またはアセットが audio でない |
+| 403 | Asset Write カテゴリが無効 |
+| 404 | 指定 GUID のアセットが見つからない |
+| 409 | Unity Editor が Play モード中、または競合 activity の実行中 |
+| 500 | normalization の書き込み、reimport が失敗、または reimport 後に importer が消失 |
+
+---
