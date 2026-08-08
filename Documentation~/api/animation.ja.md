@@ -335,7 +335,7 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
 |--------|---------|
 | `AnimationClip` | モーションはクリップ。`guid` で参照できる |
 | `BlendTree` | モーションはこのコントローラーが所有するブレンドツリー。`guid` は常に `null` |
-| `Unknown` | このバージョンが記述できない `Motion` 派生型。上の 2 つのどちらかであるかのように見せず、そのまま報告する |
+| `Unknown` | このバージョンが記述できない `Motion` 派生型。上の 2 つのどちらかであるかのように見せず、そのまま報告する。`guid` はそのモーションがパス上のメインアセットである場合にのみ非 null |
 
 削除されたモーションアセットは `Unknown` ではなく `"motion": null` になります。型を調べる前に、Unity が失われた参照を null として解決するためです。
 
@@ -345,8 +345,8 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
 |-------|-------------|
 | `guid` | クリップを含むアセットの GUID。未保存のクリップでは `null` |
 | `name` | クリップ名 |
-| `assetPath` | クリップを含むアセットのパス。無い場合は `null` |
-| `clipsAtPath` | `assetPath` から到達できる AnimationClip の数 |
+| `assetPath` | クリップを含むアセットのパス。未保存のクリップでは `null` |
+| `clipsAtPath` | `assetPath` から到達できる AnimationClip の数。`assetPath` が `null` のときは数える対象が無いため**キーごと出力されません** |
 
 `clipsAtPath` は `guid` の精度を示します。モデルファイルからインポートされたクリップはそのファイルの中にあるため、GUID が指すのはクリップではなく**ファイル**です。`clipsAtPath` が `1` なら GUID は一意に定まります。`1` より大きい場合、`GET /api/assets/animation-clips/{guid}` はインポーターが最初に列挙したクリップを返し、他のテイクは GUID では参照できません。
 

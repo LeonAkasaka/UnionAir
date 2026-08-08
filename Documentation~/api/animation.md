@@ -332,7 +332,7 @@ Every `motion` carries a `type`, and a state with no motion has `"motion": null`
 |--------|---------|
 | `AnimationClip` | The motion is a clip. `guid` addresses it. |
 | `BlendTree` | The motion is a blend tree owned by this controller. `guid` is always `null`. |
-| `Unknown` | A `Motion` subclass this version does not describe. Reported rather than presented as one of the above. |
+| `Unknown` | A `Motion` subclass this version does not describe. Reported rather than presented as one of the above. `guid` is non-null only when the motion is the main asset at its path. |
 
 A motion asset that has been deleted reports `"motion": null`, not `Unknown` — Unity resolves a missing reference to null before the type can be examined.
 
@@ -342,8 +342,8 @@ A motion asset that has been deleted reports `"motion": null`, not `Unknown` —
 |-------|-------------|
 | `guid` | GUID of the asset holding the clip, or `null` when the clip is not saved |
 | `name` | Clip name |
-| `assetPath` | Path of the asset holding the clip, or `null` |
-| `clipsAtPath` | Number of AnimationClips reachable at `assetPath` |
+| `assetPath` | Path of the asset holding the clip, or `null` when the clip is not saved |
+| `clipsAtPath` | Number of AnimationClips reachable at `assetPath`. **Absent** when `assetPath` is `null`, since there is no path to count at |
 
 `clipsAtPath` is how precise `guid` is. A clip imported from a model file lives inside that file, so the GUID identifies the **file**, not the clip. When `clipsAtPath` is `1` the GUID is unambiguous. When it is greater than `1`, `GET /api/assets/animation-clips/{guid}` returns whichever clip the importer lists first, and the other takes cannot be addressed by GUID at all.
 

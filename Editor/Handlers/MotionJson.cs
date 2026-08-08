@@ -61,8 +61,19 @@ namespace LeonAkasaka.UnionAir.Editor
 
             // A Motion subclass this build does not know about. Reported as such rather
             // than forced into one of the two shapes above.
+            //
+            // Its GUID follows the rule the blend tree established rather than the one
+            // the clip does: reported only when the motion is the main asset at its
+            // path. A Motion that is not a clip is as likely as a blend tree to be a
+            // sub-asset owned by the controller, and GetAssetPath resolves a sub-asset
+            // to its container -- so reporting the container's GUID here would be the
+            // same defect this serializer exists to remove, in the one branch nothing
+            // can currently exercise. The clip branch reports a sub-asset GUID
+            // knowingly, because clipsAtPath says how precise it is; there is no
+            // equivalent to say that for a type this build cannot describe.
             sb.Append("{\"type\":\"Unknown\",\"guid\":");
-            sb.Append(RestResponse.FormatNullableString(GuidOf(AssetDatabase.GetAssetPath(motion))));
+            sb.Append(RestResponse.FormatNullableString(
+                AssetDatabase.IsMainAsset(motion) ? GuidOf(AssetDatabase.GetAssetPath(motion)) : null));
             sb.Append(",\"name\":");
             sb.Append(RestResponse.FormatNullableString(motion.name));
             sb.Append("}");
