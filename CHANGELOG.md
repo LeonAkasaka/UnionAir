@@ -32,6 +32,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ObjectRefUtils.ResolveType` threw on an empty type name instead of answering `null`, because `Assembly.GetType` rejects an empty string. No caller could reach it, since each rejected an empty name first; the animation curve endpoints default `type` rather than requiring it, so `"type": ""` reached the resolver and would have answered `500` with the exception text in the body. It answers `Unknown type` like any other name that resolves to nothing.
 
 - Layer writes now validate every value before it reaches Unity, because the editing API answers an illegal one by damaging the controller rather than by refusing it. Measured on 6000.0.80f1: `RemoveLayer(0)` does not refuse and leaves a single-layer controller with zero layers; a `syncedLayerIndex` pointing at its own layer removed a layer silently, three becoming two with no error; and one index past the last layer crashed the Editor outright. Deleting layer 0, deleting a layer another layer syncs to, and an out-of-range or self-referential `syncedLayerIndex` each answer `400` naming the reason. Deleting a layer that is itself synced clears the sync first: `RemoveLayer` does not destroy the state machine of a synced layer, which otherwise left the `.controller` file holding an `AnimatorStateMachine` that no layer referred to.
+
+### Documentation
+
+- The animation API reference now states which animation writes the Editor can undo. AnimatorController structure writes are undoable and always were -- the `UnityEditor.Animations` editing APIs register their own undo, so UnionAir adds none and a request that adds a state is taken back by one Ctrl+Z. AnimationClip curve writes are not, by choice: they are saved to disk before the response is sent, so a `200` means the file already changed and recovery belongs to version control; registering undo would revert the asset in memory while the file kept the written content until some later unrelated save. Asset creation is not undoable in Unity itself. Measured on 6000.0.80f1 rather than inferred, including the case that an earlier draft of #64 had backwards.
+
 ## [0.5.1] - 2026-08-08
 
 ### Fixed

@@ -8,6 +8,26 @@
 
 ---
 
+## Undo
+
+アニメーション系の書き込みには、Editor で Ctrl+Z を押して戻せるものと戻せないものがあります。これは偶然ではなく意図した境界なので、エンドポイントごとではなくここに一度だけ記載します。Unity 6000.0.80f1 で計測。
+
+| 書き込み | Undo 可否 |
+|---|---|
+| AnimatorController の構造(パラメータ、レイヤー、ステート、トランジション) | ✅ |
+| AnimationClip のカーブ(`POST` / `DELETE .../curves`) | ❌ |
+| アセットの作成(`POST /api/assets/animation-clips`、`POST /api/assets/animator-controllers`) | ❌ |
+
+**コントローラーへの書き込みは Undo できますが、UnionAir は何もしていません。** `UnityEditor.Animations` の編集 API が自前で Undo を登録するため、ステートを追加するリクエストは Ctrl+Z 1 回で戻ります。UnionAir はこれらの経路に独自の登録を追加しません。二重に登録しても冗長なだけだからです。
+
+**クリップのカーブへの書き込みは、意図的に Undo 対象外です。** これらの API は Undo を登録せず、UnionAir も代わりに登録しません。ここでのアセット書き込みはレスポンスを返す前にディスクへ保存されるため、`200` はファイルが既に変更済みであることを意味します。復元は Undo スタックではなくバージョン管理の担当です。Undo を登録すると、Ctrl+Z がメモリ上のアセットだけを戻し、ファイルは次の無関係な保存まで書き込んだ内容を保持するため、「前でも後でもない」状態が生じます。
+
+**アセットの作成は Unity 自体が Undo に対応していません。** UnionAir もそれを変えません。作成を取り消すにはアセットを削除してください。
+
+シーンへの書き込みは別で、Undo できます。[`api/gameobjects.md`](gameobjects.ja.md) を参照してください。
+
+---
+
 ## POST /api/assets/animation-clips
 
 AnimationClip アセットを作成します。
