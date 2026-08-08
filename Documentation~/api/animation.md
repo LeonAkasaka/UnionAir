@@ -233,7 +233,7 @@ A `property` that matches no binding on the clip is reported in `errors`, and th
 }
 ```
 
-`removed` lists only bindings that were present before the call and absent after it. A binding that could not be removed is reported in `errors` instead.
+`removed` lists only bindings that were present before the call and absent after it. A binding that could not be removed is reported in `errors` instead. A binding listed more than once in the same request is removed and reported once -- an entry names a curve, so repeating it does not remove a second one.
 
 ```json
 {
@@ -248,7 +248,7 @@ A `property` that matches no binding on the clip is reported in `errors`, and th
 
 | Status | Cause |
 |--------|-------|
-| 400 | `bindings` is missing or empty, a binding entry is malformed, or nothing was removed and at least one binding failed |
+| 400 | `bindings` is missing or empty, or nothing was removed and at least one binding failed. A request that removed at least one binding answers `200` even when other entries failed, with the failures in `errors` |
 | 404 | No asset found for the given GUID |
 | 403 | Asset Write category is disabled |
 

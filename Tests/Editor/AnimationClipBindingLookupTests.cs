@@ -84,6 +84,35 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void BindingKey_IsTheSameForARepeatedBinding()
+        {
+            // What makes a repeated entry detectable: the same path, type, and property
+            // produce the same key, so the second entry is skipped rather than removed and
+            // reported a second time. The key is built from the resolved Type, so two
+            // spellings ResolveType maps together -- "Image" and "UnityEngine.UI.Image" --
+            // reach this as one binding.
+            Assert.AreEqual(
+                AnimationClipHandler.BindingKey("Hips", typeof(Transform), "m_LocalPosition.y"),
+                AnimationClipHandler.BindingKey("Hips", typeof(Transform), "m_LocalPosition.y"));
+        }
+
+        [Test]
+        public void BindingKey_DiffersWhenAnyOfThePathTypeOrPropertyDiffers()
+        {
+            var baseline = AnimationClipHandler.BindingKey("Hips", typeof(Transform), "m_LocalPosition.y");
+
+            Assert.AreNotEqual(baseline,
+                AnimationClipHandler.BindingKey("Head", typeof(Transform), "m_LocalPosition.y"),
+                "another path is another binding");
+            Assert.AreNotEqual(baseline,
+                AnimationClipHandler.BindingKey("Hips", typeof(SkinnedMeshRenderer), "m_LocalPosition.y"),
+                "another type is another binding");
+            Assert.AreNotEqual(baseline,
+                AnimationClipHandler.BindingKey("Hips", typeof(Transform), "m_LocalPosition.z"),
+                "another component of an expanded property is another binding");
+        }
+
+        [Test]
         public void DescribeBindingsAt_SaysNoneRatherThanEmpty()
         {
             Assert.AreEqual(

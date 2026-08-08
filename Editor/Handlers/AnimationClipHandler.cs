@@ -316,6 +316,13 @@ namespace LeonAkasaka.UnionAir.Editor
             var targets = new List<EditorCurveBinding>();
             var targetIsPPtr = new List<bool>();
 
+            // A binding names one curve, so listing it twice in one request is one
+            // removal, not two. Without this the second entry matched the same binding,
+            // ran a removal that did nothing, and confirmed it absent -- reporting the
+            // same name twice under "removed", which is the response describing the
+            // request again rather than the result.
+            var seen = new List<string>();
+
             foreach (var bindingJson in bindings)
             {
                 var relativePath = RequestBodyReader.GetString(bindingJson, "relativePath") ?? "";
@@ -326,6 +333,14 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 var bindingType = ResolveType(typeName);
                 if (bindingType == null) { errors.Add($"Unknown type: {typeName}"); continue; }
+
+                // Deduplicated after the type resolves rather than on the raw request
+                // text, so two spellings of one type -- "Image" and "UnityEngine.UI.Image"
+                // -- count as one binding. Applied to failures too: a name that matches
+                // nothing is reported once, however many times it was asked for.
+                var key = BindingKey(relativePath, bindingType, property);
+                if (seen.Contains(key)) continue;
+                seen.Add(key);
 
                 if (TryFindBinding(floatBindings, relativePath, bindingType, property, out var floatMatch))
                 {
@@ -401,6 +416,13 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Identity of a binding within one request, for detecting a repeated entry.
+        /// Uses the resolved type rather than the name the request spelled it with.
+        /// </summary>
+        internal static string BindingKey(string path, Type type, string property)
+            => $"{path}\n{type.FullName}\n{property}";
 
         /// <summary>
         /// Finds the binding on the clip matching a path, type, and serialized property name.
