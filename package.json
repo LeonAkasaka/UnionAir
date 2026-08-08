@@ -1,6 +1,6 @@
 {
   "name": "com.leonakasaka.unionair",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "displayName": "UnionAir - Unity REST Bridge",
   "description": "Exposes Unity Editor state (hierarchy, GameObjects, assets) as a REST API for external tools including LLM MCP bridges, development bots, and CI tooling.",
   "unity": "2022.3",

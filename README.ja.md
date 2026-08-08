@@ -75,7 +75,7 @@ UnionAir 自身はこの依存を宣言していません。Test Runner カテ�
 3. 次の URL を入力します:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git#v0.5.0
+https://github.com/LeonAkasaka/UnionAir.git#v0.5.1
 ```
 
 ### manifest.json から
@@ -85,7 +85,7 @@ https://github.com/LeonAkasaka/UnionAir.git#v0.5.0
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.5.0"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.5.1"
   }
 }
 ```
