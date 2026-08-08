@@ -307,7 +307,21 @@ namespace LeonAkasaka.UnionAir.Editor
             var removed = new List<string>();
             var errors = new List<string>();
 
+            var floatBindings = AnimationUtility.GetCurveBindings(clip);
             var pptrBindings = AnimationUtility.GetObjectReferenceCurveBindings(clip);
+
+            // Resolve every requested binding against what the clip actually holds before
+            // touching anything, so a name that matches nothing is reported rather than
+            // counted as a removal.
+            var targets = new List<EditorCurveBinding>();
+            var targetIsPPtr = new List<bool>();
+
+            // A binding names one curve, so listing it twice in one request is one
+            // removal, not two. Without this the second entry matched the same binding,
+            // ran a removal that did nothing, and confirmed it absent -- reporting the
+            // same name twice under "removed", which is the response describing the
+            // request again rather than the result.
+            var seen = new List<string>();
 
             foreach (var bindingJson in bindings)
             {
@@ -320,28 +334,68 @@ namespace LeonAkasaka.UnionAir.Editor
                 var bindingType = ResolveType(typeName);
                 if (bindingType == null) { errors.Add($"Unknown type: {typeName}"); continue; }
 
-                bool isPPtr = false;
-                foreach (var b in pptrBindings)
+                // Deduplicated after the type resolves rather than on the raw request
+                // text, so two spellings of one type -- "Image" and "UnityEngine.UI.Image"
+                // -- count as one binding. Applied to failures too: a name that matches
+                // nothing is reported once, however many times it was asked for.
+                var key = BindingKey(relativePath, bindingType, property);
+                if (seen.Contains(key)) continue;
+                seen.Add(key);
+
+                if (TryFindBinding(floatBindings, relativePath, bindingType, property, out var floatMatch))
                 {
-                    if (b.path == relativePath && b.type == bindingType && b.propertyName == property)
-                    {
-                        isPPtr = true;
-                        break;
-                    }
+                    targets.Add(floatMatch);
+                    targetIsPPtr.Add(false);
+                    continue;
                 }
 
-                if (isPPtr)
-                    AnimationUtility.SetObjectReferenceCurve(clip, EditorCurveBinding.PPtrCurve(relativePath, bindingType, property), null);
-                else
-                    clip.SetCurve(relativePath, bindingType, property, null);
+                if (TryFindBinding(pptrBindings, relativePath, bindingType, property, out var pptrMatch))
+                {
+                    targets.Add(pptrMatch);
+                    targetIsPPtr.Add(true);
+                    continue;
+                }
 
-                removed.Add(property);
+                // The property name a client writes is not always the one the clip stores:
+                // POST accepts "localPosition.y" and Unity expands it to the serialized
+                // "m_LocalPosition.x/.y/.z". GET reports the serialized names, so those are
+                // what DELETE addresses. Name the alternatives rather than failing blankly.
+                errors.Add(
+                    $"No curve bound to '{property}' on '{relativePath}' ({typeName}). " +
+                    $"Bindings there: {DescribeBindingsAt(floatBindings, pptrBindings, relativePath, bindingType)}");
             }
 
-            if (removed.Count > 0)
+            for (int i = 0; i < targets.Count; i++)
+            {
+                // AnimationClip.SetCurve with a null curve does not remove a binding; only
+                // the AnimationUtility form does.
+                if (targetIsPPtr[i])
+                    AnimationUtility.SetObjectReferenceCurve(clip, targets[i], null);
+                else
+                    AnimationUtility.SetEditorCurve(clip, targets[i], null);
+            }
+
+            if (targets.Count > 0)
             {
                 EditorUtility.SetDirty(clip);
                 AssetDatabase.SaveAssets();
+            }
+
+            // Report the outcome, not the intent. A binding still present afterwards is a
+            // failure however confidently the removal was attempted.
+            var remainingFloat = AnimationUtility.GetCurveBindings(clip);
+            var remainingPPtr = AnimationUtility.GetObjectReferenceCurveBindings(clip);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                var t = targets[i];
+                var stillThere = targetIsPPtr[i]
+                    ? TryFindBinding(remainingPPtr, t.path, t.type, t.propertyName, out _)
+                    : TryFindBinding(remainingFloat, t.path, t.type, t.propertyName, out _);
+
+                if (stillThere)
+                    errors.Add($"Failed to remove '{t.propertyName}' on '{t.path}'.");
+                else
+                    removed.Add(t.propertyName);
             }
 
             var sb = new StringBuilder();
@@ -358,10 +412,49 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append($"\"{RestResponse.EscapeJson(errors[i])}\"");
             }
             sb.Append("]}");
-            RestResponse.Send(response, sb.ToString());
+            RestResponse.Send(response, sb.ToString(), errors.Count > 0 && removed.Count == 0 ? 400 : 200);
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Identity of a binding within one request, for detecting a repeated entry.
+        /// Uses the resolved type rather than the name the request spelled it with.
+        /// </summary>
+        internal static string BindingKey(string path, Type type, string property)
+            => $"{path}\n{type.FullName}\n{property}";
+
+        /// <summary>
+        /// Finds the binding on the clip matching a path, type, and serialized property name.
+        /// </summary>
+        internal static bool TryFindBinding(EditorCurveBinding[] bindings, string path, Type type, string property, out EditorCurveBinding match)
+        {
+            foreach (var b in bindings)
+            {
+                if (b.path == path && b.type == type && b.propertyName == property)
+                {
+                    match = b;
+                    return true;
+                }
+            }
+            match = default(EditorCurveBinding);
+            return false;
+        }
+
+        /// <summary>
+        /// Lists the serialized property names bound at a path and type, for an error that
+        /// tells the caller what it could have asked for.
+        /// </summary>
+        internal static string DescribeBindingsAt(EditorCurveBinding[] floatBindings, EditorCurveBinding[] pptrBindings, string path, Type type)
+        {
+            var names = new List<string>();
+            foreach (var b in floatBindings)
+                if (b.path == path && b.type == type) names.Add(b.propertyName);
+            foreach (var b in pptrBindings)
+                if (b.path == path && b.type == type) names.Add(b.propertyName);
+
+            return names.Count == 0 ? "none" : string.Join(", ", names.ToArray());
+        }
 
         private static WrapMode ParseWrapMode(string s)
         {
