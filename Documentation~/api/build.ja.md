@@ -4,7 +4,9 @@
 
 > **注記**: 本ドキュメントは [英語版](build.md) の翻訳です。内容に乖離がある場合は英語版が優先されます。
 
-ベース URL: `http://localhost:<port>/api/`(デフォルトポート: **8765**)。レスポンスの規約とカテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+ベース URL: `http://localhost:<port>/api/`。実際の URL は接続時に `<project>/.unionair/endpoint.txt` から読み取ってください。エンドポイントの発見手順、レスポンスの規約、カテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+
+このページのシェル例は `BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"` を前提としています。`${BASE_URL}` は末尾の `/api/` まで含みます。
 
 これらのエンドポイントは、プロジェクトがどのようにビルドされるよう構成されているかを報告します。どのターゲットがアクティブか、どのシーンが有効でそれぞれどのビルドインデックスを得るか、どのスクリプティングバックエンドと定義シンボルが適用されるか、そして Editor が実際にどのプラットフォームモジュールをインストールしているかです。
 
@@ -127,8 +129,8 @@
 この集合は Editor のバージョンと導入済みモジュールによって異なるため、固定リストを文書化するのではなくエンドポイントが報告します。空白を含む名前は URL エンコードが必要です。
 
 ```bash
-curl http://localhost:8765/api/build/settings
-curl "http://localhost:8765/api/build/settings?namedBuildTarget=Android"
+curl "${BASE_URL}build/settings"
+curl "${BASE_URL}build/settings?namedBuildTarget=Android"
 ```
 
 ---
@@ -185,8 +187,8 @@ curl "http://localhost:8765/api/build/settings?namedBuildTarget=Android"
 `Server` は `GET /api/build/settings` では named build target として現れますが、ここには行がありません。独立したビルドターゲットではなく Standalone のサブターゲットだからです。settings レスポンスの `standaloneBuildSubtarget` がそれを選択します。
 
 ```bash
-curl http://localhost:8765/api/build/targets
-curl "http://localhost:8765/api/build/targets?installed=true"
+curl "${BASE_URL}build/targets"
+curl "${BASE_URL}build/targets?installed=true"
 ```
 
 ---
@@ -311,7 +313,7 @@ all-or-nothing が必要な場合は、1 リクエストにつき 1 変更とし
 ```
 
 ```bash
-curl -X PATCH http://localhost:8765/api/build/settings \
+curl -X PATCH "${BASE_URL}build/settings" \
   -H "Content-Type: application/json" \
   -d '{"addDefineSymbols":["UNIONAIR_SAMPLE"]}'
 ```
@@ -364,7 +366,7 @@ curl -X PATCH http://localhost:8765/api/build/settings \
 ```
 
 ```bash
-curl -X POST http://localhost:8765/api/build/scenes \
+curl -X POST "${BASE_URL}build/scenes" \
   -H "Content-Type: application/json" \
   -d '{"scenes":["Assets/Scenes/SampleScene.unity"]}'
 ```
@@ -459,7 +461,7 @@ Build Settings に有効なシーンが 1 つもない場合、`requestId` が�
 ビルドレコードを書き込めなかった場合は `500` を返し、**ビルドは開始されません**。ビルド中は何も応答しないため、`202` の id が呼び出し側の唯一の手がかりです。結果を報告できないと分かっている 1 分間の処理を開始するより、断るほうが良いからです。リクエストを失敗させる前に、書き込みは 1 回だけ即時リトライされます。
 
 ```bash
-curl -X POST http://localhost:8765/api/builds \
+curl -X POST "${BASE_URL}builds" \
   -H "Content-Type: application/json" \
   -d '{"requestId":"nightly-1"}'
 ```
@@ -643,7 +645,7 @@ curl -X POST http://localhost:8765/api/builds \
 コンパイル・アセットインポート・ビルドの実行中は `activeActivity` を伴う `409`。
 
 ```bash
-curl -X POST http://localhost:8765/api/build/target \
+curl -X POST "${BASE_URL}build/target" \
   -H "Content-Type: application/json" \
   -d '{"buildTarget":"StandaloneWindows64"}'
 ```

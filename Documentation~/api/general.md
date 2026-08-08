@@ -1,7 +1,7 @@
 # API Reference — General
 **English** | [日本語](general.ja.md)
 
-Base URL: `http://localhost:<port>/api/` (default port: **8765**). See the [API Reference index](../api-reference.md) for response conventions and category/security notes.
+Base URL: `http://localhost:<port>/api/`, read from `<project>/.unionair/endpoint.txt` at connection time. See the [API Reference index](../api-reference.md) for endpoint discovery, response conventions, and category/security notes.
 
 ---
 
@@ -16,7 +16,7 @@ Returns a compact API manifest for LLMs, MCP bridges, and other tools that canno
   "name": "com.leonakasaka.unionair",
   "displayName": "UnionAir - Unity REST Bridge",
   "version": "0.2.0",
-  "baseUrl": "http://localhost:8765/api",
+  "baseUrl": "http://localhost:51234/api",
   "description": "UnionAir exposes Unity Editor state and selected Editor operations as a local REST API.",
   "categories": [
     {

@@ -4,7 +4,7 @@
 
 > **注記**: 本ドキュメントは [英語版](general.md) の翻訳です。内容に乖離がある場合は英語版が優先されます。
 
-ベース URL: `http://localhost:<port>/api/`(デフォルトポート: **8765**)。レスポンスの規約とカテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+ベース URL: `http://localhost:<port>/api/`。実際の URL は接続時に `<project>/.unionair/endpoint.txt` から読み取ってください。エンドポイントの発見手順、レスポンスの規約、カテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
 
 ---
 
@@ -19,7 +19,7 @@
   "name": "com.leonakasaka.unionair",
   "displayName": "UnionAir - Unity REST Bridge",
   "version": "0.2.0",
-  "baseUrl": "http://localhost:8765/api",
+  "baseUrl": "http://localhost:51234/api",
   "description": "UnionAir exposes Unity Editor state and selected Editor operations as a local REST API.",
   "categories": [
     {

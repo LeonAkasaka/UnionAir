@@ -4,7 +4,7 @@
 
 > **注記**: 本ドキュメントは [英語版](activities.md) の翻訳です。内容に乖離がある場合は英語版が優先されます。
 
-ベース URL: `http://localhost:<port>/api/`(デフォルトポート: **8765**)。レスポンスの規約とカテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+ベース URL: `http://localhost:<port>/api/`。実際の URL は接続時に `<project>/.unionair/endpoint.txt` から読み取ってください。エンドポイントの発見手順、レスポンスの規約、カテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
 
 このページはエンドポイント群ではありません。「Unity Editor が X で処理中である」ことを表すために UnionAir が用いる単一の語彙を説明します。これは `GET /api/help`、`GET /api/editor/status`、そして「リクエストが誤っている」ではなく「後で再試行せよ」を意味するすべての `409` に現れます。
 

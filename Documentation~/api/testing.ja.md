@@ -4,7 +4,7 @@
 
 > **注記**: 本ドキュメントは [英語版](testing.md) の翻訳です。内容に乖離がある場合は英語版が優先されます。
 
-ベース URL: `http://localhost:<port>/api/`(デフォルトポート: **8765**)。共通のレスポンス規約とセキュリティ上の注意は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+ベース URL: `http://localhost:<port>/api/`。実際の URL は接続時に `<project>/.unionair/endpoint.txt` から読み取ってください。エンドポイントの発見手順、共通のレスポンス規約、セキュリティ上の注意は [API リファレンス索引](../api-reference.ja.md) を参照してください。
 
 Test Runner API は `com.unity.test-framework` 導入時のみ表示されます。**Test Runner** カテゴリは既定で無効であり、**Window > UnionAir > REST Bridge** で有効化する必要があります。
 

@@ -1,7 +1,9 @@
 # API Reference — Editor
 **English** | [日本語](editor.ja.md)
 
-Base URL: `http://localhost:<port>/api/` (default port: **8765**). See the [API Reference index](../api-reference.md) for response conventions and category/security notes.
+Base URL: `http://localhost:<port>/api/`, read from `<project>/.unionair/endpoint.txt` at connection time. See the [API Reference index](../api-reference.md) for endpoint discovery, response conventions, and category/security notes.
+
+Shell examples on this page assume `BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"`, so `${BASE_URL}` already ends with `/api/`.
 
 ---
 
@@ -138,13 +140,13 @@ Unknown `type` values return `400 Bad Request` instead of silently disabling the
 
 ```bash
 # Latest 20 errors and exceptions
-curl "http://localhost:8765/api/editor/logs?type=error&limit=20"
+curl "${BASE_URL}editor/logs?type=error&limit=20"
 
 # Logs containing "NullReference"
-curl "http://localhost:8765/api/editor/logs?search=NullReference"
+curl "${BASE_URL}editor/logs?search=NullReference"
 
 # Only entries newer than sequence 42
-curl "http://localhost:8765/api/editor/logs?since=42"
+curl "${BASE_URL}editor/logs?since=42"
 ```
 
 ---
@@ -160,7 +162,7 @@ Downloads the retained NDJSON logs for the current Editor session, including ent
 The active file is rotated when it reaches approximately 8 MiB. The response concatenates the same-session rotated predecessor (`console.1.ndjson`) followed by the active file (`console.ndjson`), so their JSON lines remain oldest-first across the rotation boundary. At most these two files are retained; entries older than the predecessor cannot be recovered. A predecessor left by an earlier Editor process is never included.
 
 ```bash
-curl -O "http://localhost:8765/api/editor/logs.ndjson"
+curl -O "${BASE_URL}editor/logs.ndjson"
 ```
 
 ---
@@ -383,14 +385,14 @@ Works in both Edit mode and Play mode.
 
 ```bash
 # List cameras to find the path
-curl "http://localhost:8765/api/cameras"
+curl "${BASE_URL}cameras"
 
 # Capture Main Camera at default resolution in JPEG
-curl --get "http://localhost:8765/api/cameras/capture" \
+curl --get "${BASE_URL}cameras/capture" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 
 # Capture in PNG at HD resolution
-curl --get "http://localhost:8765/api/cameras/capture" \
+curl --get "${BASE_URL}cameras/capture" \
   --data-urlencode 'target={"type":"componentPath","value":"Main Camera:UnityEngine.Camera"}' \
   --data-urlencode "width=1280" \
   --data-urlencode "height=720" \
@@ -428,15 +430,15 @@ Same as `/api/cameras/capture` (`target` required; `scenePath` / `width` / `heig
 
 ```bash
 # Open in browser to view directly (URL-encoded target)
-open "http://localhost:8765/api/cameras/capture/image?target=%7B%22type%22%3A%22hierarchyPath%22%2C%22value%22%3A%22Main%20Camera%22%7D"
+open "${BASE_URL}cameras/capture/image?target=%7B%22type%22%3A%22hierarchyPath%22%2C%22value%22%3A%22Main%20Camera%22%7D"
 
 # Save to file with curl
-curl --get -o screenshot.png "http://localhost:8765/api/cameras/capture/image" \
+curl --get -o screenshot.png "${BASE_URL}cameras/capture/image" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}' \
   --data-urlencode "format=png"
 
 # Save HD JPEG
-curl --get -o hd.jpg "http://localhost:8765/api/cameras/capture/image" \
+curl --get -o hd.jpg "${BASE_URL}cameras/capture/image" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}' \
   --data-urlencode "width=1280" --data-urlencode "height=720" --data-urlencode "quality=90"
 ```
@@ -578,8 +580,8 @@ When Unity's internal menu enumeration method is unavailable, the endpoint falls
 ### Examples
 
 ```bash
-curl "http://localhost:8765/api/editor/menu-items?search=UnionAir"
-curl "http://localhost:8765/api/editor/menu-items?root=Window&includeFolders=false"
+curl "${BASE_URL}editor/menu-items?search=UnionAir"
+curl "${BASE_URL}editor/menu-items?root=Window&includeFolders=false"
 ```
 
 ---
@@ -625,7 +627,7 @@ Executes a Unity Editor menu item using `EditorApplication.ExecuteMenuItem()`.
 ### Examples
 
 ```bash
-curl -X POST http://localhost:8765/api/editor/menu-item \
+curl -X POST "${BASE_URL}editor/menu-item" \
   -H "Content-Type: application/json" \
   -d '{"path":"Window/UnionAir/REST Bridge"}'
 ```
@@ -682,10 +684,10 @@ The `target` parameter is not required; the endpoint automatically selects the a
 
 ```bash
 # Capture the current view at default resolution
-curl http://localhost:8765/api/editor/capture
+curl "${BASE_URL}editor/capture"
 
 # Capture and resize the output image to a specific resolution in PNG
-curl "http://localhost:8765/api/editor/capture?width=1280&height=720&format=png"
+curl "${BASE_URL}editor/capture?width=1280&height=720&format=png"
 ```
 
 ### Use with LLM / MCP Bridges
@@ -718,11 +720,11 @@ Same as `GET /api/editor/capture` (`width`, `height`, `format`, `quality` — al
 
 ```bash
 # Open in browser to view directly
-open "http://localhost:8765/api/editor/capture/image"
+open "${BASE_URL}editor/capture/image"
 
 # Save to file
-curl -o screenshot.jpg "http://localhost:8765/api/editor/capture/image"
+curl -o screenshot.jpg "${BASE_URL}editor/capture/image"
 
 # Save PNG with the output image resized to the specified resolution
-curl -o view.png "http://localhost:8765/api/editor/capture/image?format=png&width=1280&height=720"
+curl -o view.png "${BASE_URL}editor/capture/image?format=png&width=1280&height=720"
 ```

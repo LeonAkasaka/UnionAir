@@ -1,7 +1,7 @@
 # API Reference — Editor Activities
 **English** | [日本語](activities.ja.md)
 
-Base URL: `http://localhost:<port>/api/` (default port: **8765**). See the [API Reference index](../api-reference.md) for response conventions and category/security notes.
+Base URL: `http://localhost:<port>/api/`, read from `<project>/.unionair/endpoint.txt` at connection time. See the [API Reference index](../api-reference.md) for endpoint discovery, response conventions, and category/security notes.
 
 This page is not an endpoint group. It describes the single vocabulary UnionAir uses for "the Unity Editor is busy with X", which appears in `GET /api/help`, in `GET /api/editor/status`, and in every `409` that means *retry later* rather than *your request was wrong*.
 

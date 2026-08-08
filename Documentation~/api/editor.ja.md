@@ -4,7 +4,9 @@
 
 > **注記**: 本ドキュメントは [英語版](editor.md) の翻訳です。内容に乖離がある場合は英語版が優先されます。
 
-ベース URL: `http://localhost:<port>/api/`(デフォルトポート: **8765**)。レスポンスの規約とカテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+ベース URL: `http://localhost:<port>/api/`。実際の URL は接続時に `<project>/.unionair/endpoint.txt` から読み取ってください。エンドポイントの発見手順、レスポンスの規約、カテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+
+このページのシェル例は `BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"` を前提としています。`${BASE_URL}` は末尾の `/api/` まで含みます。
 
 ---
 
@@ -141,13 +143,13 @@ Unity Console のログを返します。インメモリのリングバッファ
 
 ```bash
 # 最新のエラー・例外 20 件
-curl "http://localhost:8765/api/editor/logs?type=error&limit=20"
+curl "${BASE_URL}editor/logs?type=error&limit=20"
 
 # "NullReference" を含むログ
-curl "http://localhost:8765/api/editor/logs?search=NullReference"
+curl "${BASE_URL}editor/logs?search=NullReference"
 
 # sequence 42 より新しいエントリのみ
-curl "http://localhost:8765/api/editor/logs?since=42"
+curl "${BASE_URL}editor/logs?since=42"
 ```
 
 ---
@@ -163,7 +165,7 @@ curl "http://localhost:8765/api/editor/logs?since=42"
 アクティブなファイルは約 8 MiB に達するとローテーションされます。レスポンスは同じセッションの前世代(`console.1.ndjson`)にアクティブファイル(`console.ndjson`)を続けて連結するため、ローテーション境界をまたいでも JSON 行は古い順です。保持されるのは最大でこの2ファイルで、それ以前のエントリは回収できません。以前の Editor プロセスが残した前世代ファイルはレスポンスに含まれません。
 
 ```bash
-curl -O "http://localhost:8765/api/editor/logs.ndjson"
+curl -O "${BASE_URL}editor/logs.ndjson"
 ```
 
 ---
@@ -386,14 +388,14 @@ Edit モードと Play モードの両方で動作します。
 
 ```bash
 # カメラ一覧からパスを確認
-curl "http://localhost:8765/api/cameras"
+curl "${BASE_URL}cameras"
 
 # Main Camera をデフォルト解像度の JPEG でキャプチャ
-curl --get "http://localhost:8765/api/cameras/capture" \
+curl --get "${BASE_URL}cameras/capture" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}'
 
 # HD 解像度の PNG でキャプチャ
-curl --get "http://localhost:8765/api/cameras/capture" \
+curl --get "${BASE_URL}cameras/capture" \
   --data-urlencode 'target={"type":"componentPath","value":"Main Camera:UnityEngine.Camera"}' \
   --data-urlencode "width=1280" \
   --data-urlencode "height=720" \
@@ -431,15 +433,15 @@ curl --get "http://localhost:8765/api/cameras/capture" \
 
 ```bash
 # ブラウザで直接表示(target は URL エンコード)
-open "http://localhost:8765/api/cameras/capture/image?target=%7B%22type%22%3A%22hierarchyPath%22%2C%22value%22%3A%22Main%20Camera%22%7D"
+open "${BASE_URL}cameras/capture/image?target=%7B%22type%22%3A%22hierarchyPath%22%2C%22value%22%3A%22Main%20Camera%22%7D"
 
 # curl でファイルに保存
-curl --get -o screenshot.png "http://localhost:8765/api/cameras/capture/image" \
+curl --get -o screenshot.png "${BASE_URL}cameras/capture/image" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}' \
   --data-urlencode "format=png"
 
 # HD JPEG で保存
-curl --get -o hd.jpg "http://localhost:8765/api/cameras/capture/image" \
+curl --get -o hd.jpg "${BASE_URL}cameras/capture/image" \
   --data-urlencode 'target={"type":"hierarchyPath","value":"Main Camera"}' \
   --data-urlencode "width=1280" --data-urlencode "height=720" --data-urlencode "quality=90"
 ```
@@ -581,8 +583,8 @@ Unity 内部のメニュー列挙メソッドが利用できない場合、エ�
 ### 例
 
 ```bash
-curl "http://localhost:8765/api/editor/menu-items?search=UnionAir"
-curl "http://localhost:8765/api/editor/menu-items?root=Window&includeFolders=false"
+curl "${BASE_URL}editor/menu-items?search=UnionAir"
+curl "${BASE_URL}editor/menu-items?root=Window&includeFolders=false"
 ```
 
 ---
@@ -628,7 +630,7 @@ curl "http://localhost:8765/api/editor/menu-items?root=Window&includeFolders=fal
 ### 例
 
 ```bash
-curl -X POST http://localhost:8765/api/editor/menu-item \
+curl -X POST "${BASE_URL}editor/menu-item" \
   -H "Content-Type: application/json" \
   -d '{"path":"Window/UnionAir/REST Bridge"}'
 ```
@@ -685,10 +687,10 @@ curl -X POST http://localhost:8765/api/editor/menu-item \
 
 ```bash
 # 現在のビューをデフォルト解像度でキャプチャ
-curl http://localhost:8765/api/editor/capture
+curl "${BASE_URL}editor/capture"
 
 # 指定解像度の PNG に出力画像をリサイズしてキャプチャ
-curl "http://localhost:8765/api/editor/capture?width=1280&height=720&format=png"
+curl "${BASE_URL}editor/capture?width=1280&height=720&format=png"
 ```
 
 ### LLM / MCP ブリッジでの利用
@@ -721,11 +723,11 @@ Play モードでは `width` と `height` はキャプチャした GameView フ�
 
 ```bash
 # ブラウザで直接表示
-open "http://localhost:8765/api/editor/capture/image"
+open "${BASE_URL}editor/capture/image"
 
 # ファイルに保存
-curl -o screenshot.jpg "http://localhost:8765/api/editor/capture/image"
+curl -o screenshot.jpg "${BASE_URL}editor/capture/image"
 
 # 指定解像度に出力画像をリサイズして PNG で保存
-curl -o view.png "http://localhost:8765/api/editor/capture/image?format=png&width=1280&height=720"
+curl -o view.png "${BASE_URL}editor/capture/image?format=png&width=1280&height=720"
 ```

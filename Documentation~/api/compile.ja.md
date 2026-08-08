@@ -4,7 +4,9 @@
 
 > **注記**: 本ドキュメントは [英語版](compile.md) の翻訳です。内容に乖離がある場合は英語版が優先されます。
 
-ベース URL: `http://localhost:<port>/api/`(デフォルトポート: **8765**)。レスポンスの規約とカテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+ベース URL: `http://localhost:<port>/api/`。実際の URL は接続時に `<project>/.unionair/endpoint.txt` から読み取ってください。エンドポイントの発見手順、レスポンスの規約、カテゴリ/セキュリティの注意事項は [API リファレンス索引](../api-reference.ja.md) を参照してください。
+
+このページのシェル例は `BASE_URL="$(tr -d '\r\n' < .unionair/endpoint.txt)"` を前提としています。`${BASE_URL}` は末尾の `/api/` まで含みます。
 
 UnionAir はスクリプトのコンパイルサイクルを、メッセージごとの `file` / `line` / `column` / `code` を含む構造化された結果として記録します。UnionAir 以外から開始されたサイクルも記録されます。IDE でファイルを保存し、Unity がフォーカス取得時に自動リフレッシュするのが、プロジェクトが再コンパイルされる最も一般的な経路だからです。
 
@@ -81,7 +83,7 @@ UnionAir はスクリプトのコンパイルサイクルを、メッセージ�
 Editor が Play モードに入る途中または Play モード中、あるいはアセット更新中の場合も `409` を返します。`requestId` に使用できない文字が含まれる場合、または Windows の予約デバイス名の場合は `400` を返します。
 
 ```bash
-curl -X POST http://localhost:8765/api/compile \
+curl -X POST "${BASE_URL}compile" \
   -H "Content-Type: application/json" \
   -d '{"refresh":true}'
 ```
@@ -213,7 +215,7 @@ Unity が assembly domain をリロードするのは、ビルド **全体** が
 ### 例
 
 ```bash
-curl http://localhost:8765/api/compile
+curl "${BASE_URL}compile"
 ```
 
 ---
@@ -260,7 +262,7 @@ filter はページングの前に適用されます。レコードは `finished
 不正な filter またはページング値には `400` を返します。履歴が空の場合は `total: 0` と空の `records` 配列を返します。保持レコードのディレクトリを列挙できない場合は、不完全な scan を完全な結果として見せずに `500` を返します。
 
 ```bash
-curl "http://localhost:8765/api/compile/records?target=player&offset=0&limit=20"
+curl "${BASE_URL}compile/records?target=player&offset=0&limit=20"
 ```
 
 ---
@@ -276,7 +278,7 @@ UnionAir は直近 20 件のレコードを `Library/UnionAir/Compile/records` �
 レスポンスボディは上記と同じレコードオブジェクトで、`current` / `latest` のラッパーはありません。
 
 ```bash
-curl http://localhost:8765/api/compile/c-20260728-040030-67c0fd
+curl "${BASE_URL}compile/c-20260728-040030-67c0fd"
 ```
 
 ---
