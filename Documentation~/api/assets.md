@@ -210,6 +210,7 @@ If `scenePath` is omitted, the active scene is used.
 
 ---
 
+
 ## POST /api/assets/prefabs/apply
 
 Applies prefab instance overrides to the prefab asset.
@@ -858,5 +859,222 @@ At least one field must be provided.
 | 400 | No recognized fields, unknown `textureType` value, or asset is not a texture |
 | 404 | No asset found for the given GUID |
 | 403 | Asset Write category is disabled |
+
+---
+
+## GET /api/assets/audio-importer/{guid}
+
+Returns typed settings for an audio asset's `AudioImporter`, the platform override
+catalog for this Editor, and the imported `AudioClip` metadata.
+
+> This endpoint belongs to the Read category.
+
+### Path Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `guid` | GUID of an asset whose importer is an `AudioImporter` |
+
+### Response
+
+```json
+{
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Audio/theme.ogg",
+  "forceToMono": false,
+  "normalize": true,
+  "ambisonic": false,
+  "loadInBackground": false,
+  "defaultSampleSettings": {
+    "loadType": "CompressedInMemory",
+    "compressionFormat": "Vorbis",
+    "quality": 0.7,
+    "preloadAudioData": true,
+    "sampleRateSetting": "PreserveSampleRate",
+    "sampleRateOverride": 0,
+    "conversionMode": 0
+  },
+  "defaultCompressionFormats": ["PCM", "Vorbis", "ADPCM"],
+  "supportedConversionModes": [0],
+  "platforms": [{
+    "platform": "WebGL",
+    "installed": false,
+    "compressionFormats": ["AAC"],
+    "override": false,
+    "inherited": {
+      "loadType": "CompressedInMemory",
+      "compressionFormat": "Vorbis",
+      "quality": 0.7,
+      "preloadAudioData": true,
+      "sampleRateSetting": "PreserveSampleRate",
+      "sampleRateOverride": 0,
+      "conversionMode": 0
+    },
+    "effective": {
+      "loadType": "CompressedInMemory",
+      "compressionFormat": "AAC",
+      "quality": 0.7,
+      "preloadAudioData": true,
+      "sampleRateSetting": "OverrideSampleRate",
+      "sampleRateOverride": 44100,
+      "conversionMode": 0
+    }
+  }],
+  "audioClip": {
+    "name": "theme",
+    "length": 12.5,
+    "channels": 2,
+    "frequency": 44100,
+    "samples": 551250,
+    "loadType": "CompressedInMemory",
+    "preloadAudioData": true,
+    "ambisonic": false,
+    "loadInBackground": false,
+    "loadState": "Loaded"
+  }
+}
+```
+
+`defaultSampleSettings` and each platform's `inherited` object are the stored default
+baseline. `effective` is what `AudioImporter.GetOverrideSampleSettings()` reports for
+that platform. When `override` is `false`, Unity may translate the inherited baseline;
+WebGL changing a default codec to `AAC` is one example. When `override` is `true`,
+`effective` is the explicit override.
+
+`platforms` is derived from the non-obsolete build targets known to this Editor.
+`installed` reports whether at least one target in that group has its platform module
+installed; an uninstalled platform remains readable and may still have serialized
+override settings.
+
+### Compression Format Compatibility
+
+The response's `compressionFormats` arrays are authoritative for the current request.
+The compatibility model is:
+
+| Settings | Accepted formats |
+|----------|------------------|
+| Default, `Standalone`, `WSA` | `PCM`, `Vorbis`, `ADPCM` |
+| `WebGL` | `AAC` |
+| `PS4`, `PS5` | `PCM`, `Vorbis`, `ADPCM`, `MP3`, `ATRAC9` |
+| `GameCoreScarlett`, `GameCoreXboxSeries`, `GameCoreXboxOne` | `PCM`, `Vorbis`, `ADPCM`, `MP3`, `XMA` |
+| Other platforms reported by this Editor | `PCM`, `Vorbis`, `ADPCM`, `MP3` |
+
+Current platform names are used (`iOS`, `WSA`), not their legacy enum aliases
+(`iPhone`, `Metro`).
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | The asset does not use an `AudioImporter` |
+| 404 | No asset found for the given GUID |
+
+---
+
+## PATCH /api/assets/audio-importer/{guid}
+
+Validates and updates AudioImporter settings, calls `SaveAndReimport()` once when
+anything changed, and returns the final state described above.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode or during a conflicting Editor activity.
+
+### Request Body (JSON)
+
+```json
+{
+  "forceToMono": true,
+  "normalize": true,
+  "defaultSampleSettings": {
+    "loadType": "CompressedInMemory",
+    "compressionFormat": "Vorbis",
+    "quality": 0.7,
+    "preloadAudioData": true,
+    "sampleRateSetting": "OptimizeSampleRate"
+  },
+  "platformOverrides": [{
+    "platform": "Android",
+    "override": true,
+    "sampleSettings": {
+      "compressionFormat": "Vorbis",
+      "quality": 0.5,
+      "preloadAudioData": false
+    }
+  }, {
+    "platform": "WebGL",
+    "override": false
+  }]
+}
+```
+
+Top-level fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `forceToMono` | bool | Converts the imported source to mono |
+| `normalize` | bool | Normalizes the source after forcing it to mono |
+| `ambisonic` | bool | Treats the clip as ambisonic audio |
+| `loadInBackground` | bool | Loads clip data without blocking the main thread |
+| `defaultSampleSettings` | object | Partial patch applied to the stored default sample settings |
+| `platformOverrides` | array | Platform override creations, updates, or removals |
+
+Sample settings are partial patches:
+
+| Field | Type | Accepted values |
+|-------|------|-----------------|
+| `loadType` | string | `DecompressOnLoad`, `CompressedInMemory`, `Streaming` |
+| `compressionFormat` | string | One value from the corresponding `compressionFormats` array |
+| `quality` | number | Finite value from `0` to `1` |
+| `preloadAudioData` | bool | Preload policy, stored per default/platform sample settings |
+| `sampleRateSetting` | string | `PreserveSampleRate`, `OptimizeSampleRate`, `OverrideSampleRate` |
+| `sampleRateOverride` | integer | `1..192000` with `OverrideSampleRate`; otherwise `0` |
+| `conversionMode` | integer | `0` only; Unity exposes the field but defines no non-zero public flags |
+
+Unity 6 makes preload policy part of sample settings rather than a global
+`AudioImporter` property. Keeping it in the nested object is the contract common to
+Unity 2022.3 and Unity 6 and also permits platform-specific preload overrides.
+
+Every platform entry requires `platform` and the boolean `override`.
+`override: true` also requires a non-empty `sampleSettings` object; it patches the
+current effective settings and registers the result as an explicit override.
+`override: false` forbids `sampleSettings` and clears the override. Clearing an
+already inherited platform is an unchanged request.
+
+The full request is validated before reimport. Unknown or duplicate fields, wrong JSON
+types, unknown enums/platforms, duplicate platform entries, incompatible codecs, and
+invalid ranges/combinations return `400` without reimporting. If Unity refuses one
+staged platform override, every staged override is restored and the request fails.
+
+### Response
+
+The response has the same importer, platform, and `audioClip` fields as GET, followed
+by:
+
+```json
+{
+  "...": "...",
+  "reimported": true,
+  "diagnostics": [{
+    "severity": "warning",
+    "message": "Import message",
+    "file": "Assets/Audio/theme.ogg",
+    "line": 0
+  }]
+}
+```
+
+`diagnostics` contains warning and error entries from Unity's import log for the final
+import. An unchanged request returns `reimported: false`, an empty diagnostics array,
+and does not call `SaveAndReimport()`.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | Invalid request, unsupported setting combination, unknown platform, Unity refused an override, or the asset is not audio |
+| 403 | Asset Write category is disabled |
+| 404 | No asset found for the given GUID |
+| 409 | The Unity Editor is in Play mode or a conflicting activity is active |
+| 500 | Normalization could not be written, reimport threw, or the importer disappeared after reimport |
 
 ---

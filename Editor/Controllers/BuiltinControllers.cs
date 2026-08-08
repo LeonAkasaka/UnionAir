@@ -666,6 +666,29 @@ namespace LeonAkasaka.UnionAir.Editor
             => new TextureImporterHandler().HandleUpdate(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
     }
 
+    [UnionAirController("assets/audio-importer")]
+    internal sealed class AudioImporterController
+    {
+        [UnionAirEndpoint("GET", "{guid}",
+            Category = UnionAirEndpointCategories.Read,
+            Summary = "Returns typed AudioImporter settings, platform override state and effective settings, the per-platform compression format catalog, and AudioClip metadata.",
+            PathParams = new string[] { "guid" },
+            ResponseExample = "{\"guid\":\"...\",\"assetPath\":\"Assets/Audio/theme.ogg\",\"forceToMono\":false,\"normalize\":true,\"ambisonic\":false,\"loadInBackground\":false,\"defaultSampleSettings\":{\"loadType\":\"CompressedInMemory\",\"compressionFormat\":\"Vorbis\",\"quality\":0.7,\"preloadAudioData\":true,\"sampleRateSetting\":\"PreserveSampleRate\",\"sampleRateOverride\":0,\"conversionMode\":0},\"platforms\":[{\"platform\":\"Android\",\"installed\":true,\"compressionFormats\":[\"PCM\",\"Vorbis\",\"ADPCM\",\"MP3\"],\"override\":false,\"inherited\":{},\"effective\":{}}],\"audioClip\":{\"name\":\"theme\",\"length\":12.5,\"channels\":2,\"frequency\":44100,\"samples\":551250,\"loadType\":\"CompressedInMemory\",\"preloadAudioData\":true,\"ambisonic\":false,\"loadInBackground\":false,\"loadState\":\"Loaded\"}}")]
+        private void Get(UnionAirRequestContext ctx)
+            => new AudioImporterHandler().HandleGet(ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("PATCH", "{guid}",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Validates and updates AudioImporter global/default settings and platform overrides, then calls SaveAndReimport once. Set a platform entry's override to false to restore inheritance. The response reports final importer state, import diagnostics, and AudioClip metadata.",
+            PathParams = new string[] { "guid" },
+            OptionalBody = new string[] { "forceToMono", "normalize", "ambisonic", "loadInBackground", "defaultSampleSettings", "platformOverrides" },
+            RequestExample = "{\"forceToMono\":true,\"defaultSampleSettings\":{\"loadType\":\"CompressedInMemory\",\"compressionFormat\":\"Vorbis\",\"quality\":0.7},\"platformOverrides\":[{\"platform\":\"Android\",\"override\":true,\"sampleSettings\":{\"compressionFormat\":\"Vorbis\",\"quality\":0.5}}]}",
+            ResponseExample = "{\"guid\":\"...\",\"assetPath\":\"Assets/Audio/theme.ogg\",\"reimported\":true,\"diagnostics\":[]}")]
+        private void Update(UnionAirRequestContext ctx)
+            => new AudioImporterHandler().HandleUpdate(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+    }
+
     [UnionAirController("assets/animation-clips")]
     internal sealed class AnimationClipsController
     {
