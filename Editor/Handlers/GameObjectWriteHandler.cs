@@ -46,8 +46,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = -1;
             if (useUndo)
             {
-                Undo.SetCurrentGroupName("UnionAir: Create GameObject");
-                group = Undo.GetCurrentGroup();
+                group = UndoGroups.Begin("UnionAir: Create GameObject");
             }
 
             GameObject go;
@@ -105,7 +104,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 UnityEngine.Object.Destroy(go);
             else
             {
-                Undo.SetCurrentGroupName("UnionAir: Delete GameObject");
+                UndoGroups.Begin("UnionAir: Delete GameObject");
                 Undo.DestroyObjectImmediate(go);
             }
             SceneUtils.MarkDirtyUnlessPlaying(scene);
@@ -134,8 +133,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = -1;
             if (useUndo)
             {
-                Undo.SetCurrentGroupName("UnionAir: Update GameObject");
-                group = Undo.GetCurrentGroup();
+                group = UndoGroups.Begin("UnionAir: Update GameObject");
                 Undo.RecordObject(go, "UnionAir: Update GameObject");
                 Undo.RecordObject(go.transform, "UnionAir: Update GameObject");
             }

@@ -748,8 +748,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         [UnionAirEndpoint("GET", "{guid}",
             Category = UnionAirEndpointCategories.Read,
-            Summary = "Returns the full AnimatorController structure: layers, states, transitions, and parameters.",
-            PathParams = new string[] { "guid" })]
+            Summary = "Returns the full AnimatorController structure: layers, states, transitions, and parameters. Every 'motion' carries a 'type' of AnimationClip, BlendTree, or Unknown; a blend tree has a null 'guid' and its structure inline, nested trees included. A clip's 'guid' identifies the asset holding it, so 'clipsAtPath' above 1 means it does not identify one clip. Sub-state machines are not enumerated.",
+            PathParams = new string[] { "guid" },
+            ResponseExample = "{\"assetPath\":\"Assets/Animations/Character.controller\",\"guid\":\"...\",\"parameters\":[{\"name\":\"Speed\",\"type\":\"Float\",\"defaultFloat\":0.0}],\"layers\":[{\"name\":\"Base Layer\",\"index\":0,\"weight\":0.0,\"blendingMode\":\"Override\",\"states\":[{\"name\":\"Locomotion\",\"speed\":1.0,\"isDefault\":false,\"motion\":{\"type\":\"BlendTree\",\"guid\":null,\"name\":\"Locomotion\",\"blendType\":\"Simple1D\",\"blendParameter\":\"Speed\",\"blendParameterY\":\"\",\"useAutomaticThresholds\":true,\"minThreshold\":0.0,\"maxThreshold\":0.8,\"children\":[{\"threshold\":0.0,\"position\":{\"x\":0.0,\"y\":0.0},\"timeScale\":1.0,\"cycleOffset\":0.0,\"mirror\":false,\"directBlendParameter\":\"\",\"motion\":{\"type\":\"AnimationClip\",\"guid\":\"...\",\"name\":\"WAIT00\",\"assetPath\":\"Assets/Animations/wait.fbx\",\"clipsAtPath\":1}}]},\"transitions\":[]}],\"anyStateTransitions\":[]}]}")]
         private void Detail(UnionAirRequestContext ctx)
             => new AnimatorControllerHandler().HandleRead(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 

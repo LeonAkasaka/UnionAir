@@ -321,7 +321,13 @@ Returns the full AnimatorController structure: parameters, layers, states, trans
           "name": "Idle",
           "speed": 1.0,
           "isDefault": true,
-          "motion": { "guid": "d4e5f6...", "name": "IdleClip" },
+          "motion": {
+            "type": "AnimationClip",
+            "guid": "d4e5f6...",
+            "name": "IdleClip",
+            "assetPath": "Assets/Animations/Idle.anim",
+            "clipsAtPath": 1
+          },
           "transitions": [
             {
               "to": "Walk",
@@ -340,6 +346,77 @@ Returns the full AnimatorController structure: parameters, layers, states, trans
   ]
 }
 ```
+
+### Motion
+
+Every `motion` carries a `type`, and a state with no motion has `"motion": null`.
+
+| `type` | Meaning |
+|--------|---------|
+| `AnimationClip` | The motion is a clip. `guid` addresses the asset holding it, which is the clip itself only when `clipsAtPath` is `1`. |
+| `BlendTree` | The motion is a blend tree owned by this controller. `guid` is always `null`. |
+| `Unknown` | A `Motion` subclass this version does not describe. Reported rather than presented as one of the above. `guid` is non-null only when the motion is the main asset at its path. |
+
+A motion asset that has been deleted reports `"motion": null`, not `Unknown` — Unity resolves a missing reference to null before the type can be examined.
+
+#### AnimationClip
+
+| Field | Description |
+|-------|-------------|
+| `guid` | GUID of the asset holding the clip, or `null` when the clip is not saved |
+| `name` | Clip name |
+| `assetPath` | Path of the asset holding the clip, or `null` when the clip is not saved |
+| `clipsAtPath` | Number of AnimationClips reachable at `assetPath`. **Absent** when `assetPath` is `null`, since there is no path to count at |
+
+`clipsAtPath` is how precise `guid` is. A clip imported from a model file lives inside that file, so the GUID identifies the **file**, not the clip. When `clipsAtPath` is `1` the GUID is unambiguous. When it is greater than `1`, `GET /api/assets/animation-clips/{guid}` returns whichever clip the importer lists first, and the other takes cannot be addressed by GUID at all.
+
+#### BlendTree
+
+A blend tree is a sub-asset of the controller and has no GUID, so its structure is serialized inline instead of being fetched separately.
+
+| Field | Description |
+|-------|-------------|
+| `blendType` | `Simple1D`, `SimpleDirectional2D`, `FreeformDirectional2D`, `FreeformCartesian2D`, or `Direct` |
+| `blendParameter` | Parameter driving the blend, or its X axis for 2D types |
+| `blendParameterY` | Parameter driving the Y axis. Consulted by the 2D types only |
+| `useAutomaticThresholds` | Whether Unity recomputes child thresholds. Consulted by `Simple1D` only |
+| `minThreshold`, `maxThreshold` | Threshold range. Consulted by `Simple1D` only |
+| `children` | Child motions, in order |
+
+Every field in the table above is present on every blend tree, whatever its `blendType`, because Unity stores them all regardless of which the blend consults -- `blendParameterY` and the threshold fields included, and the same for a child's `directBlendParameter`, which only `Direct` uses. "Consulted by" says which blend types read a field, not which ones report it. The one case where fields are absent is a tree at the depth cap, which carries `truncated` instead.
+
+Each child carries `threshold`, `position` (`{x, y}`, used by the 2D types), `timeScale`, `cycleOffset`, `mirror`, `directBlendParameter`, and a `motion` of exactly the shape above — so a nested blend tree is described like any other.
+
+```json
+"motion": {
+  "type": "BlendTree",
+  "guid": null,
+  "name": "Locomotion",
+  "blendType": "Simple1D",
+  "blendParameter": "Speed",
+  "blendParameterY": "",
+  "useAutomaticThresholds": true,
+  "minThreshold": 0.0,
+  "maxThreshold": 0.8,
+  "children": [
+    {
+      "threshold": 0.0,
+      "position": { "x": 0.0, "y": 0.0 },
+      "timeScale": 1.0,
+      "cycleOffset": 0.0,
+      "mirror": false,
+      "directBlendParameter": "",
+      "motion": { "type": "AnimationClip", "guid": "...", "name": "Walk", "assetPath": "...", "clipsAtPath": 1 }
+    }
+  ]
+}
+```
+
+Nesting is serialized to a depth of 10. A blend tree at that depth is reported with `"truncated": true` and **no** `children`, so a boundary is distinguishable from a leaf; an empty `children` array keeps meaning what it says, since a blend tree may genuinely have none.
+
+### Not described by this response
+
+Sub-state machines are not enumerated. Only the states directly on each layer's root state machine appear, so a layer whose states live inside a sub-state machine reports an empty `states` array.
 
 ### Errors
 

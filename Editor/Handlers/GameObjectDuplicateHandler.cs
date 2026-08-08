@@ -27,8 +27,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = -1;
             if (useUndo)
             {
-                Undo.SetCurrentGroupName("UnionAir: Duplicate GameObject");
-                group = Undo.GetCurrentGroup();
+                group = UndoGroups.Begin("UnionAir: Duplicate GameObject");
             }
 
             var copy = Object.Instantiate(go, go.transform.parent);
