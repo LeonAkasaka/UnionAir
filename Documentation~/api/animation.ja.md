@@ -161,7 +161,7 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 | フィールド | 必須 | 説明 |
 |-------|----------|-------------|
 | `relativePath` | ✅ | Animator の GameObject からの相対子パス。Animator 自身の GameObject には `""` を使用 |
-| `type` | ✅ | C# 型名(例: `Transform`、`UnityEngine.UI.Image`)。`Image` のような短い名前も受け付けます |
+| `type` | ✅ | C# 型名。短縮名と完全修飾名のどちらでも解決します(`Transform` と `UnityEngine.Transform`、`Image` と `UnityEngine.UI.Image`)。型は `UnityEngine.Object` から派生している必要があり、そうでなければ `Unknown type` を返します |
 | `property` | ✅ | シリアライズ済みプロパティパス(例: `localPosition.y`、`m_Sprite`) |
 | `keys[].time` | ✅ | 秒単位の時間 |
 | `keys[].value` | ✅(float カーブ) | float 値 |
