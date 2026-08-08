@@ -20,6 +20,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             var entry = new RequestLogEntry
             {
                 Method = method,
+                RequestOrigin = "http://localhost:51801",
                 Path = path,
                 Query = query,
                 RequestBody = requestBody,
@@ -47,15 +48,15 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             var entry = Completed("POST", "/api/test", requestBody: "{\"a\":\"x y\"}");
 
             StringAssert.DoesNotContain(
-                "--%", RequestLogFormatter.BuildCurl(entry, "http://x", CurlShell.Bash));
+                "--%", RequestLogFormatter.BuildCurl(entry, CurlShell.Bash));
             StringAssert.DoesNotContain(
-                "--%", RequestLogFormatter.BuildCurl(entry, "http://x", CurlShell.PowerShell7));
+                "--%", RequestLogFormatter.BuildCurl(entry, CurlShell.PowerShell7));
         }
 
         [Test]
         public void BuildCurl_UsesCurlExeSoPowerShellDoesNotResolveTheAlias()
         {
-            var command = RequestLogFormatter.BuildCurl(Completed(), "http://localhost:51801");
+            var command = RequestLogFormatter.BuildCurl(Completed());
 
             StringAssert.StartsWith("curl.exe ", command);
         }
@@ -63,17 +64,27 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         [Test]
         public void BuildCurl_OmitsTheMethodFlagForGet()
         {
-            var command = RequestLogFormatter.BuildCurl(Completed(), "http://localhost:51801");
+            var command = RequestLogFormatter.BuildCurl(Completed());
 
             Assert.AreEqual("curl.exe 'http://localhost:51801/api/health'", command);
+        }
+
+        [Test]
+        public void BuildCurl_UsesTheOriginCapturedWithTheEntry()
+        {
+            var entry = Completed();
+            entry.RequestOrigin = "http://localhost:54321";
+
+            Assert.AreEqual(
+                "curl.exe 'http://localhost:54321/api/health'",
+                RequestLogFormatter.BuildCurl(entry));
         }
 
         [Test]
         public void BuildCurl_IncludesTheQueryString()
         {
             var command = RequestLogFormatter.BuildCurl(
-                Completed(path: "/api/gameobjects", query: "?scenePath=Main"),
-                "http://localhost:51801");
+                Completed(path: "/api/gameobjects", query: "?scenePath=Main"));
 
             StringAssert.Contains("'http://localhost:51801/api/gameobjects?scenePath=Main'", command);
         }
@@ -84,8 +95,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             // Without this header UnionAir answers 415, which is the mistake most easily made
             // when writing the command by hand.
             var command = RequestLogFormatter.BuildCurl(
-                Completed("POST", "/api/gameobjects", requestBody: "{\"name\":\"Cube\"}"),
-                "http://localhost:51801");
+                Completed("POST", "/api/gameobjects", requestBody: "{\"name\":\"Cube\"}"));
 
             StringAssert.Contains("-X POST", command);
             StringAssert.Contains("-H 'Content-Type: application/json'", command);
@@ -97,7 +107,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         {
             // Windows HttpListener answers 411 for a POST with no length and no chunking.
             var command = RequestLogFormatter.BuildCurl(
-                Completed("POST", "/api/editor/refresh"), "http://localhost:51801");
+                Completed("POST", "/api/editor/refresh"));
 
             StringAssert.Contains("-H 'Content-Length: 0'", command);
             StringAssert.DoesNotContain("-d", command);
@@ -108,8 +118,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         {
             // UnionAir rejects any request that carries one, so a command with it always fails.
             var command = RequestLogFormatter.BuildCurl(
-                Completed("POST", "/api/gameobjects", requestBody: "{\"a\":1}"),
-                "http://localhost:51801");
+                Completed("POST", "/api/gameobjects", requestBody: "{\"a\":1}"));
 
             StringAssert.DoesNotContain("Origin", command);
         }
@@ -121,7 +130,17 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             entry.RequestBodyTruncated = true;
 
             Assert.IsFalse(RequestLogFormatter.CanBuildCurl(entry));
-            Assert.AreEqual("", RequestLogFormatter.BuildCurl(entry, "http://localhost:51801"));
+            Assert.AreEqual("", RequestLogFormatter.BuildCurl(entry));
+        }
+
+        [Test]
+        public void BuildCurl_IsNotOfferedWithoutACapturedOrigin()
+        {
+            var entry = Completed();
+            entry.RequestOrigin = null;
+
+            Assert.IsFalse(RequestLogFormatter.CanBuildCurl(entry));
+            Assert.AreEqual("", RequestLogFormatter.BuildCurl(entry));
         }
 
         [Test]
@@ -186,7 +205,6 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         {
             var command = RequestLogFormatter.BuildCurl(
                 Completed("POST", "/api/gameobjects", requestBody: "{\"name\":\"Cube\"}"),
-                "http://localhost:51801",
                 CurlShell.WindowsPowerShell);
 
             StringAssert.StartsWith("curl.exe --% ", command,
@@ -218,8 +236,8 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             var entry = Completed("POST", "/api/test", requestBody: "{\"a\":\"it's\"}");
 
             Assert.AreEqual(
-                RequestLogFormatter.BuildCurl(entry, "http://x", CurlShell.Bash),
-                RequestLogFormatter.BuildCurl(entry, "http://x"));
+                RequestLogFormatter.BuildCurl(entry, CurlShell.Bash),
+                RequestLogFormatter.BuildCurl(entry));
         }
 
         [TestCase(CurlShell.Bash)]

@@ -108,7 +108,7 @@ namespace LeonAkasaka.UnionAir.Editor
                         "Quoted for " + RequestLogFormatter.ShellLabel(shell));
                     if (GUILayout.Button(copy, EditorStyles.miniButtonLeft, GUILayout.Width(90)))
                         GUIUtility.systemCopyBuffer =
-                            RequestLogFormatter.BuildCurl(entry, BaseUrl(), shell);
+                            RequestLogFormatter.BuildCurl(entry, shell);
 
                     // Escaped rather than written literally: sources here are UTF-8 without a BOM,
                     // which a Shift-JIS machine reads as mojibake.
@@ -215,14 +215,6 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 EditorUtility.DisplayDialog("Save Failed", ex.Message, "OK");
             }
-        }
-
-        private static string BaseUrl()
-        {
-            var server = UnionAirInit.Server;
-            return server != null && server.IsRunning
-                ? "http://localhost:" + server.Port
-                : "http://localhost:8765";
         }
     }
 }

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Copy as curl** now uses the Base URL captured with the request log entry instead of substituting port `8765` when the server is stopped. Commands therefore preserve the actual host and port that received each request, including Automatic port assignments.
+
 ## [0.5.0] - 2026-08-07
 
 ### Upgrade Notes
