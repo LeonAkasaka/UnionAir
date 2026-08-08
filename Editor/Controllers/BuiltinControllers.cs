@@ -804,10 +804,10 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "{guid}/blend-trees",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Updates the blend tree addressed by 'layerIndex', 'state', and 'childPath'. Tree fields are 'name', 'blendType', 'blendParameter', 'blendParameterY', 'useAutomaticThresholds', 'minThreshold', 'maxThreshold'; child fields, which need a non-empty childPath, are 'threshold', 'position', 'timeScale', 'cycleOffset', 'mirror', 'directBlendParameter'. Every value is validated before anything is written, so a request that fails applies nothing. A field the addressed blend type does not consult is stored and reported in 'ignored' rather than dropped silently.",
+            Summary = "Updates the blend tree addressed by 'layerIndex', 'state', and 'childPath'. Tree fields are 'name', 'blendType', 'blendParameter', 'blendParameterY', 'useAutomaticThresholds', 'minThreshold', 'maxThreshold'; child fields, which need a non-empty childPath, are 'threshold', 'position', 'timeScale', 'cycleOffset', 'mirror', 'directBlendParameter', and 'motion' to swap in a clip -- a blend tree the swap displaces is destroyed with its descendants. Every value is validated before anything is written, so a request that fails applies nothing. A field the addressed blend type does not consult is stored and reported in 'ignored' rather than dropped silently.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "state" },
-            OptionalBody = new string[] { "layerIndex", "childPath", "name", "blendType", "blendParameter", "blendParameterY", "useAutomaticThresholds", "minThreshold", "maxThreshold", "threshold", "position", "timeScale", "cycleOffset", "mirror", "directBlendParameter" },
+            OptionalBody = new string[] { "layerIndex", "childPath", "name", "blendType", "blendParameter", "blendParameterY", "useAutomaticThresholds", "minThreshold", "maxThreshold", "threshold", "position", "timeScale", "cycleOffset", "mirror", "directBlendParameter", "motion" },
             RequestExample = "{\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[1],\"threshold\":0.8}",
             ResponseExample = "{\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[1],\"ignored\":[]}")]
         private void UpdateBlendTree(UnionAirRequestContext ctx)

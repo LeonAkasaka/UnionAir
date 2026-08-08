@@ -64,9 +64,12 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (!TryResolveTree(controller, state, layerIndex, body, response, out var parent, out var path)) return;
 
-            // Validate before anything is created, so a rejected request leaves nothing
-            // behind. The child is built only once every field has resolved.
+            // Everything the request asks for is parsed and checked before the child is
+            // created, so a rejected request leaves nothing behind. Creating first and
+            // validating after would append a child -- and possibly a BlendTree sub-asset
+            // -- that the caller was told did not happen.
             if (!TryReadChildMotion(body, response, out var clip, out var hasMotion)) return;
+            if (!TryParseChildFields(body, response, out var childFields)) return;
 
             var childIsTree = !hasMotion;
             BlendTree childTree = null;
@@ -78,23 +81,26 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (!ok) return;
             }
 
-            var threshold = RequestBodyReader.GetFloat(body, "threshold") ?? 0f;
-            var thresholdSet = RequestBodyReader.HasTopLevelField(body, "threshold");
+            var childIgnored = BlendTreeRules.CollectIgnoredChildFields(
+                parent.blendType, parent.useAutomaticThresholds,
+                positionSet: childFields.HasPosition,
+                directBlendParameterSet: childFields.HasDirectBlendParameter,
+                thresholdSet: childFields.HasThreshold);
 
             if (childIsTree)
             {
                 // CreateBlendTreeChild owns the sub-asset and already sets HideInHierarchy.
-                childTree = parent.CreateBlendTreeChild(threshold);
+                childTree = parent.CreateBlendTreeChild(childFields.Threshold);
                 childTree.name = ReadName(body, "New Blend Tree");
                 TryApplyTreeFields(controller, childTree, body, response, out _, validateOnly: false);
             }
             else
             {
-                parent.AddChild(clip, threshold);
+                parent.AddChild(clip, childFields.Threshold);
             }
 
             var childIndex = parent.children.Length - 1;
-            if (!TryApplyChildFields(parent, childIndex, body, response, out var childIgnored, thresholdSet)) return;
+            ApplyChildFields(parent, childIndex, childFields);
 
             Save(controller);
 
@@ -111,30 +117,97 @@ namespace LeonAkasaka.UnionAir.Editor
 
             var body = RequestBodyReader.ReadString(request);
             if (!TryResolveState(controller, body, response, out var layerIndex, out var state)) return;
-            if (!TryResolveTree(controller, state, layerIndex, body, response, out var tree, out var path)) return;
+            if (!TryReadChildPath(body, response, out var path)) return;
 
-            // Everything resolvable is checked before a single field is written, so a
-            // request that fails partway leaves the controller as it was.
-            if (!TryApplyTreeFields(controller, tree, body, response, out _, validateOnly: true)) return;
+            // The parent is resolved rather than the addressed motion, because a child
+            // does not have to be a blend tree to be updated: threshold, position,
+            // timeScale, cycleOffset, mirror and directBlendParameter all belong to the
+            // entry, and most entries in a real tree hold a clip. Requiring the addressed
+            // motion to be a tree made every clip child unreachable.
+            if (!TryResolveParent(controller, state, layerIndex, path, response, out var parent)) return;
 
-            var ignored = new List<string>();
-            if (!TryApplyTreeFields(controller, tree, body, response, out var treeIgnored, validateOnly: false)) return;
-            ignored.AddRange(treeIgnored);
-
-            // Child fields belong to the entry in the parent, not to the tree itself, so
-            // they need the path's last hop.
-            if (path.Length > 0)
+            BlendTree tree = null;
+            if (path.Length == 0)
             {
-                if (!TryResolveParent(controller, state, layerIndex, path, response, out var parent)) return;
-                var thresholdSet = RequestBodyReader.HasTopLevelField(body, "threshold");
-                if (!TryApplyChildFields(parent, path[path.Length - 1], body, response, out var childIgnored, thresholdSet)) return;
-                ignored.AddRange(childIgnored);
+                tree = parent;
             }
-            else if (RequestBodyReader.HasTopLevelField(body, "threshold"))
+            else
+            {
+                var index = path[path.Length - 1];
+                if (index < 0 || index >= parent.children.Length)
+                {
+                    RestResponse.SendNotFound(response,
+                        $"childPath does not resolve: index {index} at depth {path.Length - 1}, " +
+                        $"which has {parent.children.Length} child(ren).");
+                    return;
+                }
+                tree = parent.children[index].motion as BlendTree;
+            }
+
+            var hasTreeFields = HasAnyTreeField(body);
+            if (hasTreeFields && tree == null)
+            {
+                RestResponse.SendError(response,
+                    "The addressed child holds a clip, so the blend tree fields do not apply to it. " +
+                    "Address a blend tree, or send only the child fields.", 400);
+                return;
+            }
+
+            // Everything is checked before a single field is written, tree fields and
+            // child fields alike. Validating the child half after writing the tree half
+            // would let a malformed position leave a partly updated tree behind a 400.
+            if (tree != null && !TryApplyTreeFields(controller, tree, body, response, out _, validateOnly: true)) return;
+
+            if (path.Length == 0 && RequestBodyReader.HasTopLevelField(body, "threshold"))
             {
                 RestResponse.SendError(response,
                     "threshold addresses a child, and childPath names the root blend tree, which is not a child of anything.", 400);
                 return;
+            }
+
+            if (!TryParseChildFields(body, response, out var childFields)) return;
+
+            if (childFields.HasMotion && hasTreeFields)
+            {
+                // The tree fields would be written to a tree this same request replaces,
+                // so they would take effect on an object nothing can reach afterwards.
+                RestResponse.SendError(response,
+                    "motion replaces what the child holds, so blend tree fields in the same request would " +
+                    "be written to a tree this request discards. Send them separately.", 400);
+                return;
+            }
+
+            var ignored = new List<string>();
+            if (tree != null)
+            {
+                if (!TryApplyTreeFields(controller, tree, body, response, out var treeIgnored, validateOnly: false)) return;
+                ignored.AddRange(treeIgnored);
+            }
+
+            if (path.Length > 0)
+            {
+                ignored.AddRange(BlendTreeRules.CollectIgnoredChildFields(
+                    parent.blendType, parent.useAutomaticThresholds,
+                    positionSet: childFields.HasPosition,
+                    directBlendParameterSet: childFields.HasDirectBlendParameter,
+                    thresholdSet: childFields.HasThreshold));
+
+                var index = path[path.Length - 1];
+                if (childFields.HasMotion)
+                {
+                    // Swapping a child's motion drops whatever was there. If that was a
+                    // blend tree, Unity leaves it in the asset exactly as it does for a
+                    // removed child, so the subtree is collected first and destroyed after.
+                    var doomed = new List<BlendTree>();
+                    CollectTrees(parent.children[index].motion as BlendTree, doomed);
+                    ApplyChildFields(parent, index, childFields);
+                    foreach (var t in doomed)
+                        if (t != null) Object.DestroyImmediate(t, true);
+                }
+                else
+                {
+                    ApplyChildFields(parent, index, childFields);
+                }
             }
 
             Save(controller);
@@ -147,6 +220,16 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("}");
             RestResponse.Send(response, sb.ToString());
         }
+
+        /// <summary>Whether the request carries any field that belongs to a blend tree rather than to a child entry.</summary>
+        private static bool HasAnyTreeField(string body)
+            => RequestBodyReader.HasTopLevelField(body, "name")
+            || RequestBodyReader.HasTopLevelField(body, "blendType")
+            || RequestBodyReader.HasTopLevelField(body, "blendParameter")
+            || RequestBodyReader.HasTopLevelField(body, "blendParameterY")
+            || RequestBodyReader.HasTopLevelField(body, "useAutomaticThresholds")
+            || RequestBodyReader.HasTopLevelField(body, "minThreshold")
+            || RequestBodyReader.HasTopLevelField(body, "maxThreshold");
 
         // ── DELETE ───────────────────────────────────────────────────────────
 
@@ -402,28 +485,33 @@ namespace LeonAkasaka.UnionAir.Editor
             return true;
         }
 
-        private static bool TryApplyChildFields(
-            BlendTree parent, int childIndex, string body,
-            UnionAirResponse response, out List<string> ignored, bool thresholdSet)
+        /// <summary>
+        /// The child-entry fields a request carries, parsed and checked but not applied.
+        ///
+        /// Separating the two is what makes a request atomic: the child cannot be created
+        /// or written until every value has resolved, so a malformed one is refused with
+        /// the controller untouched.
+        /// </summary>
+        private struct ChildFields
         {
-            ignored = BlendTreeRules.CollectIgnoredChildFields(
-                parent.blendType,
-                parent.useAutomaticThresholds,
-                positionSet: RequestBodyReader.HasTopLevelField(body, "position"),
-                directBlendParameterSet: RequestBodyReader.HasTopLevelField(body, "directBlendParameter"),
-                thresholdSet: thresholdSet);
+            public bool HasThreshold; public float Threshold;
+            public bool HasPosition; public Vector2 Position;
+            public bool HasTimeScale; public float TimeScale;
+            public bool HasCycleOffset; public float CycleOffset;
+            public bool HasMirror; public bool Mirror;
+            public bool HasDirectBlendParameter; public string DirectBlendParameter;
+            public bool HasMotion; public AnimationClip Motion;
+        }
 
-            var children = parent.children;
-            if (childIndex < 0 || childIndex >= children.Length)
+        private static bool TryParseChildFields(string body, UnionAirResponse response, out ChildFields fields)
+        {
+            fields = default(ChildFields);
+
+            if (!RequestBodyReader.TryGetFloatValue(body, "threshold", out fields.Threshold, out fields.HasThreshold))
             {
-                RestResponse.SendError(response, $"Child index {childIndex} is out of range.", 400);
+                RestResponse.SendError(response, "threshold must be a number.", 400);
                 return false;
             }
-
-            var child = children[childIndex];
-
-            if (thresholdSet && RequestBodyReader.TryGetFloatValue(body, "threshold", out var threshold, out _))
-                child.threshold = threshold;
 
             var positionJson = RequestBodyReader.GetObject(body, "position");
             if (positionJson != null)
@@ -435,21 +523,60 @@ namespace LeonAkasaka.UnionAir.Editor
                     RestResponse.SendError(response, "position requires x and y.", 400);
                     return false;
                 }
-                child.position = new Vector2(x.Value, y.Value);
+                fields.HasPosition = true;
+                fields.Position = new Vector2(x.Value, y.Value);
+            }
+            else if (RequestBodyReader.HasTopLevelField(body, "position"))
+            {
+                RestResponse.SendError(response, "position must be an object such as {\"x\":0,\"y\":0}.", 400);
+                return false;
             }
 
-            if (RequestBodyReader.TryGetFloatValue(body, "timeScale", out var timeScale, out var hasTimeScale) && hasTimeScale)
-                child.timeScale = timeScale;
-            if (RequestBodyReader.TryGetFloatValue(body, "cycleOffset", out var cycleOffset, out var hasCycle) && hasCycle)
-                child.cycleOffset = cycleOffset;
-            if (RequestBodyReader.TryGetBoolValue(body, "mirror", out var mirror, out var hasMirror) && hasMirror)
-                child.mirror = mirror;
-            if (RequestBodyReader.TryGetStringValue(body, "directBlendParameter", out var direct, out var hasDirect) && hasDirect)
-                child.directBlendParameter = direct;
+            if (!RequestBodyReader.TryGetFloatValue(body, "timeScale", out fields.TimeScale, out fields.HasTimeScale))
+            {
+                RestResponse.SendError(response, "timeScale must be a number.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetFloatValue(body, "cycleOffset", out fields.CycleOffset, out fields.HasCycleOffset))
+            {
+                RestResponse.SendError(response, "cycleOffset must be a number.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetBoolValue(body, "mirror", out fields.Mirror, out fields.HasMirror))
+            {
+                RestResponse.SendError(response, "mirror must be a boolean.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetStringValue(body, "directBlendParameter", out fields.DirectBlendParameter, out fields.HasDirectBlendParameter))
+            {
+                RestResponse.SendError(response, "directBlendParameter must be a string.", 400);
+                return false;
+            }
+
+            if (!TryReadChildMotion(body, response, out fields.Motion, out fields.HasMotion)) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Writes parsed child fields. Cannot fail, which is the point: every check
+        /// happened in <see cref="TryParseChildFields"/>, before anything was mutated.
+        /// </summary>
+        private static void ApplyChildFields(BlendTree parent, int childIndex, ChildFields fields)
+        {
+            var children = parent.children;
+            if (childIndex < 0 || childIndex >= children.Length) return;
+
+            var child = children[childIndex];
+            if (fields.HasThreshold) child.threshold = fields.Threshold;
+            if (fields.HasPosition) child.position = fields.Position;
+            if (fields.HasTimeScale) child.timeScale = fields.TimeScale;
+            if (fields.HasCycleOffset) child.cycleOffset = fields.CycleOffset;
+            if (fields.HasMirror) child.mirror = fields.Mirror;
+            if (fields.HasDirectBlendParameter) child.directBlendParameter = fields.DirectBlendParameter;
+            if (fields.HasMotion) child.motion = fields.Motion;
 
             children[childIndex] = child;
             parent.children = children;
-            return true;
         }
 
         private static bool TryReadFloatParameter(

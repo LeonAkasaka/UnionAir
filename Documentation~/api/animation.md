@@ -609,11 +609,27 @@ Updates the addressed tree, and the addressed child entry when `childPath` is no
 { "layerIndex": 0, "state": "Locomotion", "childPath": [1], "threshold": 0.8 }
 ```
 
-Tree fields and child fields are the same as for `POST`. `threshold` with an empty `childPath` answers `400`: the root blend tree is not a child of anything.
+Tree fields and child fields are the same as for `POST`, plus `motion` to swap what a child holds.
+
+### A child does not have to be a blend tree
+
+`childPath` may address a child holding a clip. The child fields — `threshold`, `position`, `timeScale`, `cycleOffset`, `mirror`, `directBlendParameter`, `motion` — belong to the entry in the parent, not to what the entry holds, so they apply either way. Most children of a real tree hold a clip.
+
+The tree fields do not. Sending one for a child that holds a clip answers `400` rather than being dropped.
+
+| Request | Result |
+|---|---|
+| `threshold` with an empty `childPath` | `400` — the root tree is not a child of anything |
+| a tree field on a child holding a clip | `400` naming the mismatch |
+| `motion` together with a tree field | `400` — the tree fields would be written to a tree the same request discards |
+
+### `motion` destroys what it displaces
+
+Swapping a child's motion drops whatever was there. If that was a blend tree, Unity leaves it in the asset exactly as it does for a removed child, so the subtree is destroyed here — the same handling `DELETE` of a child needs.
 
 ### A failed request applies nothing
 
-Every value is resolved against the controller before the first write, so a request that sets several fields and fails on one leaves the tree exactly as it was. Setting `name` and an unknown `blendParameter` in the same request changes neither.
+Every value is resolved against the controller before the first write — tree fields and child fields alike — so a request that sets several fields and fails on one leaves the tree exactly as it was. Setting `name` and an unknown `blendParameter` in the same request changes neither, and a `POST` with `addChild` that fails on a child field adds no child and no sub-asset.
 
 ---
 
