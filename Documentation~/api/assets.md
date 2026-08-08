@@ -1030,6 +1030,9 @@ Sample settings are partial patches:
 | `sampleRateOverride` | integer | `1..192000` with `OverrideSampleRate`; otherwise `0` |
 | `conversionMode` | integer | `0` only; Unity exposes the field but defines no non-zero public flags |
 
+Changing `sampleRateSetting` away from `OverrideSampleRate` clears an omitted
+`sampleRateOverride` to `0`. Supplying a non-zero override with either other mode is rejected.
+
 Unity 6 makes preload policy part of sample settings rather than a global
 `AudioImporter` property. Keeping it in the nested object is the contract common to
 Unity 2022.3 and Unity 6 and also permits platform-specific preload overrides.

@@ -61,7 +61,12 @@ namespace LeonAkasaka.UnionAir.Editor
             if (HasCompressionFormat) settings.compressionFormat = CompressionFormat;
             if (HasQuality) settings.quality = Quality;
             if (HasPreloadAudioData) settings.preloadAudioData = PreloadAudioData;
-            if (HasSampleRateSetting) settings.sampleRateSetting = SampleRateSetting;
+            if (HasSampleRateSetting)
+            {
+                settings.sampleRateSetting = SampleRateSetting;
+                if (!HasSampleRateOverride && SampleRateSetting != AudioSampleRateSetting.OverrideSampleRate)
+                    settings.sampleRateOverride = 0;
+            }
             if (HasSampleRateOverride) settings.sampleRateOverride = (uint)SampleRateOverride;
             if (HasConversionMode) settings.conversionMode = ConversionMode;
             return settings;

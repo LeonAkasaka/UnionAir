@@ -779,9 +779,6 @@ ObjectReference フィールドには `assetGuid` または `assetPath` を持�
 | 400 | `guid` の欠落、アセットが ScriptableObject でない、`properties` フィールドの欠落、またはプロパティ値が不正 |
 | 404 | 指定 GUID のアセットが見つからない |
 | 403 | Asset Write カテゴリが無効 |
-
----
-
 | 409 | Unity Editor が Play モード中 |
 
 ---
@@ -866,6 +863,8 @@ ScriptableObject アセットとその `.meta` ファイルを削除します。
 | 400 | 認識可能なフィールドがない、`textureType` の値が未知、またはアセットがテクスチャでない |
 | 404 | 指定 GUID のアセットが見つからない |
 | 403 | Asset Write カテゴリが無効 |
+
+---
 
 ## GET /api/assets/audio-importer/{guid}
 
@@ -1034,6 +1033,10 @@ sample settings は部分 patch です。
 | `sampleRateSetting` | string | `PreserveSampleRate`、`OptimizeSampleRate`、`OverrideSampleRate` |
 | `sampleRateOverride` | integer | `OverrideSampleRate` では `1..192000`、それ以外では `0` |
 | `conversionMode` | integer | `0` のみ。Unity はフィールドを公開していますが、0 以外の public flag は定義していません |
+
+`sampleRateSetting` を `OverrideSampleRate` 以外へ変更したとき、
+`sampleRateOverride` を省略すると `0` にクリアされます。他の mode とともに0以外の
+override を指定した場合は拒否されます。
 
 Unity 6 では preload policy は global な `AudioImporter` property ではなく sample
 settings の一部です。nested object 内に置くことで、Unity 2022.3 と Unity 6 に共通の

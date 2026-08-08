@@ -96,6 +96,29 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void SamplePatch_ClearsOverrideWhenLeavingOverrideSampleRate()
+        {
+            AudioImporterUpdateRequest request;
+            string error;
+            Assert.IsTrue(
+                AudioImporterUpdateParser.TryParse(
+                    "{\"defaultSampleSettings\":{\"sampleRateSetting\":\"PreserveSampleRate\"}}",
+                    out request,
+                    out error),
+                error);
+            var original = new AudioImporterSampleSettings
+            {
+                sampleRateSetting = AudioSampleRateSetting.OverrideSampleRate,
+                sampleRateOverride = 44100
+            };
+
+            var applied = request.DefaultSampleSettings.Apply(original);
+
+            Assert.AreEqual(AudioSampleRateSetting.PreserveSampleRate, applied.sampleRateSetting);
+            Assert.AreEqual(0, applied.sampleRateOverride);
+        }
+
+        [Test]
         public void PlatformCatalog_UsesTheAudioImporterCodecCompatibilityModel()
         {
             AudioImporterPlatformCatalog.Entry standalone;
