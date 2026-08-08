@@ -675,6 +675,170 @@ Deleting a layer that is *itself* synced is fine. Its sync is cleared before rem
 
 ---
 
+## Blend trees
+
+A blend tree has no GUID. It is a sub-asset owned by the controller, so it is addressed by where it sits:
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "childPath": [1] }
+```
+
+| Field | Description |
+|-------|-------------|
+| `layerIndex` | Layer holding the state. Defaults to `0` |
+| `state` | Name of the state whose motion is the root blend tree |
+| `childPath` | Child indices from that root. `[]` or omitted means the root itself, `[1]` the second child, `[1, 0]` the first child of that |
+
+### `childPath` is positional
+
+Removing or reordering children invalidates any path a client is holding. That is a property of the asset rather than a choice made here: Unity gives a `ChildMotion` no identity beyond its index — there is no name to key on and no id to preserve, and inventing one would mean maintaining a mapping the `.controller` file does not store.
+
+A `childPath` that does not resolve answers `404` naming the index and the depth that failed, so a stale path reports where it went wrong rather than failing blankly.
+
+---
+
+## POST /api/assets/animator-controllers/{guid}/blend-trees
+
+Creates a blend tree as the motion of an existing state, or adds a child to one.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Creating the root tree
+
+Without `addChild`, the request creates the state's root blend tree:
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "name": "Locomotion",
+  "blendType": "Simple1D", "blendParameter": "Speed",
+  "useAutomaticThresholds": false, "minThreshold": 0, "maxThreshold": 0.8 }
+```
+
+A state that already holds a blend tree answers `409`; delete it first, or use `addChild`.
+
+### Adding a child
+
+With `addChild`, the request appends to the tree at `childPath` — a nested blend tree by default, or a clip when `motion` carries a GUID:
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "childPath": [], "addChild": true,
+  "name": "Runs", "blendType": "Simple1D", "blendParameter": "Direction", "threshold": 0.8 }
+```
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "childPath": [0], "addChild": true,
+  "motion": { "guid": "a1b2c3..." }, "threshold": -1 }
+```
+
+A nested tree is created only through `addChild`; there is no tree literal to pass, so there is exactly one way to bring a sub-asset into existence.
+
+### Fields
+
+| Field | Applies to | Description |
+|-------|-----------|-------------|
+| `name`, `blendType`, `blendParameter`, `blendParameterY`, `useAutomaticThresholds`, `minThreshold`, `maxThreshold` | the tree | `blendType` is one of `Simple1D`, `SimpleDirectional2D`, `FreeformDirectional2D`, `FreeformCartesian2D`, `Direct` |
+| `threshold`, `position`, `timeScale`, `cycleOffset`, `mirror`, `directBlendParameter` | the child entry | Only with `addChild` |
+| `motion` | the child entry | `{guid}` of an `AnimationClip`. Its absence is what makes the child a nested tree |
+
+### Response (HTTP 201)
+
+```json
+{ "created": "BlendTree", "layerIndex": 0, "state": "Locomotion",
+  "childPath": [1], "name": "Runs", "ignored": [] }
+```
+
+`childPath` is where the new tree or child ended up, ready to address in the next request.
+
+---
+
+## PATCH /api/assets/animator-controllers/{guid}/blend-trees
+
+Updates the addressed tree, and the addressed child entry when `childPath` is non-empty.
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "childPath": [1], "threshold": 0.8 }
+```
+
+Tree fields and child fields are the same as for `POST`, plus `motion` to swap what a child holds.
+
+### A child does not have to be a blend tree
+
+`childPath` may address a child holding a clip. The child fields — `threshold`, `position`, `timeScale`, `cycleOffset`, `mirror`, `directBlendParameter`, `motion` — belong to the entry in the parent, not to what the entry holds, so they apply either way. Most children of a real tree hold a clip.
+
+The tree fields do not. Sending one for a child that holds a clip answers `400` rather than being dropped.
+
+| Request | Result |
+|---|---|
+| `threshold` with an empty `childPath` | `400` — the root tree is not a child of anything |
+| a tree field on a child holding a clip | `400` naming the mismatch |
+| `motion` together with a tree field | `400` — the tree fields would be written to a tree the same request discards |
+
+### `motion` destroys what it displaces
+
+Swapping a child's motion drops whatever was there. If that was a blend tree, Unity leaves it in the asset exactly as it does for a removed child, so the subtree is destroyed here — the same handling `DELETE` of a child needs.
+
+### A failed request applies nothing
+
+Every value is resolved against the controller before the first write — tree fields and child fields alike — so a request that sets several fields and fails on one leaves the tree exactly as it was. Setting `name` and an unknown `blendParameter` in the same request changes neither, and a `POST` with `addChild` that fails on a child field adds no child and no sub-asset.
+
+---
+
+## DELETE /api/assets/animator-controllers/{guid}/blend-trees
+
+Removes the addressed tree or child.
+
+```json
+{ "layerIndex": 0, "state": "Locomotion", "childPath": [1] }
+```
+
+An empty or omitted `childPath` clears the state's motion. A non-empty one removes that child.
+
+```json
+{ "removed": "child", "layerIndex": 0, "state": "Locomotion",
+  "childPath": [1], "destroyedSubTrees": 2 }
+```
+
+`destroyedSubTrees` counts the blend trees destroyed with the child, which is why the field exists — see below.
+
+---
+
+## What happens to the sub-assets
+
+A blend tree lives inside the `.controller` file, so removing one from the graph is not the same as removing it from the asset. Measured on Unity 6000.0.80f1, against the file rather than against the API's own read:
+
+| Operation | Unity's behaviour | What UnionAir does |
+|---|---|---|
+| Clearing a state's motion | Destroys the tree **and every descendant** | Nothing extra. Adding cleanup here would be code with nothing to do |
+| `DELETE` of a child | Detaches the entry and **leaves the whole subtree in the file** | Collects the subtree before removing the entry, then destroys it |
+| `DELETE .../states` on a state owning a tree | Destroys the state's own tree but **not its descendants** | Collects the subtree first and destroys whatever survives. Reported as `destroyedBlendTrees` |
+
+The third row is why `DELETE .../states` now reports a count. A flat blend tree is cleaned up correctly by Unity, so the leak only appears once a tree is nested — a test that built a one-level tree would have reported success.
+
+Created sub-assets carry `HideFlags.HideInHierarchy`, matching what the Animator window produces. `BlendTree.CreateBlendTreeChild` sets it already; a root tree created on an existing state has it set explicitly, because the only route to one is `AssetDatabase.AddObjectToAsset` and that route does not.
+
+---
+
+## Validation
+
+- `blendParameter` and `blendParameterY` must name an existing `Float` parameter on the controller. A tree pointing at a parameter that does not exist is a broken controller that the read cannot tell from a working one, so it answers `400` rather than being stored.
+- An unknown `blendType` answers `400` naming the accepted values.
+- A `childPath` that does not resolve answers `404`.
+
+### Fields that are stored but not consulted
+
+Some fields are meaningful only for some blend types. They are stored — Unity stores them too, and the read reports them, so refusing would make the API narrower than the asset — and named in `ignored` so they never pass silently:
+
+```json
+{ "created": "AnimationClip", "childPath": [1, 0], "ignored": [
+  "position is stored but not consulted: the parent blendType is Simple1D, and position applies to the 2D types.",
+  "threshold is not kept because the parent has useAutomaticThresholds true; Unity recomputes it. Set the parent's useAutomaticThresholds to false to keep a threshold."
+] }
+```
+
+A child's `position`, `directBlendParameter`, and `threshold` are judged against the **parent**: the child does not decide whether they are read, the blend its parent performs does.
+
+---
+
 ## POST /api/assets/animator-controllers/{guid}/states
 
 Adds a state to a layer of an AnimatorController.

@@ -812,6 +812,43 @@ namespace LeonAkasaka.UnionAir.Editor
         private void DeleteLayer(UnionAirRequestContext ctx)
             => new AnimatorControllerHandler().HandleDeleteLayer(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 
+        [UnionAirEndpoint("POST", "{guid}/blend-trees",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Creates a blend tree as the motion of an existing state, or adds a child to one. A blend tree has no GUID, so it is addressed by 'layerIndex' plus 'state', then 'childPath' -- an array of child indices from that state's root tree, where [] is the root itself. Without 'addChild' the request creates the state's root tree. With 'addChild' it appends to the addressed tree: a nested tree by default, or a clip when 'motion' carries a guid. childPath is positional, so removing or reordering children invalidates a path a client is holding.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "state" },
+            OptionalBody = new string[] { "layerIndex", "childPath", "addChild", "name", "blendType", "blendParameter", "blendParameterY", "useAutomaticThresholds", "minThreshold", "maxThreshold", "threshold", "position", "timeScale", "cycleOffset", "mirror", "directBlendParameter", "motion" },
+            RequestExample = "{\"layerIndex\":0,\"state\":\"Locomotion\",\"name\":\"Locomotion\",\"blendType\":\"Simple1D\",\"blendParameter\":\"Speed\"}",
+            ResponseExample = "{\"created\":\"BlendTree\",\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[],\"name\":\"Locomotion\",\"ignored\":[]}")]
+        private void AddBlendTree(UnionAirRequestContext ctx)
+            => new BlendTreeHandler().HandleCreate(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("PATCH", "{guid}/blend-trees",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Updates the blend tree addressed by 'layerIndex', 'state', and 'childPath'. Tree fields are 'name', 'blendType', 'blendParameter', 'blendParameterY', 'useAutomaticThresholds', 'minThreshold', 'maxThreshold'; child fields, which need a non-empty childPath, are 'threshold', 'position', 'timeScale', 'cycleOffset', 'mirror', 'directBlendParameter', and 'motion' to swap in a clip -- a blend tree the swap displaces is destroyed with its descendants. Every value is validated before anything is written, so a request that fails applies nothing. A field the addressed blend type does not consult is stored and reported in 'ignored' rather than dropped silently.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "state" },
+            OptionalBody = new string[] { "layerIndex", "childPath", "name", "blendType", "blendParameter", "blendParameterY", "useAutomaticThresholds", "minThreshold", "maxThreshold", "threshold", "position", "timeScale", "cycleOffset", "mirror", "directBlendParameter", "motion" },
+            RequestExample = "{\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[1],\"threshold\":0.8}",
+            ResponseExample = "{\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[1],\"ignored\":[]}")]
+        private void UpdateBlendTree(UnionAirRequestContext ctx)
+            => new BlendTreeHandler().HandleUpdate(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("DELETE", "{guid}/blend-trees",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Removes the blend tree or child addressed by 'layerIndex', 'state', and 'childPath'. An empty or omitted childPath clears the state's motion, which Unity destroys along with every descendant. A non-empty childPath removes that child; Unity leaves the detached subtree in the asset, so it is destroyed here and 'destroyedSubTrees' reports how many blend trees went with it.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "state" },
+            OptionalBody = new string[] { "layerIndex", "childPath" },
+            RequestExample = "{\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[1]}",
+            ResponseExample = "{\"removed\":\"child\",\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[1],\"destroyedSubTrees\":2}")]
+        private void DeleteBlendTree(UnionAirRequestContext ctx)
+            => new BlendTreeHandler().HandleDelete(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+
         [UnionAirEndpoint("POST", "{guid}/states",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,

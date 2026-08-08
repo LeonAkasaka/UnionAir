@@ -697,11 +697,32 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            // RemoveState destroys the state's own motion tree but not the trees nested
+            // inside it: measured on 6000.0.80f1, removing a state whose blend tree had one
+            // nested child left one BlendTree in the .controller file with no state and no
+            // parent referring to it. A flat tree is cleaned up, which is why this is easy
+            // to miss. The subtree is collected while it is still reachable and whatever
+            // survives the removal is destroyed after.
+            var doomed = new List<UnityEditor.Animations.BlendTree>();
+            BlendTreeHandler.CollectTrees(
+                controller.GetStateEffectiveMotion(state, layerIndex) as UnityEditor.Animations.BlendTree, doomed);
+
             sm.RemoveState(state);
+
+            var destroyed = 0;
+            foreach (var tree in doomed)
+            {
+                if (tree == null) continue;
+                Object.DestroyImmediate(tree, true);
+                destroyed++;
+            }
+
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
 
-            RestResponse.Send(response, $"{{\"removed\":\"{RestResponse.EscapeJson(name)}\",\"layerIndex\":{layerIndex}}}");
+            RestResponse.Send(response,
+                $"{{\"removed\":\"{RestResponse.EscapeJson(name)}\",\"layerIndex\":{layerIndex}," +
+                $"\"destroyedBlendTrees\":{destroyed}}}");
         }
 
         // ── POST /api/assets/animator-controllers/{guid}/transitions ─────────
