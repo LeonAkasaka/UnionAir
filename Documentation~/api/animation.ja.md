@@ -317,7 +317,7 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
     {
       "name": "Base Layer",
       "index": 0,
-      "defaultWeight": 1.0,
+      "defaultWeight": 0.0,
       "isBaseLayer": true,
       "blendingMode": "Override",
       "avatarMask": null,
@@ -509,7 +509,7 @@ AnimatorController から名前を指定してパラメータを削除します�
 |-------|-------------|
 | `name` | レイヤー名。一意ではなく、アドレスにもなりません |
 | `index` | コントローラー内の位置 |
-| `defaultWeight` | `AnimatorControllerLayer.defaultWeight` そのまま。**ベースレイヤーでは実効ウェイトではありません** — 下記参照 |
+| `defaultWeight` | `AnimatorControllerLayer.defaultWeight` そのまま。**ベースレイヤーでは実効ウェイトではなく**、**クランプもされません** — 下記参照 |
 | `isBaseLayer` | レイヤー 0 のとき true |
 | `blendingMode` | `Override` または `Additive` |
 | `avatarMask` | `null`、または `AvatarMask` アセットの `{guid, name}`。ブレンドツリーと違いマスクは通常のアセットなので、GUID から取得できます |
@@ -522,6 +522,10 @@ AnimatorController から名前を指定してパラメータを削除します�
 レイヤー 0 では `defaultWeight` は実効ウェイトではありません。ベースレイヤーはこの値に関わらず実行時ウェイト 1 で動作し、Animator ウィンドウにもウェイトのスライダーは表示されません。作成直後のコントローラーは、完全に有効なレイヤーに対して `"defaultWeight": 0` を返します。このフィールドはシリアライズされた値の忠実な読み取りであり、その値が参照されないことをクライアントに伝えるのが `isBaseLayer` です。Unity の規則を知らなくても判断できます。
 
 `effectiveWeight` は意図的に用意していません。実行時ウェイトはアセットではなく生きた `Animator` の性質であり、ここで計算すると推測を読み取り結果として提示することになります。
+
+### `defaultWeight` はクランプされません
+
+意味を持つ範囲は 0 〜 1 ですが、それを強制する仕組みはありません。6000.0.80f1 での実測では、Unity は `5` も `-2` もそのまま格納し、そのまま読み戻します。したがってこのエンドポイントも拒否しません。拒否すると API がアセットや Inspector のデータモデルより狭くなるためで、`effectiveWeight` を用意しない理由と同じです。0〜1 の外の値もそのまま往復します。実行時にどう扱われるかは Unity の領分です。
 
 ---
 
@@ -547,7 +551,7 @@ AnimatorController にレイヤーを追加します。`PATCH` が受け付け�
 | フィールド | 必須 | 説明 |
 |-------|----------|-------------|
 | `name` | ✅ | レイヤー名 |
-| `defaultWeight` | ❌ | レイヤーの既定ウェイト(0〜1)。追加レイヤーの既定値は 0 |
+| `defaultWeight` | ❌ | レイヤーの既定ウェイト。意味を持つのは 0〜1 ですが、**クランプされません**(下記参照)。追加レイヤーの既定値は 0 |
 | `weight` | ❌ | `defaultWeight` の別名として受け付けます |
 | `blendingMode` | ❌ | `Override` または `Additive` |
 | `avatarMask` | ❌ | `AvatarMask` アセットの `{guid}` |

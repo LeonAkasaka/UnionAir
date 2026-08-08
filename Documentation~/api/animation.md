@@ -314,7 +314,7 @@ Returns the full AnimatorController structure: parameters, layers, states, trans
     {
       "name": "Base Layer",
       "index": 0,
-      "defaultWeight": 1.0,
+      "defaultWeight": 0.0,
       "isBaseLayer": true,
       "blendingMode": "Override",
       "avatarMask": null,
@@ -506,7 +506,7 @@ Layers are addressed by `layerIndex`, never by name: Unity does not enforce uniq
 |-------|-------------|
 | `name` | Layer name. Not unique, and not an address |
 | `index` | Position in the controller |
-| `defaultWeight` | `AnimatorControllerLayer.defaultWeight`, verbatim. **Not the weight in effect on the base layer** — see below |
+| `defaultWeight` | `AnimatorControllerLayer.defaultWeight`, verbatim. **Not the weight in effect on the base layer**, and **not clamped** — see below |
 | `isBaseLayer` | True for layer 0 |
 | `blendingMode` | `Override` or `Additive` |
 | `avatarMask` | `null`, or `{guid, name}` of an `AvatarMask` asset. Unlike a blend tree, a mask is an ordinary asset and the GUID is fetchable |
@@ -519,6 +519,10 @@ Layers are addressed by `layerIndex`, never by name: Unity does not enforce uniq
 For layer 0, `defaultWeight` is not the weight in effect. The base layer runs at 1 whatever the field holds, and the Animator window shows no weight slider for it — a freshly created controller reports `"defaultWeight": 0` on a layer that is fully active. The field is a faithful reading of the serialized value, and `isBaseLayer` is what tells a client the value is not consulted, without the client having to know Unity's rule.
 
 There is deliberately no `effectiveWeight`. Runtime weight belongs to a live `Animator`, not to the asset, and computing it here would be a guess presented as a reading.
+
+### `defaultWeight` is not clamped
+
+The meaningful range is 0 to 1, and nothing enforces it. Measured on 6000.0.80f1, Unity stores `5` and `-2` verbatim and reads them back unchanged, so this endpoint does not refuse them either — refusing would make the API narrower than the asset and than the Inspector's own data model, which is the same reason there is no `effectiveWeight`. A value outside 0–1 round-trips; what it does at runtime is Unity's business.
 
 ---
 
@@ -544,7 +548,7 @@ Adds a layer to an AnimatorController. Every setting `PATCH` accepts may be supp
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | ✅ | Layer name |
-| `defaultWeight` | ❌ | Default layer weight (0–1). Additional layers default to 0 |
+| `defaultWeight` | ❌ | Default layer weight. Meaningful over 0–1; **not clamped** — see below. Additional layers default to 0 |
 | `weight` | ❌ | Accepted as a synonym for `defaultWeight` |
 | `blendingMode` | ❌ | `Override` or `Additive` |
 | `avatarMask` | ❌ | `{guid}` of an `AvatarMask` asset |
