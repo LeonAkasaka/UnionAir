@@ -330,7 +330,7 @@ Every `motion` carries a `type`, and a state with no motion has `"motion": null`
 
 | `type` | Meaning |
 |--------|---------|
-| `AnimationClip` | The motion is a clip. `guid` addresses it. |
+| `AnimationClip` | The motion is a clip. `guid` addresses the asset holding it, which is the clip itself only when `clipsAtPath` is `1`. |
 | `BlendTree` | The motion is a blend tree owned by this controller. `guid` is always `null`. |
 | `Unknown` | A `Motion` subclass this version does not describe. Reported rather than presented as one of the above. `guid` is non-null only when the motion is the main asset at its path. |
 
@@ -356,11 +356,11 @@ A blend tree is a sub-asset of the controller and has no GUID, so its structure 
 | `blendType` | `Simple1D`, `SimpleDirectional2D`, `FreeformDirectional2D`, `FreeformCartesian2D`, or `Direct` |
 | `blendParameter` | Parameter driving the blend, or its X axis for 2D types |
 | `blendParameterY` | Parameter driving the Y axis. Consulted by the 2D types only |
-| `useAutomaticThresholds` | Whether Unity recomputes child thresholds. `Simple1D` only |
-| `minThreshold`, `maxThreshold` | Threshold range. `Simple1D` only |
+| `useAutomaticThresholds` | Whether Unity recomputes child thresholds. Consulted by `Simple1D` only |
+| `minThreshold`, `maxThreshold` | Threshold range. Consulted by `Simple1D` only |
 | `children` | Child motions, in order |
 
-`blendParameterY` is reported for every blend type because Unity stores it for every blend type, whether or not the blend consults it. The same applies to a child's `directBlendParameter`, which only `Direct` uses.
+Every field in the table above is present on every blend tree, whatever its `blendType`, because Unity stores them all regardless of which the blend consults -- `blendParameterY` and the threshold fields included, and the same for a child's `directBlendParameter`, which only `Direct` uses. "Consulted by" says which blend types read a field, not which ones report it. The one case where fields are absent is a tree at the depth cap, which carries `truncated` instead.
 
 Each child carries `threshold`, `position` (`{x, y}`, used by the 2D types), `timeScale`, `cycleOffset`, `mirror`, `directBlendParameter`, and a `motion` of exactly the shape above — so a nested blend tree is described like any other.
 

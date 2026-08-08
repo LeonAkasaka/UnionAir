@@ -157,9 +157,17 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// Returns the asset GUID for a path, or <c>null</c> when there is none.
-        /// An in-memory motion and a sub-asset both land on null rather than on an empty
-        /// string, so a client can test one thing to learn whether the motion is fetchable.
+        /// Returns the GUID of the asset at a path, or <c>null</c> when there is no path
+        /// or no GUID for it. A motion that was never saved lands on null rather than on
+        /// an empty string, so a client can test one thing to learn whether there is
+        /// anything to fetch.
+        ///
+        /// Null does not mean "not a sub-asset". <c>GetAssetPath</c> resolves a sub-asset
+        /// to the file that holds it, so an imported clip yields the model file's GUID --
+        /// which is why <see cref="CountClipsAtPath"/> exists to say how precise that GUID
+        /// is. The blend tree case never reaches here at all; it is written as a literal
+        /// null by <see cref="AppendBlendTree"/>, because a blend tree has no file of its
+        /// own to fall back to.
         /// </summary>
         private static string GuidOf(string assetPath)
         {

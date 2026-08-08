@@ -333,7 +333,7 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
 
 | `type` | 意味 |
 |--------|---------|
-| `AnimationClip` | モーションはクリップ。`guid` で参照できる |
+| `AnimationClip` | モーションはクリップ。`guid` はクリップを含むアセットを指し、クリップ自体を一意に指すのは `clipsAtPath` が `1` のときだけ |
 | `BlendTree` | モーションはこのコントローラーが所有するブレンドツリー。`guid` は常に `null` |
 | `Unknown` | このバージョンが記述できない `Motion` 派生型。上の 2 つのどちらかであるかのように見せず、そのまま報告する。`guid` はそのモーションがパス上のメインアセットである場合にのみ非 null |
 
@@ -359,11 +359,11 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
 | `blendType` | `Simple1D`、`SimpleDirectional2D`、`FreeformDirectional2D`、`FreeformCartesian2D`、`Direct` のいずれか |
 | `blendParameter` | ブレンドを駆動するパラメータ。2D タイプでは X 軸 |
 | `blendParameterY` | Y 軸を駆動するパラメータ。2D タイプでのみ参照される |
-| `useAutomaticThresholds` | Unity が子のしきい値を自動計算するか。`Simple1D` のみ |
-| `minThreshold`, `maxThreshold` | しきい値の範囲。`Simple1D` のみ |
+| `useAutomaticThresholds` | Unity が子のしきい値を自動計算するか。`Simple1D` でのみ参照される |
+| `minThreshold`, `maxThreshold` | しきい値の範囲。`Simple1D` でのみ参照される |
 | `children` | 子モーション(順序どおり) |
 
-`blendParameterY` はすべてのブレンドタイプで返します。ブレンドが実際に参照するかどうかに関わらず、Unity がすべてのタイプで値を保持しているためです。`Direct` だけが使う子の `directBlendParameter` も同様です。
+上の表のフィールドは、`blendType` に関わらずすべてのブレンドツリーで返されます。ブレンドが実際に参照するかどうかに関わらず Unity が値を保持しているためで、`blendParameterY` としきい値系のフィールドも、`Direct` だけが使う子の `directBlendParameter` も同様です。「参照される」はどのブレンドタイプがその値を読むかを示すものであって、どのタイプで出力されるかではありません。フィールドが出力されない唯一のケースは深さ上限に達したツリーで、その場合は代わりに `truncated` が付きます。
 
 各子は `threshold`、`position`(`{x, y}`、2D タイプで使用)、`timeScale`、`cycleOffset`、`mirror`、`directBlendParameter`、そして上記とまったく同じ形の `motion` を持ちます。入れ子のブレンドツリーも他と同じように記述されます。
 
