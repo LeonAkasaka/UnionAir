@@ -4,7 +4,7 @@
 
 > **注記**: 本ドキュメントは [英語版](api-reference.md) の翻訳です。内容に乖離がある場合は英語版が優先されます。
 
-ベース URL: 接続時に `<project>/.unionair/endpoint.txt` から読み取ってください。port mode の既定は Automatic であり、固定のデフォルトポートは存在しません。接続を拒否された場合はファイルを読み直してください。手順は [サーバの確認](index.ja.md#2-サーバの確認) にあります。
+ベース URL: `http://localhost:<port>/api/`。port mode の既定は Automatic であり固定のデフォルトポートは存在しないため、実際の URL は接続時に `<project>/.unionair/endpoint.txt` から読み取り、接続を拒否された場合は読み直してください。手順は [サーバの確認](index.ja.md#2-サーバの確認) にあります。
 
 エンドポイントに別の media type の記載がない限り、レスポンスは `Content-Type: application/json; charset=utf-8` で返されます。NUnit 結果のダウンロードは `application/xml` です。レスポンスには CORS を許可するヘッダーが含まれません。`Origin` ヘッダーを持つリクエストは `403` で拒否されるため、ブラウザの `fetch` と XMLHttpRequest は既定で非対応です。ローカル CLI や連携クライアントは `Origin` を送信しないでください。
 JSON レスポンス内の文字列フィールドは制御文字を含め一貫してエスケープされます。
