@@ -287,6 +287,43 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
+        /// Reads an optional nested object that may also be sent as an explicit <c>null</c>.
+        ///
+        /// Three cases have to stay apart for a PATCH whose fields are all optional: the
+        /// field was omitted and must be left alone, the field was sent as <c>null</c> and
+        /// must be cleared, and the field carries an object to apply. <see cref="GetObject"/>
+        /// answers null for the first two alike, which would make "leave it" and "clear it"
+        /// the same request.
+        /// </summary>
+        /// <returns>
+        /// False when the value is neither an object nor <c>null</c>, so the caller can
+        /// reject it rather than guess.
+        /// </returns>
+        public static bool TryGetObjectOrNullValue(
+            string json,
+            string key,
+            out string value,
+            out bool isNull,
+            out bool present)
+        {
+            value = null;
+            isNull = false;
+            present = HasTopLevelField(json, key);
+            if (!present) return true;
+
+            value = GetObject(json, key);
+            if (value != null) return true;
+
+            var token = FindToken(json, key);
+            if (token != null && token.Trim() == "null")
+            {
+                isNull = true;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Extracts a nested JSON object as a raw substring from a flat JSON body.
         /// Returns null when the key is absent.
         /// </summary>

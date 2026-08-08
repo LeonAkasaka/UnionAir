@@ -334,8 +334,13 @@ Returns the full AnimatorController structure: parameters, layers, states, trans
     {
       "name": "Base Layer",
       "index": 0,
-      "weight": 1.0,
+      "defaultWeight": 0.0,
+      "isBaseLayer": true,
       "blendingMode": "Override",
+      "avatarMask": null,
+      "iKPass": false,
+      "syncedLayerIndex": -1,
+      "syncedLayerAffectsTiming": false,
       "states": [
         {
           "name": "Idle",
@@ -513,9 +518,37 @@ Removes a parameter from an AnimatorController by name.
 
 ---
 
+## Layer fields
+
+Layers are addressed by `layerIndex`, never by name: Unity does not enforce unique layer names, and the state and transition endpoints already address layers by index.
+
+| Field | Description |
+|-------|-------------|
+| `name` | Layer name. Not unique, and not an address |
+| `index` | Position in the controller |
+| `defaultWeight` | `AnimatorControllerLayer.defaultWeight`, verbatim. **Not the weight in effect on the base layer**, and **not clamped** — see below |
+| `isBaseLayer` | True for layer 0 |
+| `blendingMode` | `Override` or `Additive` |
+| `avatarMask` | `null`, or `{guid, name}` of an `AvatarMask` asset. Unlike a blend tree, a mask is an ordinary asset and the GUID is fetchable |
+| `iKPass` | Whether the layer runs an IK pass |
+| `syncedLayerIndex` | Index of the layer this one takes its state machine from, or `-1` when not synced |
+| `syncedLayerAffectsTiming` | Only consulted when the layer is synced |
+
+### `defaultWeight` on the base layer
+
+For layer 0, `defaultWeight` is not the weight in effect. The base layer runs at 1 whatever the field holds, and the Animator window shows no weight slider for it — a freshly created controller reports `"defaultWeight": 0` on a layer that is fully active. The field is a faithful reading of the serialized value, and `isBaseLayer` is what tells a client the value is not consulted, without the client having to know Unity's rule.
+
+There is deliberately no `effectiveWeight`. Runtime weight belongs to a live `Animator`, not to the asset, and computing it here would be a guess presented as a reading.
+
+### `defaultWeight` is not clamped
+
+The meaningful range is 0 to 1, and nothing enforces it. Measured on 6000.0.80f1, Unity stores `5` and `-2` verbatim and reads them back unchanged, so this endpoint does not refuse them either — refusing would make the API narrower than the asset and than the Inspector's own data model, which is the same reason there is no `effectiveWeight`. A value outside 0–1 round-trips; what it does at runtime is Unity's business.
+
+---
+
 ## POST /api/assets/animator-controllers/{guid}/layers
 
-Adds a layer to an AnimatorController.
+Adds a layer to an AnimatorController. Every setting `PATCH` accepts may be supplied here, so a masked layer takes one request rather than a create followed by a patch.
 
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
@@ -529,19 +562,116 @@ Adds a layer to an AnimatorController.
 ### Request Body (JSON)
 
 ```json
-{ "name": "Arms", "weight": 1.0 }
+{ "name": "Arms", "defaultWeight": 1.0, "avatarMask": { "guid": "a1b2c3..." } }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | ✅ | Layer name |
-| `weight` | ❌ | Default layer weight (0–1). Additional layers default to 0 |
+| `defaultWeight` | ❌ | Default layer weight. Meaningful over 0–1; **not clamped** — see below. Additional layers default to 0 |
+| `weight` | ❌ | Accepted as a synonym for `defaultWeight` |
+| `blendingMode` | ❌ | `Override` or `Additive` |
+| `avatarMask` | ❌ | `{guid}` of an `AvatarMask` asset |
+| `iKPass` | ❌ | Whether the layer runs an IK pass |
+| `syncedLayerIndex` | ❌ | See `PATCH` for the values accepted |
+| `syncedLayerAffectsTiming` | ❌ | Only meaningful on a synced layer |
 
 ### Response (HTTP 201)
 
 ```json
-{ "added": "Arms", "layerIndex": 1 }
+{ "added": "Arms", "layerIndex": 1, "applied": ["defaultWeight", "avatarMask"] }
 ```
+
+`applied` names the settings that were set. A rejected setting answers `400` and **the layer is not created** — the create is taken back rather than leaving a layer that is half what was asked for.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `name` is missing, or a setting is invalid |
+| 404 | No asset found for the given GUID, or `avatarMask.guid` names no `AvatarMask` |
+| 403 | Asset Write category is disabled |
+
+---
+
+## PATCH /api/assets/animator-controllers/{guid}/layers
+
+Updates one layer. Every field except `layerIndex` is optional, and **an omitted field is left unchanged**.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Request Body (JSON)
+
+```json
+{ "layerIndex": 1, "defaultWeight": 0.5, "avatarMask": null }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `layerIndex` | ✅ | Layer to update |
+| `name`, `defaultWeight`, `weight`, `blendingMode`, `iKPass`, `syncedLayerAffectsTiming` | ❌ | Set when present |
+| `avatarMask` | ❌ | `{guid}` to set, explicit `null` to clear. Omitting it leaves the mask alone — `null` and absent mean different things here |
+| `syncedLayerIndex` | ❌ | `-1` for no sync, or another layer's index |
+
+### Response
+
+```json
+{ "layerIndex": 1, "applied": ["defaultWeight", "avatarMask"] }
+```
+
+### `syncedLayerIndex` is checked before it reaches Unity
+
+An illegal value is rejected with `400` rather than passed through, because Unity answers one by damaging the controller rather than by refusing it. Measured on 6000.0.80f1: pointing a layer at **itself** removed a layer from the controller silently — three layers became two, with no error — and assigning **one index past the last layer** crashed the Editor. The out-of-range case is therefore bounded from the legal side rather than characterised further, since reproducing it costs an Editor session.
+
+Accepted: `-1`, or `0` to `layerCount - 1` other than the layer's own index.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `layerIndex` missing or out of range, an invalid `syncedLayerIndex`, an unknown `blendingMode`, or an `avatarMask` that is neither an object nor `null` |
+| 404 | No asset found for the given GUID, or `avatarMask.guid` names no `AvatarMask` |
+| 403 | Asset Write category is disabled |
+
+---
+
+## DELETE /api/assets/animator-controllers/{guid}/layers
+
+Removes one layer. The layer's `AnimatorStateMachine` is a sub-asset of the controller and is destroyed with it.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Request Body (JSON)
+
+```json
+{ "layerIndex": 1 }
+```
+
+### Response
+
+```json
+{ "removed": "Arms", "layerIndex": 1, "layerCount": 1 }
+```
+
+### Layer 0 cannot be deleted
+
+`AnimatorController.RemoveLayer(0)` does not refuse. Measured on 6000.0.80f1 it removes the base layer and promotes the next one, and on a single-layer controller it leaves a controller with **zero layers**, which no other endpoint can repair. The request answers `400` instead.
+
+### A layer that another layer syncs to cannot be deleted
+
+Removing a layer shifts every higher index down by one, and nothing fixes up a `syncedLayerIndex` that pointed at or above it — a reference can end up naming the wrong layer, or the layer itself, which is the case measured to remove a layer silently. Such a request answers `400` naming the layer in the way; clear that layer's `syncedLayerIndex` first.
+
+Deleting a layer that is *itself* synced is fine. Its sync is cleared before removal, because `RemoveLayer` does not destroy the state machine of a synced layer and would otherwise leave it in the asset with no layer referring to it.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `layerIndex` missing, out of range, `0`, or a layer another layer syncs to |
+| 404 | No asset found for the given GUID |
+| 403 | Asset Write category is disabled |
 
 ---
 

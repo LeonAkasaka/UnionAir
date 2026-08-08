@@ -337,8 +337,13 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
     {
       "name": "Base Layer",
       "index": 0,
-      "weight": 1.0,
+      "defaultWeight": 0.0,
+      "isBaseLayer": true,
       "blendingMode": "Override",
+      "avatarMask": null,
+      "iKPass": false,
+      "syncedLayerIndex": -1,
+      "syncedLayerAffectsTiming": false,
       "states": [
         {
           "name": "Idle",
@@ -516,9 +521,37 @@ AnimatorController から名前を指定してパラメータを削除します�
 
 ---
 
+## レイヤーのフィールド
+
+レイヤーは名前ではなく `layerIndex` で指定します。Unity はレイヤー名の一意性を保証せず、ステートとトランジションのエンドポイントも既にインデックスでレイヤーを指定しているためです。
+
+| フィールド | 説明 |
+|-------|-------------|
+| `name` | レイヤー名。一意ではなく、アドレスにもなりません |
+| `index` | コントローラー内の位置 |
+| `defaultWeight` | `AnimatorControllerLayer.defaultWeight` そのまま。**ベースレイヤーでは実効ウェイトではなく**、**クランプもされません** — 下記参照 |
+| `isBaseLayer` | レイヤー 0 のとき true |
+| `blendingMode` | `Override` または `Additive` |
+| `avatarMask` | `null`、または `AvatarMask` アセットの `{guid, name}`。ブレンドツリーと違いマスクは通常のアセットなので、GUID から取得できます |
+| `iKPass` | このレイヤーが IK パスを実行するか |
+| `syncedLayerIndex` | ステートマシンを借りる先のレイヤーのインデックス。同期していなければ `-1` |
+| `syncedLayerAffectsTiming` | 同期しているレイヤーでのみ参照されます |
+
+### ベースレイヤーの `defaultWeight`
+
+レイヤー 0 では `defaultWeight` は実効ウェイトではありません。ベースレイヤーはこの値に関わらず実行時ウェイト 1 で動作し、Animator ウィンドウにもウェイトのスライダーは表示されません。作成直後のコントローラーは、完全に有効なレイヤーに対して `"defaultWeight": 0` を返します。このフィールドはシリアライズされた値の忠実な読み取りであり、その値が参照されないことをクライアントに伝えるのが `isBaseLayer` です。Unity の規則を知らなくても判断できます。
+
+`effectiveWeight` は意図的に用意していません。実行時ウェイトはアセットではなく生きた `Animator` の性質であり、ここで計算すると推測を読み取り結果として提示することになります。
+
+### `defaultWeight` はクランプされません
+
+意味を持つ範囲は 0 〜 1 ですが、それを強制する仕組みはありません。6000.0.80f1 での実測では、Unity は `5` も `-2` もそのまま格納し、そのまま読み戻します。したがってこのエンドポイントも拒否しません。拒否すると API がアセットや Inspector のデータモデルより狭くなるためで、`effectiveWeight` を用意しない理由と同じです。0〜1 の外の値もそのまま往復します。実行時にどう扱われるかは Unity の領分です。
+
+---
+
 ## POST /api/assets/animator-controllers/{guid}/layers
 
-AnimatorController にレイヤーを追加します。
+AnimatorController にレイヤーを追加します。`PATCH` が受け付ける設定はすべてここでも指定できるため、マスク付きレイヤーの作成が「作成してから更新」ではなく 1 リクエストで済みます。
 
 > Asset Write カテゴリが有効な場合のみ呼び出せます。
 > Play モード中は `409 Conflict` を返します。
@@ -532,19 +565,116 @@ AnimatorController にレイヤーを追加します。
 ### リクエストボディ(JSON)
 
 ```json
-{ "name": "Arms", "weight": 1.0 }
+{ "name": "Arms", "defaultWeight": 1.0, "avatarMask": { "guid": "a1b2c3..." } }
 ```
 
 | フィールド | 必須 | 説明 |
 |-------|----------|-------------|
 | `name` | ✅ | レイヤー名 |
-| `weight` | ❌ | 既定のレイヤーウェイト(0〜1)。追加レイヤーの既定は 0 |
+| `defaultWeight` | ❌ | レイヤーの既定ウェイト。意味を持つのは 0〜1 ですが、**クランプされません**(下記参照)。追加レイヤーの既定値は 0 |
+| `weight` | ❌ | `defaultWeight` の別名として受け付けます |
+| `blendingMode` | ❌ | `Override` または `Additive` |
+| `avatarMask` | ❌ | `AvatarMask` アセットの `{guid}` |
+| `iKPass` | ❌ | IK パスを実行するか |
+| `syncedLayerIndex` | ❌ | 受け付ける値は `PATCH` を参照 |
+| `syncedLayerAffectsTiming` | ❌ | 同期レイヤーでのみ意味を持ちます |
 
 ### レスポンス(HTTP 201)
 
 ```json
-{ "added": "Arms", "layerIndex": 1 }
+{ "added": "Arms", "layerIndex": 1, "applied": ["defaultWeight", "avatarMask"] }
 ```
+
+`applied` は実際に設定されたフィールドを列挙します。設定が 1 つでも拒否された場合は `400` を返し、**レイヤーは作成されません**。要求の一部だけが反映されたレイヤーを残すのではなく、作成ごと取り消します。
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | `name` の欠落、または設定値が不正 |
+| 404 | 指定 GUID のアセットが見つからない、または `avatarMask.guid` が `AvatarMask` を指していない |
+| 403 | Asset Write カテゴリが無効 |
+
+---
+
+## PATCH /api/assets/animator-controllers/{guid}/layers
+
+レイヤーを 1 つ更新します。`layerIndex` 以外はすべて省略可能で、**省略したフィールドは変更されません**。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### リクエストボディ(JSON)
+
+```json
+{ "layerIndex": 1, "defaultWeight": 0.5, "avatarMask": null }
+```
+
+| フィールド | 必須 | 説明 |
+|-------|----------|-------------|
+| `layerIndex` | ✅ | 更新対象のレイヤー |
+| `name`、`defaultWeight`、`weight`、`blendingMode`、`iKPass`、`syncedLayerAffectsTiming` | ❌ | 指定されたときのみ設定 |
+| `avatarMask` | ❌ | `{guid}` で設定、明示的な `null` で解除。省略した場合はマスクをそのまま維持します。ここでは `null` と省略は別の意味です |
+| `syncedLayerIndex` | ❌ | 同期しないなら `-1`、または他のレイヤーのインデックス |
+
+### レスポンス
+
+```json
+{ "layerIndex": 1, "applied": ["defaultWeight", "avatarMask"] }
+```
+
+### `syncedLayerIndex` は Unity に渡す前に検証します
+
+不正な値は素通しせず `400` で拒否します。Unity は不正な値を拒否するのではなく、コントローラーを壊すことで応答するためです。6000.0.80f1 での実測では、レイヤーを**自分自身**に向けるとエラーも例外もなくレイヤーが 1 つ消え(3 レイヤーが 2 レイヤーになる)、**最終インデックスの 1 つ先**を代入すると Editor がクラッシュしました。そのため範囲外の挙動はこれ以上特性化せず、正当な側から境界を定めています。再現には Editor のセッションを 1 つ失う必要があるためです。
+
+受け付ける値: `-1`、または自分自身のインデックスを除く `0` 〜 `layerCount - 1`。
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | `layerIndex` の欠落・範囲外、不正な `syncedLayerIndex`、未知の `blendingMode`、オブジェクトでも `null` でもない `avatarMask` |
+| 404 | 指定 GUID のアセットが見つからない、または `avatarMask.guid` が `AvatarMask` を指していない |
+| 403 | Asset Write カテゴリが無効 |
+
+---
+
+## DELETE /api/assets/animator-controllers/{guid}/layers
+
+レイヤーを 1 つ削除します。そのレイヤーの `AnimatorStateMachine` はコントローラーが所有するサブアセットで、一緒に破棄されます。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### リクエストボディ(JSON)
+
+```json
+{ "layerIndex": 1 }
+```
+
+### レスポンス
+
+```json
+{ "removed": "Arms", "layerIndex": 1, "layerCount": 1 }
+```
+
+### レイヤー 0 は削除できません
+
+`AnimatorController.RemoveLayer(0)` は拒否しません。6000.0.80f1 での実測では、ベースレイヤーを削除して次のレイヤーを繰り上げ、レイヤーが 1 つしかないコントローラーでは**レイヤー 0 個**の状態になります。これは他のどのエンドポイントでも修復できません。そのため `400` を返します。
+
+### 他のレイヤーが同期しているレイヤーは削除できません
+
+レイヤーを削除すると、それより大きいインデックスはすべて 1 つずつ繰り下がりますが、そのレイヤーを指していた `syncedLayerIndex` は補正されません。参照が別のレイヤーを指してしまうことも、自分自身を指してしまうこともあり、後者は前述のとおりレイヤーが黙って消えるケースです。このようなリクエストは、妨げになっているレイヤーを名指しして `400` を返します。先にそのレイヤーの `syncedLayerIndex` を解除してください。
+
+削除対象のレイヤー**自身**が同期している場合は問題ありません。削除前に同期を解除します。`RemoveLayer` は同期レイヤーのステートマシンを破棄しないため、解除しないとどのレイヤーからも参照されないステートマシンがアセットに残ります。
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | `layerIndex` の欠落・範囲外・`0`、または他のレイヤーが同期しているレイヤー |
+| 404 | 指定 GUID のアセットが見つからない |
+| 403 | Asset Write カテゴリが無効 |
 
 ---
 
