@@ -58,6 +58,11 @@ namespace LeonAkasaka.UnionAir.Editor
             var controller = LoadController(guid, response, out var assetPath);
             if (controller == null) return;
 
+            // Shared across every motion in this response: several states commonly
+            // resolve to the same imported model file, and counting its clips is a
+            // sub-asset scan worth doing once per path rather than once per state.
+            var clipCountByPath = new Dictionary<string, int>();
+
             var sb = new StringBuilder();
             sb.Append("{");
             sb.Append($"\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",");
@@ -116,17 +121,9 @@ namespace LeonAkasaka.UnionAir.Editor
                     sb.Append($"\"isDefault\":{(sm.defaultState == state ? "true" : "false")},");
 
                     // Motion
-                    var motion = controller.GetStateEffectiveMotion(state, li);
-                    if (motion != null)
-                    {
-                        var motionPath = AssetDatabase.GetAssetPath(motion);
-                        var motionGuid = AssetDatabase.AssetPathToGUID(motionPath);
-                        sb.Append($"\"motion\":{{\"guid\":\"{RestResponse.EscapeJson(motionGuid)}\",\"name\":\"{RestResponse.EscapeJson(motion.name)}\"}},");
-                    }
-                    else
-                    {
-                        sb.Append("\"motion\":null,");
-                    }
+                    sb.Append("\"motion\":");
+                    MotionJson.Append(sb, controller.GetStateEffectiveMotion(state, li), clipCountByPath);
+                    sb.Append(",");
 
                     // Transitions
                     sb.Append("\"transitions\":[");
