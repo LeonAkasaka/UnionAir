@@ -701,7 +701,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("DELETE", "{guid}/curves",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Removes curves from an AnimationClip by binding. Each binding requires relativePath, type, and property. 'property' is the serialized name GET returns, not the shorthand POST accepts: writing 'localPosition.y' stores 'm_LocalPosition.x/.y/.z', and each is removed separately. A binding that matches nothing is reported in 'errors' with the names that are bound there; 'removed' lists only bindings that were present before and absent after.",
+            Summary = "Removes curves from an AnimationClip by binding. Each binding requires relativePath, type, and property. 'property' is the serialized name GET returns. Adding expands a Transform vector property into all components -- writing 'localPosition.y' stores 'm_LocalPosition.x/.y/.z' -- while removal is exact, so each component is removed separately. A binding that matches nothing is reported in 'errors' with the names that are bound there; 'removed' lists only bindings that were present before and absent after.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "bindings" },
             RequestExample = "{\"bindings\":[{\"relativePath\":\"Hips\",\"type\":\"Transform\",\"property\":\"m_LocalPosition.y\"}]}",

@@ -206,9 +206,13 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 
 ### `property` には `GET` が返す名前を指定します
 
-**書き込み時に指定した名前とは限りません。** `POST .../curves` は `localPosition.y` のような略記を受け付け、Unity がこれをシリアライズ済みバインディング `m_LocalPosition.x`、`m_LocalPosition.y`、`m_LocalPosition.z` に展開します。`GET /api/assets/animation-clips/{guid}` が返すのはこの展開後の名前で、`DELETE` が対象にするのもこちらです。
+**書き込み時に指定した名前とは限りません。** 追加と削除で経由する Unity API が異なるためです。
 
-1 つのバインディングはちょうど 1 本のカーブを指すため、`m_LocalPosition.y` を削除しても `.x` と `.z` は残ります。展開されたプロパティをまとめて消すには、各成分を列挙してください。
+`POST .../curves` は `AnimationClip.SetCurve` 経由で書き込みます。これは Transform のベクタープロパティを全成分に展開します。`localPosition.y` に書いたカーブは `m_LocalPosition.x`、`.y`、`.z` の 3 バインディングとして保存され、指定しなかった成分にはそのプロパティの既定値が、カーブ全長にわたる定数として入ります(position なら `0`、scale なら `1`)。1 軸だけアニメーションさせたつもりでも、残り 2 軸が固定されます。
+
+展開するのは `SetCurve` であって略記ではありません。シリアライズ済みの名前 `m_LocalPosition.y` を渡しても同じように展開されます。対象は Transform の position、scale、euler angles で、`Light.m_Intensity` のようなスカラーや `Light.m_Color.r` のような色の 1 チャンネルはそれぞれ 1 バインディングとして保存されます。
+
+`DELETE .../curves` は `AnimationUtility.SetEditorCurve` 経由で削除します。こちらは厳密で、1 エントリが 1 バインディングを指します。したがって `m_LocalPosition.y` を削除しても `.x` と `.z` は残り、展開されたプロパティをまとめて消すには各成分を列挙する必要があります。
 
 クリップ上のどのバインディングにも一致しない `property` は `errors` に報告され、メッセージにはその相対パスと型にバインドされているプロパティ名が列挙されます。失敗した応答から正しい名前を読み取れます。
 

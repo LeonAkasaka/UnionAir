@@ -203,9 +203,13 @@ Removes curves from an AnimationClip by binding. Works for both float curves and
 
 ### `property` uses the name `GET` returns
 
-**This is not always the name you wrote.** `POST .../curves` accepts a shorthand such as `localPosition.y`, and Unity expands it into the serialized bindings `m_LocalPosition.x`, `m_LocalPosition.y`, and `m_LocalPosition.z`. `GET /api/assets/animation-clips/{guid}` reports those serialized names, and they are what `DELETE` addresses.
+**This is not always the name you wrote**, because adding and removing go through different Unity APIs.
 
-Each binding names exactly one curve, so removing `m_LocalPosition.y` leaves `.x` and `.z` in place. Removing a whole expanded property means listing each component.
+`POST .../curves` writes through `AnimationClip.SetCurve`, which expands a Transform vector property into all of its components. A curve written on `localPosition.y` is stored as three bindings — `m_LocalPosition.x`, `.y`, and `.z` — and the components you did not ask for are filled with that property's default value, held constant for the length of the curve: `0` for position, `1` for scale. Animating one axis therefore pins the other two.
+
+The expansion belongs to `SetCurve`, not to the shorthand: passing the serialized name `m_LocalPosition.y` expands identically. It applies to Transform's position, scale, and euler angles; a scalar such as `Light.m_Intensity`, and a single colour channel such as `Light.m_Color.r`, are each stored as one binding.
+
+`DELETE .../curves` removes through `AnimationUtility.SetEditorCurve`, which is exact: one entry addresses one binding. So removing `m_LocalPosition.y` leaves `.x` and `.z` in place, and removing a whole expanded property means listing each component.
 
 A `property` that matches no binding on the clip is reported in `errors`, and the message lists the property names that are bound at that path and type, so the correct name can be read off the failure.
 
