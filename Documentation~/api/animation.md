@@ -5,6 +5,26 @@ Base URL: `http://localhost:<port>/api/`, read from `<project>/.unionair/endpoin
 
 ---
 
+## Undo
+
+Some animation writes can be taken back with Ctrl+Z in the Editor and some cannot. The boundary is deliberate rather than incidental, so it is stated here once rather than per endpoint. Measured on Unity 6000.0.80f1.
+
+| Write | Undoable |
+|---|---|
+| AnimatorController structure — parameters, layers, states, transitions | ✅ |
+| AnimationClip curves — `POST` and `DELETE .../curves` | ❌ |
+| Asset creation — `POST /api/assets/animation-clips`, `POST /api/assets/animator-controllers` | ❌ |
+
+**Controller writes are undoable and UnionAir does nothing to make them so.** The `UnityEditor.Animations` editing APIs register their own undo, so a request that adds a state is taken back by one Ctrl+Z. UnionAir adds no registration of its own on these paths, because a second one is redundant.
+
+**Clip curve writes are not undoable, by choice.** These APIs register nothing, and UnionAir does not register on their behalf. An asset write here is saved to disk before the response is sent, so a `200` means the file on disk already changed — recovery belongs to version control rather than to the undo stack. Registering undo would let Ctrl+Z revert the asset in memory while the file kept the written content until some later, unrelated save, leaving a state that is neither before nor after.
+
+**Asset creation is not undoable in Unity itself**, and UnionAir does not change that. Delete the asset to reverse a create.
+
+Scene writes are a different matter and are undoable; see [`api/gameobjects.md`](gameobjects.md).
+
+---
+
 ## POST /api/assets/animation-clips
 
 Creates an AnimationClip asset.
