@@ -301,7 +301,13 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
           "name": "Idle",
           "speed": 1.0,
           "isDefault": true,
-          "motion": { "guid": "d4e5f6...", "name": "IdleClip" },
+          "motion": {
+            "type": "AnimationClip",
+            "guid": "d4e5f6...",
+            "name": "IdleClip",
+            "assetPath": "Assets/Animations/Idle.anim",
+            "clipsAtPath": 1
+          },
           "transitions": [
             {
               "to": "Walk",
@@ -320,6 +326,77 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
   ]
 }
 ```
+
+### モーション
+
+すべての `motion` は `type` を持ちます。モーションが設定されていないステートは `"motion": null` です。
+
+| `type` | 意味 |
+|--------|---------|
+| `AnimationClip` | モーションはクリップ。`guid` で参照できる |
+| `BlendTree` | モーションはこのコントローラーが所有するブレンドツリー。`guid` は常に `null` |
+| `Unknown` | このバージョンが記述できない `Motion` 派生型。上の 2 つのどちらかであるかのように見せず、そのまま報告する |
+
+削除されたモーションアセットは `Unknown` ではなく `"motion": null` になります。型を調べる前に、Unity が失われた参照を null として解決するためです。
+
+#### AnimationClip
+
+| フィールド | 説明 |
+|-------|-------------|
+| `guid` | クリップを含むアセットの GUID。未保存のクリップでは `null` |
+| `name` | クリップ名 |
+| `assetPath` | クリップを含むアセットのパス。無い場合は `null` |
+| `clipsAtPath` | `assetPath` から到達できる AnimationClip の数 |
+
+`clipsAtPath` は `guid` の精度を示します。モデルファイルからインポートされたクリップはそのファイルの中にあるため、GUID が指すのはクリップではなく**ファイル**です。`clipsAtPath` が `1` なら GUID は一意に定まります。`1` より大きい場合、`GET /api/assets/animation-clips/{guid}` はインポーターが最初に列挙したクリップを返し、他のテイクは GUID では参照できません。
+
+#### BlendTree
+
+ブレンドツリーはコントローラーのサブアセットであり GUID を持たないため、別途取得させるのではなくインラインで構造を返します。
+
+| フィールド | 説明 |
+|-------|-------------|
+| `blendType` | `Simple1D`、`SimpleDirectional2D`、`FreeformDirectional2D`、`FreeformCartesian2D`、`Direct` のいずれか |
+| `blendParameter` | ブレンドを駆動するパラメータ。2D タイプでは X 軸 |
+| `blendParameterY` | Y 軸を駆動するパラメータ。2D タイプでのみ参照される |
+| `useAutomaticThresholds` | Unity が子のしきい値を自動計算するか。`Simple1D` のみ |
+| `minThreshold`, `maxThreshold` | しきい値の範囲。`Simple1D` のみ |
+| `children` | 子モーション(順序どおり) |
+
+`blendParameterY` はすべてのブレンドタイプで返します。ブレンドが実際に参照するかどうかに関わらず、Unity がすべてのタイプで値を保持しているためです。`Direct` だけが使う子の `directBlendParameter` も同様です。
+
+各子は `threshold`、`position`(`{x, y}`、2D タイプで使用)、`timeScale`、`cycleOffset`、`mirror`、`directBlendParameter`、そして上記とまったく同じ形の `motion` を持ちます。入れ子のブレンドツリーも他と同じように記述されます。
+
+```json
+"motion": {
+  "type": "BlendTree",
+  "guid": null,
+  "name": "Locomotion",
+  "blendType": "Simple1D",
+  "blendParameter": "Speed",
+  "blendParameterY": "",
+  "useAutomaticThresholds": true,
+  "minThreshold": 0.0,
+  "maxThreshold": 0.8,
+  "children": [
+    {
+      "threshold": 0.0,
+      "position": { "x": 0.0, "y": 0.0 },
+      "timeScale": 1.0,
+      "cycleOffset": 0.0,
+      "mirror": false,
+      "directBlendParameter": "",
+      "motion": { "type": "AnimationClip", "guid": "...", "name": "Walk", "assetPath": "...", "clipsAtPath": 1 }
+    }
+  ]
+}
+```
+
+入れ子は深さ 10 まで返します。その深さにあるブレンドツリーは `"truncated": true` を持ち、`children` を**持ちません**。境界と葉を区別できるようにするためで、空の `children` 配列は文字どおり「子が無い」という意味のまま残ります。
+
+### このレスポンスが記述しないもの
+
+サブステートマシンは列挙されません。各レイヤーのルートステートマシン直下のステートだけが現れるため、ステートがサブステートマシンの中にあるレイヤーは `states` が空配列になります。
 
 ### エラー
 
