@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added typed AudioImporter inspection and updates through `GET|PATCH /api/assets/audio-importer/{guid}`. Responses distinguish stored inherited defaults from Unity's platform-effective settings, publish the Editor's platform/codec compatibility catalog, and include final AudioClip metadata. Writes strictly preflight global fields, default sample settings, and atomic platform override creation/update/removal before one `SaveAndReimport`; unchanged requests skip the reimport, and completed imports return structured warning/error diagnostics. Preload policy is modelled inside default/platform sample settings to match Unity 6.
 
+### Fixed
+
+- Consecutive writes through the API accumulated into a single undo entry, so one Ctrl+Z took back all of them. Every scene write path named its undo group with `Undo.SetCurrentGroupName` but never opened one -- that call renames the current group, and `Undo.IncrementCurrentGroup` appeared nowhere in the package. `Undo.GetCurrentGroup` therefore returned the group the previous request was already in, and `Undo.CollapseUndoOperations` merged that request into this one. A hand edit was never affected, because Unity advances the group after a human interaction with the Editor; nothing advances it between two HTTP-triggered main-thread callbacks, which is exactly the case UnionAir is driven in. Measured: adding a component to one object and then to another, then a single Ctrl+Z, removed both. Each write path now opens its own group through a shared `UndoGroups.Begin`, so one request is one undo entry, and a batch request remains the single entry it was always meant to be.
+
 ## [0.5.1] - 2026-08-08
 
 ### Fixed

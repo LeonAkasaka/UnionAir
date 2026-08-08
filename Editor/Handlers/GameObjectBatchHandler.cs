@@ -48,8 +48,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var group = -1;
             if (useUndo)
             {
-                Undo.SetCurrentGroupName("UnionAir: Batch GameObject Operations");
-                group = Undo.GetCurrentGroup();
+                group = UndoGroups.Begin("UnionAir: Batch GameObject Operations");
             }
 
             var results  = new List<(int index, bool success, string pathOrError, string globalObjectId)>();
