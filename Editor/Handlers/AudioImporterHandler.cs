@@ -7,6 +7,8 @@ namespace LeonAkasaka.UnionAir.Editor
     /// <summary>Reads and updates typed AudioImporter settings by asset GUID.</summary>
     internal sealed class AudioImporterHandler
     {
+        private readonly Action<AudioImporter> _saveAndReimport;
+
         private sealed class PreparedPlatformUpdate
         {
             internal AudioImporterPlatformCatalog.Entry Platform;
@@ -15,6 +17,11 @@ namespace LeonAkasaka.UnionAir.Editor
             internal bool RequestedOverride;
             internal AudioImporterSampleSettings RequestedSettings;
             internal bool Changed;
+        }
+
+        internal AudioImporterHandler(Action<AudioImporter> saveAndReimport = null)
+        {
+            _saveAndReimport = saveAndReimport ?? (value => value.SaveAndReimport());
         }
 
         internal void HandleGet(UnionAirResponse response, string guid)
@@ -177,11 +184,27 @@ namespace LeonAkasaka.UnionAir.Editor
 
             try
             {
-                importer.SaveAndReimport();
+                _saveAndReimport(importer);
             }
             catch (Exception ex)
             {
-                RestResponse.SendError(response, "Audio reimport failed: " + ex.Message, 500);
+                string rollbackError;
+                var restored = TryRestoreAfterReimportFailure(
+                    assetPath,
+                    importer,
+                    preparedPlatforms,
+                    originalDefault,
+                    originalForceToMono,
+                    originalNormalize,
+                    normalizeSupported,
+                    originalAmbisonic,
+                    originalBackground,
+                    out rollbackError);
+                var message = "Audio reimport failed: " + ex.Message;
+                message += restored
+                    ? " Original importer settings were restored."
+                    : " Rollback failed: " + rollbackError;
+                RestResponse.SendError(response, message, 500);
                 return;
             }
 
@@ -253,6 +276,109 @@ namespace LeonAkasaka.UnionAir.Editor
                 error = prefix +
                         ".conversionMode supports only 0; Unity exposes no defined non-zero conversion flags.";
                 return false;
+            }
+
+            error = null;
+            return true;
+        }
+
+        private static bool TryRestoreAfterReimportFailure(
+            string assetPath,
+            AudioImporter importer,
+            List<PreparedPlatformUpdate> platforms,
+            AudioImporterSampleSettings defaultSettings,
+            bool forceToMono,
+            bool normalize,
+            bool normalizeSupported,
+            bool ambisonic,
+            bool background,
+            out string error)
+        {
+            try
+            {
+                var rollbackImporter = AssetImporter.GetAtPath(assetPath) as AudioImporter ?? importer;
+                if (rollbackImporter == null)
+                {
+                    error = "The asset no longer has an AudioImporter.";
+                    return false;
+                }
+
+                Restore(
+                    rollbackImporter,
+                    platforms,
+                    defaultSettings,
+                    forceToMono,
+                    normalize,
+                    normalizeSupported,
+                    ambisonic,
+                    background);
+                if (!MatchesOriginal(
+                        rollbackImporter,
+                        platforms,
+                        defaultSettings,
+                        forceToMono,
+                        normalize,
+                        normalizeSupported,
+                        ambisonic,
+                        background,
+                        out error))
+                    return false;
+
+                AssetDatabase.WriteImportSettingsIfDirty(assetPath);
+                error = null;
+                return true;
+            }
+            catch (Exception rollbackException)
+            {
+                error = rollbackException.Message;
+                return false;
+            }
+        }
+
+        private static bool MatchesOriginal(
+            AudioImporter importer,
+            List<PreparedPlatformUpdate> platforms,
+            AudioImporterSampleSettings defaultSettings,
+            bool forceToMono,
+            bool normalize,
+            bool normalizeSupported,
+            bool ambisonic,
+            bool background,
+            out string error)
+        {
+            if (!AudioImporterSettings.Equal(importer.defaultSampleSettings, defaultSettings) ||
+                importer.forceToMono != forceToMono ||
+                importer.ambisonic != ambisonic ||
+                importer.loadInBackground != background)
+            {
+                error = "Unity did not restore the original global/default importer settings.";
+                return false;
+            }
+
+            if (normalizeSupported)
+            {
+                bool restoredNormalize;
+                if (!AudioImporterSettings.TryGetNormalize(importer, out restoredNormalize) ||
+                    restoredNormalize != normalize)
+                {
+                    error = "Unity did not restore the original normalize setting.";
+                    return false;
+                }
+            }
+
+            foreach (var platform in platforms)
+            {
+                if (!platform.Changed) continue;
+                var hasOverride = importer.ContainsSampleSettingsOverride(platform.Platform.Group);
+                if (hasOverride != platform.HadOverride ||
+                    hasOverride && !AudioImporterSettings.Equal(
+                        importer.GetOverrideSampleSettings(platform.Platform.Group),
+                        platform.OriginalSettings))
+                {
+                    error = "Unity did not restore the original override for platform '" +
+                            platform.Platform.Name + "'.";
+                    return false;
+                }
             }
 
             error = null;

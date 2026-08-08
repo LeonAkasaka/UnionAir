@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using NUnit.Framework;
 using UnityEditor;
@@ -197,6 +198,57 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
                 AssetDatabase.DeleteAsset(TestDirectory);
                 AssetDatabase.Refresh();
             }
+        }
+
+        [Test]
+        public void Handler_RestoresImporterSettingsWhenReimportThrows()
+        {
+            CreateWaveAsset();
+            try
+            {
+                var guid = AssetDatabase.AssetPathToGUID(TestAssetPath);
+                var importer = AssetImporter.GetAtPath(TestAssetPath) as AudioImporter;
+                Assert.IsNotNull(importer);
+                var originalForceToMono = importer.forceToMono;
+                var originalDefault = importer.defaultSampleSettings;
+                var changedForceToMono = originalForceToMono ? "false" : "true";
+                var changedQuality = originalDefault.quality < 0.5f ? 0.75f : 0.25f;
+                var handler = new AudioImporterHandler(
+                    value => throw new InvalidOperationException("Forced reimport failure."));
+                var update = new FakeRequest("PATCH")
+                    .WithJsonBody(
+                        "{\"forceToMono\":" + changedForceToMono +
+                        ",\"defaultSampleSettings\":{\"quality\":" +
+                        changedQuality.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                        "},\"platformOverrides\":[{\"platform\":\"Android\",\"override\":true," +
+                        "\"sampleSettings\":{\"compressionFormat\":\"Vorbis\"}}]}");
+                var response = new FakeResponse();
+
+                handler.HandleUpdate(update, response, guid);
+
+                Assert.AreEqual(500, response.StatusCode, response.Body);
+                StringAssert.Contains("Original importer settings were restored", response.Body);
+                AssertOriginalSettings(originalForceToMono, originalDefault);
+
+                AssetDatabase.ImportAsset(TestAssetPath, ImportAssetOptions.ForceSynchronousImport);
+                AssertOriginalSettings(originalForceToMono, originalDefault);
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(TestDirectory);
+                AssetDatabase.Refresh();
+            }
+        }
+
+        private static void AssertOriginalSettings(
+            bool forceToMono,
+            AudioImporterSampleSettings defaultSettings)
+        {
+            var importer = AssetImporter.GetAtPath(TestAssetPath) as AudioImporter;
+            Assert.IsNotNull(importer);
+            Assert.AreEqual(forceToMono, importer.forceToMono);
+            Assert.IsTrue(AudioImporterSettings.Equal(defaultSettings, importer.defaultSampleSettings));
+            Assert.IsFalse(importer.ContainsSampleSettingsOverride(BuildTargetGroup.Android));
         }
 
         private static void CreateWaveAsset()

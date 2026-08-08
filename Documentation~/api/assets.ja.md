@@ -939,6 +939,10 @@ override カタログ、およびインポート後の `AudioClip` メタデー�
 }
 ```
 
+現在の Editor が serialized normalization setting を公開している場合、`normalize` は
+bool です。公開していない場合、GET は `null` を返します。PATCH では引き続き bool が
+必要で、その Editor が設定を更新できない場合は `400` を返します。
+
 `defaultSampleSettings` と各プラットフォームの `inherited` は、保存されている
 default の基準値です。`effective` はそのプラットフォームに対して
 `AudioImporter.GetOverrideSampleSettings()` が返す値です。`override` が `false`

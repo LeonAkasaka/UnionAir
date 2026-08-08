@@ -935,6 +935,10 @@ catalog for this Editor, and the imported `AudioClip` metadata.
 }
 ```
 
+`normalize` is a boolean when the current Editor exposes the serialized normalization
+setting; otherwise GET returns `null`. PATCH still requires a boolean and returns `400`
+when that Editor cannot update the setting.
+
 `defaultSampleSettings` and each platform's `inherited` object are the stored default
 baseline. `effective` is what `AudioImporter.GetOverrideSampleSettings()` reports for
 that platform. When `override` is `false`, Unity may translate the inherited baseline;
