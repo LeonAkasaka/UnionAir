@@ -750,7 +750,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Category = UnionAirEndpointCategories.Read,
             Summary = "Returns the full AnimatorController structure: layers, states, transitions, and parameters. Every 'motion' carries a 'type' of AnimationClip, BlendTree, or Unknown; a blend tree has a null 'guid' and its structure inline, nested trees included. A clip's 'guid' identifies the asset holding it, so 'clipsAtPath' above 1 means it does not identify one clip. Sub-state machines are not enumerated.",
             PathParams = new string[] { "guid" },
-            ResponseExample = "{\"assetPath\":\"Assets/Animations/Character.controller\",\"guid\":\"...\",\"parameters\":[{\"name\":\"Speed\",\"type\":\"Float\",\"defaultFloat\":0.0}],\"layers\":[{\"name\":\"Base Layer\",\"index\":0,\"weight\":0.0,\"blendingMode\":\"Override\",\"states\":[{\"name\":\"Locomotion\",\"speed\":1.0,\"isDefault\":false,\"motion\":{\"type\":\"BlendTree\",\"guid\":null,\"name\":\"Locomotion\",\"blendType\":\"Simple1D\",\"blendParameter\":\"Speed\",\"blendParameterY\":\"\",\"useAutomaticThresholds\":true,\"minThreshold\":0.0,\"maxThreshold\":0.8,\"children\":[{\"threshold\":0.0,\"position\":{\"x\":0.0,\"y\":0.0},\"timeScale\":1.0,\"cycleOffset\":0.0,\"mirror\":false,\"directBlendParameter\":\"\",\"motion\":{\"type\":\"AnimationClip\",\"guid\":\"...\",\"name\":\"WAIT00\",\"assetPath\":\"Assets/Animations/wait.fbx\",\"clipsAtPath\":1}}]},\"transitions\":[]}],\"anyStateTransitions\":[]}]}")]
+            ResponseExample = "{\"assetPath\":\"Assets/Animations/Character.controller\",\"guid\":\"...\",\"parameters\":[{\"name\":\"Speed\",\"type\":\"Float\",\"defaultFloat\":0.0}],\"layers\":[{\"name\":\"Base Layer\",\"index\":0,\"defaultWeight\":0.0,\"isBaseLayer\":true,\"blendingMode\":\"Override\",\"avatarMask\":null,\"iKPass\":false,\"syncedLayerIndex\":-1,\"syncedLayerAffectsTiming\":false,\"states\":[{\"name\":\"Locomotion\",\"speed\":1.0,\"isDefault\":false,\"motion\":{\"type\":\"BlendTree\",\"guid\":null,\"name\":\"Locomotion\",\"blendType\":\"Simple1D\",\"blendParameter\":\"Speed\",\"blendParameterY\":\"\",\"useAutomaticThresholds\":true,\"minThreshold\":0.0,\"maxThreshold\":0.8,\"children\":[{\"threshold\":0.0,\"position\":{\"x\":0.0,\"y\":0.0},\"timeScale\":1.0,\"cycleOffset\":0.0,\"mirror\":false,\"directBlendParameter\":\"\",\"motion\":{\"type\":\"AnimationClip\",\"guid\":\"...\",\"name\":\"WAIT00\",\"assetPath\":\"Assets/Animations/wait.fbx\",\"clipsAtPath\":1}}]},\"transitions\":[]}],\"anyStateTransitions\":[]}]}")]
         private void Detail(UnionAirRequestContext ctx)
             => new AnimatorControllerHandler().HandleRead(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 
@@ -780,14 +780,37 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "{guid}/layers",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Adds a layer to an AnimatorController.",
+            Summary = "Adds a layer to an AnimatorController. Every setting PATCH accepts may be supplied here, so a masked layer takes one request. 'weight' is accepted as a synonym for 'defaultWeight'. 'avatarMask' is {guid} referencing an AvatarMask asset. A rejected setting answers 400 and the layer is not created.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "name" },
-            OptionalBody = new string[] { "weight" },
-            RequestExample = "{\"name\":\"Arms\",\"weight\":1.0}",
-            ResponseExample = "{\"added\":\"Arms\",\"layerIndex\":1}")]
+            OptionalBody = new string[] { "defaultWeight", "weight", "blendingMode", "avatarMask", "iKPass", "syncedLayerIndex", "syncedLayerAffectsTiming" },
+            RequestExample = "{\"name\":\"Arms\",\"defaultWeight\":1.0,\"avatarMask\":{\"guid\":\"...\"}}",
+            ResponseExample = "{\"added\":\"Arms\",\"layerIndex\":1,\"applied\":[\"defaultWeight\",\"avatarMask\"]}")]
         private void AddLayer(UnionAirRequestContext ctx)
             => new AnimatorControllerHandler().HandleAddLayer(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("PATCH", "{guid}/layers",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Updates a layer of an AnimatorController, addressed by 'layerIndex'. Every other field is optional and an omitted field is left unchanged. 'avatarMask' takes {guid} to set and an explicit null to clear. 'syncedLayerIndex' is -1 for no sync, or another layer's index; a value out of range, or the layer's own index, is rejected rather than passed to Unity. 'applied' lists the fields that were set.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "layerIndex" },
+            OptionalBody = new string[] { "name", "defaultWeight", "weight", "blendingMode", "avatarMask", "iKPass", "syncedLayerIndex", "syncedLayerAffectsTiming" },
+            RequestExample = "{\"layerIndex\":1,\"defaultWeight\":0.5,\"avatarMask\":null}",
+            ResponseExample = "{\"layerIndex\":1,\"applied\":[\"defaultWeight\",\"avatarMask\"]}")]
+        private void UpdateLayer(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleUpdateLayer(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("DELETE", "{guid}/layers",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Removes a layer from an AnimatorController, addressed by 'layerIndex'. The layer's state machine is a sub-asset of the controller and is destroyed with it. Layer 0 is the base layer and is rejected with 400: Unity does not refuse the removal, and a controller without a base layer cannot be repaired through any other endpoint.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "layerIndex" },
+            RequestExample = "{\"layerIndex\":1}",
+            ResponseExample = "{\"removed\":\"Arms\",\"layerIndex\":1,\"layerCount\":1}")]
+        private void DeleteLayer(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleDeleteLayer(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 
         [UnionAirEndpoint("POST", "{guid}/states",
             Category = UnionAirEndpointCategories.AssetWrite,

@@ -105,8 +105,39 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append("{");
                 sb.Append($"\"name\":\"{RestResponse.EscapeJson(layer.name)}\",");
                 sb.Append($"\"index\":{li},");
-                sb.Append($"\"weight\":{RestResponse.FormatFloat(layer.defaultWeight)},");
+
+                // defaultWeight, not weight. It is AnimatorControllerLayer.defaultWeight
+                // verbatim, and for layer 0 that is not the weight in effect: the base
+                // layer runs at 1 whatever the field holds, and the Animator window shows
+                // no weight slider for it. Naming the field after the thing it reports
+                // means the number needs no caveat to be read correctly, and isBaseLayer
+                // is what tells a client the rule applies without knowing Unity's.
+                sb.Append($"\"defaultWeight\":{RestResponse.FormatFloat(layer.defaultWeight)},");
+                sb.Append($"\"isBaseLayer\":{(li == 0 ? "true" : "false")},");
                 sb.Append($"\"blendingMode\":\"{layer.blendingMode}\",");
+
+                // An AvatarMask is an ordinary asset with its own GUID, unlike a blend
+                // tree, so this one is fetchable. Null for an unmasked layer, which is
+                // what previously could not be told apart from a masked one at all.
+                sb.Append("\"avatarMask\":");
+                if (layer.avatarMask != null)
+                {
+                    var maskPath = AssetDatabase.GetAssetPath(layer.avatarMask);
+                    var maskGuid = string.IsNullOrEmpty(maskPath) ? null : AssetDatabase.AssetPathToGUID(maskPath);
+                    sb.Append("{\"guid\":");
+                    sb.Append(RestResponse.FormatNullableString(string.IsNullOrEmpty(maskGuid) ? null : maskGuid));
+                    sb.Append(",\"name\":");
+                    sb.Append(RestResponse.FormatNullableString(layer.avatarMask.name));
+                    sb.Append("},");
+                }
+                else
+                {
+                    sb.Append("null,");
+                }
+
+                sb.Append($"\"iKPass\":{RestResponse.FormatBool(layer.iKPass)},");
+                sb.Append($"\"syncedLayerIndex\":{layer.syncedLayerIndex},");
+                sb.Append($"\"syncedLayerAffectsTiming\":{RestResponse.FormatBool(layer.syncedLayerAffectsTiming)},");
 
                 // States
                 sb.Append("\"states\":[");
@@ -268,21 +299,253 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             controller.AddLayer(name);
+            var newIndex = controller.layers.Length - 1;
 
-            var weight = RequestBodyReader.GetFloat(body, "weight");
-            if (weight.HasValue)
+            // The same optional settings PATCH accepts, so a masked layer is one request
+            // rather than a create followed by a patch. "weight" stays accepted alongside
+            // "defaultWeight": a request field naming what it sets was never ambiguous,
+            // and only the response field was misleading.
+            if (!TryApplyLayerSettings(controller, newIndex, body, response, out var applied))
             {
-                var layers = controller.layers;
-                layers[layers.Length - 1].defaultWeight = weight.Value;
-                controller.layers = layers;
+                // The layer exists but the settings did not apply. Take it back rather
+                // than answer 400 over a half-created layer.
+                controller.RemoveLayer(newIndex);
+                EditorUtility.SetDirty(controller);
+                AssetDatabase.SaveAssets();
+                return;
             }
 
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
 
             RestResponse.Send(response,
-                $"{{\"added\":\"{RestResponse.EscapeJson(name)}\",\"layerIndex\":{controller.layers.Length - 1}}}",
+                $"{{\"added\":\"{RestResponse.EscapeJson(name)}\",\"layerIndex\":{newIndex}," +
+                $"\"applied\":[{applied}]}}",
                 201);
+        }
+
+        // ── PATCH /api/assets/animator-controllers/{guid}/layers ─────────────
+
+        public void HandleUpdateLayer(UnionAirRequest request, UnionAirResponse response, string guid)
+        {
+            var controller = LoadController(guid, response, out _);
+            if (controller == null) return;
+
+            var body = RequestBodyReader.ReadString(request);
+            if (!RequestBodyReader.TryGetIntValue(body, "layerIndex", out var layerIndex, out var hasIndex) || !hasIndex)
+            {
+                RestResponse.SendError(response, "Missing or invalid required field: layerIndex", 400);
+                return;
+            }
+
+            if (!AnimatorLayerRules.TryValidateLayerIndex(layerIndex, controller.layers.Length, out var error))
+            {
+                RestResponse.SendError(response, error, 400);
+                return;
+            }
+
+            if (!TryApplyLayerSettings(controller, layerIndex, body, response, out var applied))
+                return;
+
+            EditorUtility.SetDirty(controller);
+            AssetDatabase.SaveAssets();
+
+            RestResponse.Send(response,
+                $"{{\"layerIndex\":{layerIndex},\"applied\":[{applied}]}}");
+        }
+
+        // ── DELETE /api/assets/animator-controllers/{guid}/layers ────────────
+
+        public void HandleDeleteLayer(UnionAirRequest request, UnionAirResponse response, string guid)
+        {
+            var controller = LoadController(guid, response, out _);
+            if (controller == null) return;
+
+            var body = RequestBodyReader.ReadString(request);
+            if (!RequestBodyReader.TryGetIntValue(body, "layerIndex", out var layerIndex, out var hasIndex) || !hasIndex)
+            {
+                RestResponse.SendError(response, "Missing or invalid required field: layerIndex", 400);
+                return;
+            }
+
+            if (!AnimatorLayerRules.TryValidateDelete(layerIndex, controller.layers.Length, out var error))
+            {
+                RestResponse.SendError(response, error, 400);
+                return;
+            }
+
+            var syncTargets = new int[controller.layers.Length];
+            for (int i = 0; i < syncTargets.Length; i++)
+                syncTargets[i] = controller.layers[i].syncedLayerIndex;
+
+            if (!AnimatorLayerRules.TryValidateDeleteAgainstSyncs(layerIndex, syncTargets, out error))
+            {
+                RestResponse.SendError(response, error, 400);
+                return;
+            }
+
+            var removedName = controller.layers[layerIndex].name;
+
+            // A synced layer does not own the state machine RemoveLayer would destroy, so
+            // removing one while it is still synced leaves that state machine in the asset
+            // with no layer referring to it -- measured on 6000.0.80f1: one layer left and
+            // two AnimatorStateMachine sub-assets, in memory and in the .controller file
+            // alike. Clearing the sync first hands ownership back, and the removal is then
+            // clean.
+            if (controller.layers[layerIndex].syncedLayerIndex != AnimatorLayerRules.NotSynced)
+            {
+                var unsynced = controller.layers;
+                unsynced[layerIndex].syncedLayerIndex = AnimatorLayerRules.NotSynced;
+                controller.layers = unsynced;
+            }
+
+            // Through RemoveLayer rather than by rewriting the layers array: the layer's
+            // AnimatorStateMachine is a sub-asset owned by the controller, and RemoveLayer
+            // is what destroys it.
+            controller.RemoveLayer(layerIndex);
+
+            EditorUtility.SetDirty(controller);
+            AssetDatabase.SaveAssets();
+
+            RestResponse.Send(response,
+                $"{{\"removed\":\"{RestResponse.EscapeJson(removedName)}\",\"layerIndex\":{layerIndex}," +
+                $"\"layerCount\":{controller.layers.Length}}}");
+        }
+
+        /// <summary>
+        /// Applies the optional layer settings a request carries, validating every value
+        /// before it reaches Unity. Sends the error response and answers false when a
+        /// value is rejected, so the caller only has to return.
+        /// </summary>
+        /// <param name="applied">JSON array body naming the fields that were set.</param>
+        private static bool TryApplyLayerSettings(
+            UnityEditor.Animations.AnimatorController controller,
+            int layerIndex,
+            string body,
+            UnionAirResponse response,
+            out string applied)
+        {
+            applied = "";
+            var layers = controller.layers;
+            var layer = layers[layerIndex];
+            var names = new List<string>();
+
+            if (RequestBodyReader.TryGetStringValue(body, "name", out var newName, out var hasName) && hasName)
+            {
+                if (string.IsNullOrEmpty(newName))
+                {
+                    RestResponse.SendError(response, "name must not be empty.", 400);
+                    return false;
+                }
+                layer.name = newName;
+                names.Add("name");
+            }
+
+            // defaultWeight is the field; weight is kept as the spelling POST already took.
+            var weightRead = RequestBodyReader.TryGetFloatValue(body, "defaultWeight", out var weight, out var hasWeight);
+            if (!hasWeight)
+                weightRead = RequestBodyReader.TryGetFloatValue(body, "weight", out weight, out hasWeight);
+            if (hasWeight)
+            {
+                if (!weightRead)
+                {
+                    RestResponse.SendError(response, "defaultWeight must be a number.", 400);
+                    return false;
+                }
+                layer.defaultWeight = weight;
+                names.Add("defaultWeight");
+            }
+
+            if (RequestBodyReader.TryGetStringValue(body, "blendingMode", out var blending, out var hasBlending) && hasBlending)
+            {
+                if (!TryParseBlendingMode(blending, out var mode))
+                {
+                    RestResponse.SendError(response, $"Unknown blendingMode: {blending}. Use Override or Additive.", 400);
+                    return false;
+                }
+                layer.blendingMode = mode;
+                names.Add("blendingMode");
+            }
+
+            if (RequestBodyReader.TryGetBoolValue(body, "iKPass", out var ikPass, out var hasIkPass) && hasIkPass)
+            {
+                layer.iKPass = ikPass;
+                names.Add("iKPass");
+            }
+
+            if (RequestBodyReader.TryGetBoolValue(body, "syncedLayerAffectsTiming", out var affectsTiming, out var hasTiming) && hasTiming)
+            {
+                layer.syncedLayerAffectsTiming = affectsTiming;
+                names.Add("syncedLayerAffectsTiming");
+            }
+
+            if (RequestBodyReader.TryGetIntValue(body, "syncedLayerIndex", out var synced, out var hasSynced) && hasSynced)
+            {
+                if (!AnimatorLayerRules.TryValidateSyncedLayerIndex(synced, layerIndex, layers.Length, out var syncError))
+                {
+                    RestResponse.SendError(response, syncError, 400);
+                    return false;
+                }
+                layer.syncedLayerIndex = synced;
+                names.Add("syncedLayerIndex");
+            }
+
+            // Omitted leaves the mask alone; explicit null clears it. GetObject cannot
+            // tell those apart, which is why this reads through TryGetObjectOrNullValue.
+            if (!RequestBodyReader.TryGetObjectOrNullValue(body, "avatarMask", out var maskJson, out var maskIsNull, out var hasMask))
+            {
+                RestResponse.SendError(response, "avatarMask must be an object such as {\"guid\":\"...\"} or null.", 400);
+                return false;
+            }
+            if (hasMask)
+            {
+                if (maskIsNull)
+                {
+                    layer.avatarMask = null;
+                    names.Add("avatarMask");
+                }
+                else
+                {
+                    var maskGuid = RequestBodyReader.GetString(maskJson, "guid");
+                    if (string.IsNullOrEmpty(maskGuid))
+                    {
+                        RestResponse.SendError(response, "avatarMask requires a guid.", 400);
+                        return false;
+                    }
+                    var maskPath = AssetDatabase.GUIDToAssetPath(maskGuid);
+                    var mask = string.IsNullOrEmpty(maskPath) ? null : AssetDatabase.LoadAssetAtPath<AvatarMask>(maskPath);
+                    if (mask == null)
+                    {
+                        RestResponse.SendError(response, $"No AvatarMask found for GUID: {maskGuid}", 404);
+                        return false;
+                    }
+                    layer.avatarMask = mask;
+                    names.Add("avatarMask");
+                }
+            }
+
+            layers[layerIndex] = layer;
+            controller.layers = layers;
+
+            var sb = new StringBuilder();
+            for (int i = 0; i < names.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append($"\"{names[i]}\"");
+            }
+            applied = sb.ToString();
+            return true;
+        }
+
+        private static bool TryParseBlendingMode(string value, out UnityEditor.Animations.AnimatorLayerBlendingMode mode)
+        {
+            switch ((value ?? "").ToLowerInvariant())
+            {
+                case "override": mode = UnityEditor.Animations.AnimatorLayerBlendingMode.Override; return true;
+                case "additive": mode = UnityEditor.Animations.AnimatorLayerBlendingMode.Additive; return true;
+            }
+            mode = UnityEditor.Animations.AnimatorLayerBlendingMode.Override;
+            return false;
         }
 
         // ── POST /api/assets/animator-controllers/{guid}/states ──────────────
