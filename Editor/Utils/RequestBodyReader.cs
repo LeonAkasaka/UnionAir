@@ -209,6 +209,83 @@ namespace LeonAkasaka.UnionAir.Editor
             return null;
         }
 
+        /// <summary>Reads an optional JSON string without coercing scalar tokens to text.</summary>
+        public static bool TryGetStringValue(
+            string json,
+            string key,
+            out string value,
+            out bool present)
+        {
+            value = null;
+            present = HasTopLevelField(json, key);
+            if (!present) return true;
+
+            var token = FindToken(json, key);
+            if (string.IsNullOrEmpty(token)) return false;
+            int position = 0;
+            if (!TryReadJsonString(token, ref position, out value)) return false;
+            SkipWhitespace(token, ref position);
+            return position == token.Length;
+        }
+
+        /// <summary>Reads an optional JSON boolean without accepting strings or numbers.</summary>
+        public static bool TryGetBoolValue(
+            string json,
+            string key,
+            out bool value,
+            out bool present)
+        {
+            value = false;
+            present = HasTopLevelField(json, key);
+            if (!present) return true;
+
+            var token = FindToken(json, key);
+            if (token == null) return false;
+            token = token.Trim();
+            if (token == "true") { value = true; return true; }
+            if (token == "false") { value = false; return true; }
+            return false;
+        }
+
+        /// <summary>Reads an optional JSON integer without accepting quoted values.</summary>
+        public static bool TryGetIntValue(
+            string json,
+            string key,
+            out int value,
+            out bool present)
+        {
+            value = 0;
+            present = HasTopLevelField(json, key);
+            if (!present) return true;
+
+            var token = FindToken(json, key);
+            return token != null && int.TryParse(
+                token.Trim(),
+                System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out value);
+        }
+
+        /// <summary>Reads an optional finite JSON number without accepting quoted values.</summary>
+        public static bool TryGetFloatValue(
+            string json,
+            string key,
+            out float value,
+            out bool present)
+        {
+            value = 0f;
+            present = HasTopLevelField(json, key);
+            if (!present) return true;
+
+            var token = FindToken(json, key);
+            return token != null && float.TryParse(
+                       token.Trim(),
+                       System.Globalization.NumberStyles.Float,
+                       System.Globalization.CultureInfo.InvariantCulture,
+                       out value) &&
+                   !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
         /// <summary>
         /// Extracts a nested JSON object as a raw substring from a flat JSON body.
         /// Returns null when the key is absent.
@@ -473,6 +550,112 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>Returns whether a field is present at the top level of a JSON object.</summary>
         public static bool HasTopLevelField(string json, string key)
             => !string.IsNullOrEmpty(json) && FindTopLevelKey(json, key) >= 0;
+
+        /// <summary>
+        /// Validates that a JSON object contains only the supplied top-level fields.
+        /// </summary>
+        /// <remarks>
+        /// This is intended for write endpoints whose contract rejects unknown and duplicate fields.
+        /// It also validates the complete object framing instead of accepting a valid token followed by
+        /// trailing data.
+        /// </remarks>
+        public static bool TryValidateObjectFields(
+            string json,
+            IEnumerable<string> allowedFields,
+            out string error)
+        {
+            error = null;
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                error = "Request body must be a JSON object.";
+                return false;
+            }
+
+            var allowed = new HashSet<string>(allowedFields, System.StringComparer.Ordinal);
+            var seen = new HashSet<string>(System.StringComparer.Ordinal);
+            int position = 0;
+            SkipWhitespace(json, ref position);
+            if (position >= json.Length || json[position] != '{')
+            {
+                error = "Request body must be a JSON object.";
+                return false;
+            }
+            position++;
+
+            while (true)
+            {
+                SkipWhitespace(json, ref position);
+                if (position >= json.Length)
+                {
+                    error = "Request body is not a well-formed JSON object.";
+                    return false;
+                }
+                if (json[position] == '}')
+                {
+                    position++;
+                    SkipWhitespace(json, ref position);
+                    if (position != json.Length)
+                    {
+                        error = "Request body has trailing content after the JSON object.";
+                        return false;
+                    }
+                    return true;
+                }
+
+                string field;
+                if (!TryReadJsonString(json, ref position, out field))
+                {
+                    error = "Request body contains an invalid object field name.";
+                    return false;
+                }
+                if (!seen.Add(field))
+                {
+                    error = "Duplicate field '" + field + "'.";
+                    return false;
+                }
+                if (!allowed.Contains(field))
+                {
+                    error = "Unknown field '" + field + "'. Allowed fields: " +
+                            string.Join(", ", allowedFields) + ".";
+                    return false;
+                }
+
+                SkipWhitespace(json, ref position);
+                if (position >= json.Length || json[position] != ':')
+                {
+                    error = "Field '" + field + "' is missing its value separator.";
+                    return false;
+                }
+                position++;
+                SkipWhitespace(json, ref position);
+                if (!TrySkipValue(json, ref position))
+                {
+                    error = "Field '" + field + "' is not a well-formed JSON value.";
+                    return false;
+                }
+
+                SkipWhitespace(json, ref position);
+                if (position >= json.Length)
+                {
+                    error = "Request body is not a well-formed JSON object.";
+                    return false;
+                }
+                if (json[position] == '}')
+                    continue;
+                if (json[position] != ',')
+                {
+                    error = "Request body is not a well-formed JSON object.";
+                    return false;
+                }
+                position++;
+                SkipWhitespace(json, ref position);
+                if (position < json.Length && json[position] == '}')
+                {
+                    error = "Request body is not a well-formed JSON object.";
+                    return false;
+                }
+            }
+        }
 
         // ── Private helpers ──────────────────────────────────────────────────────
 

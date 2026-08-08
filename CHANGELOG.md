@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Added typed AudioImporter inspection and updates through `GET|PATCH /api/assets/audio-importer/{guid}`. Responses distinguish stored inherited defaults from Unity's platform-effective settings, publish the Editor's platform/codec compatibility catalog, and include final AudioClip metadata. Writes strictly preflight global fields, default sample settings, and atomic platform override creation/update/removal before one `SaveAndReimport`; unchanged requests skip the reimport, and completed imports return structured warning/error diagnostics. Preload policy is modelled inside default/platform sample settings to match Unity 6.
+
 ## [0.5.1] - 2026-08-08
 
 ### Fixed
