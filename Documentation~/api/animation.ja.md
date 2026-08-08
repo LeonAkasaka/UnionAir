@@ -204,12 +204,24 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 |-----------|-------------|
 | `guid` | AnimationClip アセットの GUID |
 
+### `property` には `GET` が返す名前を指定します
+
+**書き込み時に指定した名前とは限りません。** 追加と削除で経由する Unity API が異なるためです。
+
+`POST .../curves` は `AnimationClip.SetCurve` 経由で書き込みます。これは Transform のベクタープロパティを全成分に展開します。`localPosition.y` に書いたカーブは `m_LocalPosition.x`、`.y`、`.z` の 3 バインディングとして保存され、指定しなかった成分にはそのプロパティの既定値が、カーブ全長にわたる定数として入ります(position なら `0`、scale なら `1`)。1 軸だけアニメーションさせたつもりでも、残り 2 軸が固定されます。
+
+展開するのは `SetCurve` であって略記ではありません。シリアライズ済みの名前 `m_LocalPosition.y` を渡しても同じように展開されます。対象は Transform の position、scale、euler angles で、`Light.m_Intensity` のようなスカラーや `Light.m_Color.r` のような色の 1 チャンネルはそれぞれ 1 バインディングとして保存されます。
+
+`DELETE .../curves` は `AnimationUtility.SetEditorCurve` 経由で削除します。こちらは厳密で、1 エントリが 1 バインディングを指します。したがって `m_LocalPosition.y` を削除しても `.x` と `.z` は残り、展開されたプロパティをまとめて消すには各成分を列挙する必要があります。
+
+クリップ上のどのバインディングにも一致しない `property` は `errors` に報告され、メッセージにはその相対パスと型にバインドされているプロパティ名が列挙されます。失敗した応答から正しい名前を読み取れます。
+
 ### リクエストボディ(JSON)
 
 ```json
 {
   "bindings": [
-    { "relativePath": "Hips", "type": "Transform", "property": "localPosition.y" },
+    { "relativePath": "Hips", "type": "Transform", "property": "m_LocalPosition.y" },
     { "relativePath": "", "type": "UnityEngine.UI.Image", "property": "m_Sprite" }
   ]
 }
@@ -219,8 +231,19 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 
 ```json
 {
-  "removed": ["localPosition.y", "m_Sprite"],
+  "removed": ["m_LocalPosition.y", "m_Sprite"],
   "errors": []
+}
+```
+
+`removed` に載るのは、呼び出し前に存在し呼び出し後に存在しなくなったバインディングだけです。削除できなかったものは `errors` に報告されます。同一リクエスト内で同じバインディングを複数回指定しても、削除も報告も 1 回だけです。エントリはカーブを 1 本指すものであり、繰り返しても 2 本目が消えるわけではありません。
+
+```json
+{
+  "removed": [],
+  "errors": [
+    "No curve bound to 'localPosition.y' on 'Hips' (Transform). Bindings there: m_LocalPosition.x, m_LocalPosition.y, m_LocalPosition.z"
+  ]
 }
 ```
 
@@ -228,7 +251,7 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 
 | ステータス | 原因 |
 |--------|-------|
-| 400 | `bindings` の欠落・空、またはバインディングエントリが不正 |
+| 400 | `bindings` の欠落・空、または 1 件も削除できず失敗が 1 件以上ある。1 件でも削除できていれば、他のエントリが失敗していても `200` を返し、失敗は `errors` に入ります |
 | 404 | 指定 GUID のアセットが見つからない |
 | 403 | Asset Write カテゴリが無効 |
 
