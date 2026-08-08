@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Upgrade Notes
+
+- `DELETE /api/assets/animation-clips/{guid}/curves` answers `400` for a `property` that names no binding on the clip, where it previously answered `200` and listed that name under `removed`. This affects a client that sent the name it wrote rather than the name `GET` returns -- `localPosition.y` instead of `m_LocalPosition.y` -- which is the spelling this endpoint's own documentation used as its example. No such request ever removed a curve, so nothing that worked stops working; what changes is that the failure is now visible to a client that reads the status code rather than the body. Send the serialized property name that `GET /api/assets/animation-clips/{guid}` reports.
+
 ### Fixed
 
 - `DELETE /api/assets/animation-clips/{guid}/curves` removed nothing and reported that it had. It removed float curves with `AnimationClip.SetCurve(path, type, property, null)`, which does not remove a binding -- only the `AnimationUtility` form does -- and it appended every requested binding to `removed` unconditionally, so the response described the request rather than the result. A client deleting a curve received `{"removed":["localPosition.y"],"errors":[]}` and a clip that still held every curve it started with. Object reference curves were already removed correctly and are now covered by the same reporting.
