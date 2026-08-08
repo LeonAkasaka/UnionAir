@@ -468,41 +468,30 @@ namespace LeonAkasaka.UnionAir.Editor
             }
         }
 
+        /// <summary>
+        /// Resolves the <c>type</c> of a curve binding to a Type.
+        ///
+        /// This used to be a hand-written switch of about twenty names with a fallback
+        /// that prepended <c>UnityEngine.</c> to whatever it was given -- so a name that
+        /// already carried the namespace became <c>UnityEngine.UnityEngine.Transform</c>
+        /// and resolved to nothing. Every endpoint outside this file already shared
+        /// <see cref="ObjectRefUtils.ResolveType"/>, which handles both spellings.
+        ///
+        /// The base type argument is load-bearing rather than a tightening. The shared
+        /// resolver falls back to matching on simple name across every loaded assembly
+        /// and returns the first hit, and measured on 6000.0.80f1 the first hit for the
+        /// short UI names is the wrong type: <c>Image</c> reaches
+        /// <c>UnityEngine.UIElements.Image</c>, <c>Slider</c> reaches
+        /// <c>UnityEngine.UIElements.Slider</c>, <c>Button</c> reaches
+        /// <c>UnityEngine.InputForUI.PointerEvent+Button</c>, and <c>Text</c> reaches
+        /// <c>System.Net.Mime.MediaTypeNames+Text</c>. None of those derive from
+        /// <see cref="UnityEngine.Object"/>, so requiring that base type skips them and
+        /// lands on the <c>UnityEngine.UI</c> types the switch named explicitly.
+        ///
+        /// <see cref="UnityEngine.Object"/> rather than <c>Component</c>, because
+        /// <c>GameObject</c> is a binding type here and is not a Component.
+        /// </summary>
         internal static Type ResolveType(string typeName)
-        {
-            switch (typeName)
-            {
-                // Core Unity types
-                case "Transform":               return typeof(Transform);
-                case "Animator":                return typeof(Animator);
-                case "SkinnedMeshRenderer":     return typeof(SkinnedMeshRenderer);
-                case "MeshRenderer":            return typeof(MeshRenderer);
-                case "Light":                   return typeof(Light);
-                case "Camera":                  return typeof(Camera);
-                case "AudioSource":             return typeof(AudioSource);
-                case "SpriteRenderer":          return typeof(SpriteRenderer);
-                case "RectTransform":           return typeof(RectTransform);
-                case "CanvasGroup":             return typeof(CanvasGroup);
-                case "GameObject":              return typeof(GameObject);
-                // UI types (short names)
-                case "Image":                   return typeof(UnityEngine.UI.Image);
-                case "RawImage":                return typeof(UnityEngine.UI.RawImage);
-                case "Text":                    return typeof(UnityEngine.UI.Text);
-                case "Button":                  return typeof(UnityEngine.UI.Button);
-                case "Slider":                  return typeof(UnityEngine.UI.Slider);
-                case "CanvasRenderer":          return typeof(CanvasRenderer);
-                // UI types (fully qualified)
-                case "UnityEngine.UI.Image":    return typeof(UnityEngine.UI.Image);
-                case "UnityEngine.UI.RawImage": return typeof(UnityEngine.UI.RawImage);
-                case "UnityEngine.UI.Text":     return typeof(UnityEngine.UI.Text);
-                case "UnityEngine.UI.Button":   return typeof(UnityEngine.UI.Button);
-                case "UnityEngine.UI.Slider":   return typeof(UnityEngine.UI.Slider);
-            }
-            // Fallback: fully qualified name resolution
-            return Type.GetType(typeName) ??
-                   Type.GetType("UnityEngine." + typeName + ", UnityEngine") ??
-                   Type.GetType("UnityEngine." + typeName + ", UnityEngine.CoreModule") ??
-                   Type.GetType("UnityEngine.UI." + typeName + ", UnityEngine.UI");
-        }
+            => ObjectRefUtils.ResolveType(typeName, typeof(UnityEngine.Object));
     }
 }

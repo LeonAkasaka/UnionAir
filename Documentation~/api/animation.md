@@ -158,7 +158,7 @@ Adds or replaces float curves and/or object reference curves on an AnimationClip
 | Field | Required | Description |
 |-------|----------|-------------|
 | `relativePath` | ✅ | Child path relative to the Animator's GameObject. Use `""` for the Animator's own GameObject |
-| `type` | ✅ | C# type name (e.g. `Transform`, `UnityEngine.UI.Image`). Short names such as `Image` are also accepted |
+| `type` | ✅ | C# type name, short or fully qualified: `Transform` and `UnityEngine.Transform` both resolve, as do `Image` and `UnityEngine.UI.Image`. The type must derive from `UnityEngine.Object`; anything else answers `Unknown type` |
 | `property` | ✅ | Serialized property path (e.g. `localPosition.y`, `m_Sprite`) |
 | `keys[].time` | ✅ | Time in seconds |
 | `keys[].value` | ✅ (float curves) | Float value |

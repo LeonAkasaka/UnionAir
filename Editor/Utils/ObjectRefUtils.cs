@@ -295,6 +295,13 @@ namespace LeonAkasaka.UnionAir.Editor
 
         public static Type ResolveType(string typeName, Type requiredBaseType = null)
         {
+            // Assembly.GetType throws on an empty name rather than answering null, so an
+            // empty type name reached the caller as a 500 carrying the exception text.
+            // Every caller today rejects an empty name before getting here, which is why
+            // it was never seen; a caller that defaults the field instead of requiring it
+            // does reach this.
+            if (string.IsNullOrEmpty(typeName)) return null;
+
             var t = Type.GetType(typeName);
             if (Matches(t, requiredBaseType)) return t;
 
