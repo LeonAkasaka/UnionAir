@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `DELETE /api/assets/animation-clips/{guid}/curves` removed nothing and reported that it had. It removed float curves with `AnimationClip.SetCurve(path, type, property, null)`, which does not remove a binding -- only the `AnimationUtility` form does -- and it appended every requested binding to `removed` unconditionally, so the response described the request rather than the result. A client deleting a curve received `{"removed":["localPosition.y"],"errors":[]}` and a clip that still held every curve it started with. Object reference curves were already removed correctly and are now covered by the same reporting.
+- The same endpoint now addresses bindings by the serialized property name that `GET` returns. `POST .../curves` accepts a shorthand such as `localPosition.y` and Unity expands it into `m_LocalPosition.x/.y/.z`, so the name a client writes is not the name the clip stores and was never the name deletion could match. A `property` that matches nothing is reported in `errors` together with the names that are bound at that path and type, so the correct one can be read off the failure, and `removed` now lists only bindings that were present before the call and absent after it. A request where nothing was removed and at least one binding failed answers `400` rather than `200`, matching how the add endpoint already reports a wholly failed request.
+
 ## [0.5.1] - 2026-08-08
 
 ### Fixed

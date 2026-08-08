@@ -204,12 +204,20 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 |-----------|-------------|
 | `guid` | AnimationClip アセットの GUID |
 
+### `property` には `GET` が返す名前を指定します
+
+**書き込み時に指定した名前とは限りません。** `POST .../curves` は `localPosition.y` のような略記を受け付け、Unity がこれをシリアライズ済みバインディング `m_LocalPosition.x`、`m_LocalPosition.y`、`m_LocalPosition.z` に展開します。`GET /api/assets/animation-clips/{guid}` が返すのはこの展開後の名前で、`DELETE` が対象にするのもこちらです。
+
+1 つのバインディングはちょうど 1 本のカーブを指すため、`m_LocalPosition.y` を削除しても `.x` と `.z` は残ります。展開されたプロパティをまとめて消すには、各成分を列挙してください。
+
+クリップ上のどのバインディングにも一致しない `property` は `errors` に報告され、メッセージにはその相対パスと型にバインドされているプロパティ名が列挙されます。失敗した応答から正しい名前を読み取れます。
+
 ### リクエストボディ(JSON)
 
 ```json
 {
   "bindings": [
-    { "relativePath": "Hips", "type": "Transform", "property": "localPosition.y" },
+    { "relativePath": "Hips", "type": "Transform", "property": "m_LocalPosition.y" },
     { "relativePath": "", "type": "UnityEngine.UI.Image", "property": "m_Sprite" }
   ]
 }
@@ -219,8 +227,19 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 
 ```json
 {
-  "removed": ["localPosition.y", "m_Sprite"],
+  "removed": ["m_LocalPosition.y", "m_Sprite"],
   "errors": []
+}
+```
+
+`removed` に載るのは、呼び出し前に存在し呼び出し後に存在しなくなったバインディングだけです。削除できなかったものは `errors` に報告されます。
+
+```json
+{
+  "removed": [],
+  "errors": [
+    "No curve bound to 'localPosition.y' on 'Hips' (Transform). Bindings there: m_LocalPosition.x, m_LocalPosition.y, m_LocalPosition.z"
+  ]
 }
 ```
 
@@ -228,7 +247,7 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 
 | ステータス | 原因 |
 |--------|-------|
-| 400 | `bindings` の欠落・空、またはバインディングエントリが不正 |
+| 400 | `bindings` の欠落・空、バインディングエントリが不正、または 1 件も削除できず失敗が 1 件以上ある |
 | 404 | 指定 GUID のアセットが見つからない |
 | 403 | Asset Write カテゴリが無効 |
 

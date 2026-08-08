@@ -201,12 +201,20 @@ Removes curves from an AnimationClip by binding. Works for both float curves and
 |-----------|-------------|
 | `guid` | GUID of the AnimationClip asset |
 
+### `property` uses the name `GET` returns
+
+**This is not always the name you wrote.** `POST .../curves` accepts a shorthand such as `localPosition.y`, and Unity expands it into the serialized bindings `m_LocalPosition.x`, `m_LocalPosition.y`, and `m_LocalPosition.z`. `GET /api/assets/animation-clips/{guid}` reports those serialized names, and they are what `DELETE` addresses.
+
+Each binding names exactly one curve, so removing `m_LocalPosition.y` leaves `.x` and `.z` in place. Removing a whole expanded property means listing each component.
+
+A `property` that matches no binding on the clip is reported in `errors`, and the message lists the property names that are bound at that path and type, so the correct name can be read off the failure.
+
 ### Request Body (JSON)
 
 ```json
 {
   "bindings": [
-    { "relativePath": "Hips", "type": "Transform", "property": "localPosition.y" },
+    { "relativePath": "Hips", "type": "Transform", "property": "m_LocalPosition.y" },
     { "relativePath": "", "type": "UnityEngine.UI.Image", "property": "m_Sprite" }
   ]
 }
@@ -216,8 +224,19 @@ Removes curves from an AnimationClip by binding. Works for both float curves and
 
 ```json
 {
-  "removed": ["localPosition.y", "m_Sprite"],
+  "removed": ["m_LocalPosition.y", "m_Sprite"],
   "errors": []
+}
+```
+
+`removed` lists only bindings that were present before the call and absent after it. A binding that could not be removed is reported in `errors` instead.
+
+```json
+{
+  "removed": [],
+  "errors": [
+    "No curve bound to 'localPosition.y' on 'Hips' (Transform). Bindings there: m_LocalPosition.x, m_LocalPosition.y, m_LocalPosition.z"
+  ]
 }
 ```
 
@@ -225,7 +244,7 @@ Removes curves from an AnimationClip by binding. Works for both float curves and
 
 | Status | Cause |
 |--------|-------|
-| 400 | `bindings` is missing or empty, or a binding entry is malformed |
+| 400 | `bindings` is missing or empty, a binding entry is malformed, or nothing was removed and at least one binding failed |
 | 404 | No asset found for the given GUID |
 | 403 | Asset Write category is disabled |
 
