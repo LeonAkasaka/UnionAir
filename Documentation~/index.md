@@ -13,7 +13,7 @@ It allows any HTTP-capable client—such as LLM MCP bridges, development bots, a
 Open **Window > Package Manager**, click **+**, choose **Install package from git URL...**, and enter:
 
 ```
-https://github.com/LeonAkasaka/UnionAir.git#v0.5.0
+https://github.com/LeonAkasaka/UnionAir.git#v0.5.1
 ```
 
 Alternatively, add the dependency to `Packages/manifest.json` directly:
@@ -21,7 +21,7 @@ Alternatively, add the dependency to `Packages/manifest.json` directly:
 ```json
 {
   "dependencies": {
-    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.5.0"
+    "com.leonakasaka.unionair": "https://github.com/LeonAkasaka/UnionAir.git#v0.5.1"
   }
 }
 ```

@@ -6,10 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-08
+
 ### Fixed
 
 - **Copy as curl** now uses the Base URL captured with the request log entry instead of substituting port `8765` when the server is stopped. Commands therefore preserve the actual host and port that received each request, including Automatic port assignments.
 - Every API reference page opened by naming `8765` as the default port, which the same documentation set contradicts: the configured port has defaulted to Automatic since 0.4.0, and the Getting Started guide describes reading `.unionair/endpoint.txt` instead. A client implementer starting from an API page was told a fixed port and had no reason to look for the discovery file when the connection was refused. Every page now gives the Base URL shape without a port and names the discovery file, with the full handshake stated once in the API Reference index that each page already links to. The shell examples on `api/editor.md`, `api/build.md`, `api/compile.md`, and `api/gameobjects.md` use `${BASE_URL}` rather than a hardcoded port, and the `GET /api/help` response sample shows an ephemeral port so it no longer reads as a default.
+- The `GET /api/help` documentation on `api/general.md` had fallen behind the manifest it describes. Its response sample still reported `"version": "0.2.0"` while the endpoint returns the version from `package.json`; the `build` category, added in 0.4.0, was missing from both the category constants and the `category` query filter; the `executableOutput` risk, added alongside it, was missing from the risk values; and `blockedDuring`, which the same release added to every category and endpoint item, was absent from both the response sample and the field table, as was `testRunPolicy`. The endpoint's behavior is unchanged; only the documentation was wrong.
 
 ## [0.5.0] - 2026-08-07
 
@@ -344,7 +347,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 <!-- 0.1.0 and 0.2.0 predate this repository being published and were never tagged,
      so they have no release page to link to. -->
-[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.5.1
 [0.5.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.5.0
 [0.4.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.4.0
 [0.3.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.3.0
