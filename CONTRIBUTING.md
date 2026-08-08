@@ -57,20 +57,26 @@ There is **no CI**. The declared floor is only real if someone compiles against 
 
 `main` is the integration branch and runs ahead of the latest tag. The tag is what identifies a release, so **never move a tag once it is pushed** — consumers resolve it into their `packages-lock.json`, and moving it changes what that record means without changing the record.
 
-The pinned tag in the installation instructions is the version people actually install, and it is the thing that rots quietly, so it is on this list rather than left to memory.
+The pinned tag in the installation instructions is the version people actually install, and it is the thing that rots quietly, so it is on this list rather than left to memory. The same applies to every other value that names a version — in the documentation, in the tag, and on the Release page.
 
 1. Verify `main` across the version range, as [above](#verifying-a-change-across-the-version-range). A release is a promise that the declared floor works.
 2. `package.json` — set `version`.
 3. `CHANGELOG.md` — move `[Unreleased]` into a new `[x.y.z] - YYYY-MM-DD` heading, and update the link definitions at the bottom of the file.
-4. **Update the pinned tag in every install URL.** Eight occurrences, two per file:
-   - `README.md` and `README.ja.md` — the Package Manager Git URL and the `manifest.json` example.
-   - `Documentation~/index.md` and `Documentation~/index.ja.md` — the same two in the Getting Started guide.
+4. **Update every version-pinned value in the documentation.** Ten occurrences across six files:
+   - `README.md` and `README.ja.md` — the Package Manager Git URL and the `manifest.json` example. Two each.
+   - `Documentation~/index.md` and `Documentation~/index.ja.md` — the same two in the Getting Started guide. Two each.
+   - `Documentation~/api/general.md` and `general.ja.md` — the `version` field in the `GET /api/help` response sample. One each.
 
    `package.json`'s `repository.url` is **not** one of them: it identifies the repository, not a version, and stays unpinned.
-5. Commit, then `git tag -a vX.Y.Z`.
+5. Commit, then `git tag -a vX.Y.Z -m "UnionAir X.Y.Z"`. **The tag message is one identifying line — the product name and the version, without the `v`.** A tag cannot be corrected once pushed, so this is the one convention here with no second chance.
 6. `git push origin main vX.Y.Z`.
+7. **Create the GitHub Release from the pushed tag, titled `vX.Y.Z`.** Select the existing tag rather than letting the Release page create one, which would tag a second time from whatever `main` points at. Draft it first if the notes need review; a draft touches no tag and does not move Latest. Mark it as the latest release when publishing.
 
-A UPM Git URL takes a fixed ref only — there is no version range syntax — so step 4 is what decides which version a reader ends up with. Leaving one occurrence behind silently hands that reader the previous release.
+A UPM Git URL takes a fixed ref only — there is no version range syntax — so step 4 is what decides which version a reader ends up with. Leaving one occurrence behind silently hands that reader the previous release. The `/api/help` sample belongs to the same step for the same reason: `HelpHandler` fills that field from `package.json`, so a sample left behind describes a response the server no longer sends.
+
+The tag message identifies the release rather than describing it. What changed belongs in `CHANGELOG.md` and in the Release notes, both of which can be corrected; a tag message is the one artifact in a release that cannot, which makes it the worst place to put prose worth reading. The same practice is common in widely used projects: a single product-and-version line, with the release notes kept out of the tag. Annotation still earns its place without a substantial message: only an annotated tag records a tagger and date, only an annotated tag can be signed, and `git describe` considers annotated tags by default.
+
+`v0.5.0` and `v0.5.1` predate this rule and carry `Release v0.5.0` and `Release v0.5.1`; they stay as they are, since moving a tag to reword it is exactly what the warning above forbids. `v0.3.0` and `v0.4.0` already match it.
 
 ## Known Constraints
 
