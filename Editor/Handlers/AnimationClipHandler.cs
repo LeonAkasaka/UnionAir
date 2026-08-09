@@ -67,13 +67,50 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            var imported = AnimationClipOwnership.IsImported(assetPath, out var importerType);
+            var clipNames = AnimationClipOwnership.ClipNamesAt(assetPath);
+
             var sb = new StringBuilder();
             sb.Append("{");
             sb.Append($"\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",");
             sb.Append($"\"guid\":\"{RestResponse.EscapeJson(guid)}\",");
+
+            // The clip's own name, which assetPath and guid do not give: both identify the
+            // file, and inside an .fbx that file holds the takes rather than being one.
+            sb.Append("\"name\":").Append(RestResponse.FormatNullableString(clip.name)).Append(",");
+
+            // LoadAssetAtPath returns whichever clip the importer lists first, so a path
+            // holding several exposes one by GUID and hides the rest. Addressing an
+            // individual one is a sub-asset problem this endpoint does not solve; saying
+            // that the others exist is what keeps it from presenting one as the whole.
+            sb.Append($"\"clipsAtPath\":{clipNames.Length},");
+            sb.Append("\"clipNames\":[");
+            for (int i = 0; i < clipNames.Length; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(RestResponse.FormatNullableString(clipNames[i]));
+            }
+            sb.Append("],");
+
+            sb.Append($"\"imported\":{RestResponse.FormatBool(imported)},");
+            sb.Append("\"importer\":").Append(RestResponse.FormatNullableString(importerType)).Append(",");
+            sb.Append($"\"writable\":{RestResponse.FormatBool(!imported)},");
+
             sb.Append($"\"frameRate\":{RestResponse.FormatFloat(clip.frameRate)},");
             sb.Append($"\"length\":{RestResponse.FormatFloat(clip.length)},");
+
+            // A WrapMode on the clip object, and not the answer to "does this loop" -- that
+            // is settings.loopTime, which the Inspector labels Loop Time. Reported because
+            // it is real and writable, next to the settings so the two cannot be confused.
             sb.Append($"\"wrapMode\":\"{clip.wrapMode}\",");
+
+            sb.Append("\"settings\":");
+            AnimationClipSettingsJson.Append(sb, AnimationUtility.GetAnimationClipSettings(clip));
+            sb.Append(",");
+
+            sb.Append("\"events\":");
+            AnimationEventJson.Append(sb, AnimationUtility.GetAnimationEvents(clip));
+            sb.Append(",");
 
             // Float curves
             var floatBindings = AnimationUtility.GetCurveBindings(clip);
@@ -147,6 +184,166 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString());
         }
 
+        // ── PATCH /api/assets/animation-clips/{guid} ─────────────────────────
+
+        public void HandleUpdate(UnionAirRequest request, UnionAirResponse response, string guid)
+        {
+            if (!TryLoadWritableClip(guid, response, out var clip, out var assetPath)) return;
+
+            var body = RequestBodyReader.ReadString(request);
+            if (!RequestBodyReader.TryValidateObjectFields(
+                    body, new[] { "frameRate", "wrapMode", "settings" }, out var fieldError))
+            {
+                RestResponse.SendError(response, fieldError, 400);
+                return;
+            }
+
+            // Everything is parsed before the first write, so a request that names one bad
+            // setting leaves the clip as it was rather than partly updated.
+            if (!RequestBodyReader.TryGetFloatValue(body, "frameRate", out var frameRate, out var hasFrameRate))
+            {
+                RestResponse.SendError(response, "frameRate must be a number.", 400);
+                return;
+            }
+            if (hasFrameRate && frameRate <= 0f)
+            {
+                RestResponse.SendError(response, "frameRate must be greater than zero.", 400);
+                return;
+            }
+
+            if (!RequestBodyReader.TryGetStringValue(body, "wrapMode", out var wrapModeStr, out var hasWrapMode))
+            {
+                RestResponse.SendError(response, "wrapMode must be a string.", 400);
+                return;
+            }
+            var wrapMode = clip.wrapMode;
+            if (hasWrapMode && !TryParseWrapMode(wrapModeStr, out wrapMode))
+            {
+                RestResponse.SendError(response,
+                    $"Unknown wrapMode: {wrapModeStr}. Use Once, Loop, PingPong, ClampForever, or Default.", 400);
+                return;
+            }
+
+            var settingsJson = RequestBodyReader.GetObject(body, "settings");
+            var hasSettings = settingsJson != null;
+            if (!hasSettings && RequestBodyReader.HasTopLevelField(body, "settings"))
+            {
+                RestResponse.SendError(response, "settings must be an object.", 400);
+                return;
+            }
+
+            var settings = AnimationUtility.GetAnimationClipSettings(clip);
+            var appliedSettings = new List<string>();
+            if (hasSettings &&
+                !AnimationClipSettingsJson.TryApply(settingsJson, settings, response, out settings, out appliedSettings))
+                return;
+
+            var applied = new List<string>();
+            if (hasFrameRate) { clip.frameRate = frameRate; applied.Add("frameRate"); }
+            if (hasWrapMode) { clip.wrapMode = wrapMode; applied.Add("wrapMode"); }
+            if (hasSettings)
+            {
+                AnimationUtility.SetAnimationClipSettings(clip, settings);
+                foreach (var name in appliedSettings) applied.Add("settings." + name);
+            }
+
+            EditorUtility.SetDirty(clip);
+            AssetDatabase.SaveAssets();
+
+            var sb = new StringBuilder();
+            sb.Append("{\"assetPath\":").Append(RestResponse.FormatNullableString(assetPath));
+            sb.Append(",\"name\":").Append(RestResponse.FormatNullableString(clip.name));
+            sb.Append(",\"applied\":[");
+            for (int i = 0; i < applied.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(RestResponse.FormatNullableString(applied[i]));
+            }
+            sb.Append("],\"settings\":");
+            AnimationClipSettingsJson.Append(sb, AnimationUtility.GetAnimationClipSettings(clip));
+            sb.Append("}");
+            RestResponse.Send(response, sb.ToString());
+        }
+
+        // ── POST /api/assets/animation-clips/{guid}/events ───────────────────
+
+        public void HandleSetEvents(UnionAirRequest request, UnionAirResponse response, string guid)
+        {
+            if (!TryLoadWritableClip(guid, response, out var clip, out var assetPath)) return;
+
+            var body = RequestBodyReader.ReadString(request);
+            if (!RequestBodyReader.TryValidateObjectFields(body, new[] { "events" }, out var fieldError))
+            {
+                RestResponse.SendError(response, fieldError, 400);
+                return;
+            }
+
+            if (!AnimationEventJson.TryParse(body, response, out var events, out var present)) return;
+            if (!present)
+            {
+                RestResponse.SendError(response,
+                    "Missing required field: events. The array replaces every event on the clip; " +
+                    "send [] or use DELETE to clear them.", 400);
+                return;
+            }
+
+            // Replaced wholesale, because that is how Unity stores them: an ordered array
+            // with no identity per entry. Addressing one would mean inventing an identity
+            // the format does not have.
+            AnimationUtility.SetAnimationEvents(clip, events);
+
+            EditorUtility.SetDirty(clip);
+            AssetDatabase.SaveAssets();
+
+            var sb = new StringBuilder();
+            sb.Append("{\"assetPath\":").Append(RestResponse.FormatNullableString(assetPath));
+            sb.Append(",\"eventCount\":").Append(events.Length);
+            sb.Append(",\"events\":");
+            AnimationEventJson.Append(sb, AnimationUtility.GetAnimationEvents(clip));
+            sb.Append("}");
+            RestResponse.Send(response, sb.ToString());
+        }
+
+        // ── DELETE /api/assets/animation-clips/{guid}/events ─────────────────
+
+        public void HandleDeleteEvents(UnionAirRequest request, UnionAirResponse response, string guid)
+        {
+            if (!TryLoadWritableClip(guid, response, out var clip, out var assetPath)) return;
+
+            var removed = AnimationUtility.GetAnimationEvents(clip).Length;
+            AnimationUtility.SetAnimationEvents(clip, new AnimationEvent[0]);
+
+            EditorUtility.SetDirty(clip);
+            AssetDatabase.SaveAssets();
+
+            RestResponse.Send(response,
+                $"{{\"assetPath\":{RestResponse.FormatNullableString(assetPath)},\"removed\":{removed}}}");
+        }
+
+        /// <summary>
+        /// Loads the clip a write addresses, and refuses it when an importer owns the clip.
+        /// </summary>
+        private static bool TryLoadWritableClip(
+            string guid, UnionAirResponse response, out AnimationClip clip, out string assetPath)
+        {
+            clip = null;
+            assetPath = AssetDatabase.GUIDToAssetPath(guid);
+            if (string.IsNullOrEmpty(assetPath))
+            {
+                RestResponse.SendNotFound(response, $"No asset found for GUID: {guid}");
+                return false;
+            }
+
+            clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(assetPath);
+            if (clip == null)
+            {
+                RestResponse.SendError(response, $"Asset is not an AnimationClip: {assetPath}", 400);
+                return false;
+            }
+
+            return !AnimationClipOwnership.RefuseIfImported(assetPath, response);
+        }
+
         public void HandleAddCurves(UnionAirRequest request, UnionAirResponse response, string guid)
         {
             var assetPath = AssetDatabase.GUIDToAssetPath(guid);
@@ -162,6 +359,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 RestResponse.SendError(response, $"Asset is not an AnimationClip: {assetPath}", 400);
                 return;
             }
+
+            // A clip generated by an importer is not an asset a client can write. The write
+            // used to go through and answer 200, and the next reimport threw it away.
+            if (AnimationClipOwnership.RefuseIfImported(assetPath, response)) return;
 
             var body = RequestBodyReader.ReadString(request);
             var addedFloat = new List<string>();
@@ -295,6 +496,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 RestResponse.SendError(response, $"Asset is not an AnimationClip: {assetPath}", 400);
                 return;
             }
+
+            if (AnimationClipOwnership.RefuseIfImported(assetPath, response)) return;
 
             var body = RequestBodyReader.ReadString(request);
             var bindings = RequestBodyReader.GetArray(body, "bindings");
@@ -458,14 +661,30 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static WrapMode ParseWrapMode(string s)
         {
-            switch (s.ToLowerInvariant())
+            TryParseWrapMode(s, out var mode);
+            return mode;
+        }
+
+        /// <summary>
+        /// Parses a wrap mode, separating "not one of these" from Default.
+        ///
+        /// <see cref="ParseWrapMode"/> maps anything it does not know to Default, which is
+        /// fine for a create where the field is optional and Default is the fallback, and
+        /// wrong for an update: a client sending a misspelled mode would silently get
+        /// Default rather than being told.
+        /// </summary>
+        private static bool TryParseWrapMode(string s, out WrapMode mode)
+        {
+            switch ((s ?? "").ToLowerInvariant())
             {
-                case "once":         return WrapMode.Once;
-                case "loop":         return WrapMode.Loop;
-                case "pingpong":     return WrapMode.PingPong;
-                case "clampforever": return WrapMode.ClampForever;
-                default:             return WrapMode.Default;
+                case "once":         mode = WrapMode.Once;         return true;
+                case "loop":         mode = WrapMode.Loop;         return true;
+                case "pingpong":     mode = WrapMode.PingPong;     return true;
+                case "clampforever": mode = WrapMode.ClampForever; return true;
+                case "default":      mode = WrapMode.Default;      return true;
             }
+            mode = WrapMode.Default;
+            return false;
         }
 
         /// <summary>

@@ -71,7 +71,7 @@ Asset browsing, search, prefabs, materials, ScriptableObjects, and importers:
 
 AnimationClip and AnimatorController authoring:
 
-`POST /api/assets/animation-clips` · `GET /api/assets/animation-clips/{guid}` · `POST|DELETE .../curves` · `POST /api/assets/animator-controllers` · `GET /api/assets/animator-controllers/{guid}` · parameters / layers / states / transitions / blend-trees / state-machines / state-machine-transitions sub-endpoints
+`POST /api/assets/animation-clips` · `GET|PATCH /api/assets/animation-clips/{guid}` · `POST|DELETE .../curves` · `POST|DELETE .../events` · `POST /api/assets/animator-controllers` · `GET /api/assets/animator-controllers/{guid}` · parameters / layers / states / transitions / blend-trees / state-machines / state-machine-transitions sub-endpoints
 
 ### [Play Mode](api/playmode.md)
 
