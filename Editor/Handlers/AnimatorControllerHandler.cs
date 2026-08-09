@@ -183,6 +183,11 @@ namespace LeonAkasaka.UnionAir.Editor
                     return;
             }
 
+            // Parsed before anything is created or replaced, so a malformed value leaves the
+            // controller untouched. Checking it where it is written meant a 400 that had
+            // already added a parameter, or already destroyed and recreated one.
+            if (!TryParseDefaultValue(body, paramType, response, out var defaultValue)) return;
+
             var existing = FindParameter(controller, name);
             var replacedType = existing != null && existing.type != paramType;
 
@@ -208,7 +213,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var unsupported = AnimatorParameterRules.CollectUnsupported(
                 paramType, RequestBodyReader.HasTopLevelField(body, "defaultValue"));
 
-            if (!TryApplyDefaultValue(controller, name, paramType, body, response)) return;
+            ApplyDefaultValue(controller, name, paramType, defaultValue);
 
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
@@ -227,17 +232,75 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// Writes <c>defaultValue</c> onto the named parameter, in place.
+        /// The <c>defaultValue</c> a request carries, parsed and checked but not applied.
         ///
-        /// The parameter array is a copy, so the value is set on the element and the array
-        /// assigned back. A Trigger has no default to set; the request is not refused, but
-        /// the caller is told in <c>unsupported</c> rather than left to believe it applied.
+        /// Split from the write for the reason every other endpoint here is: a value that
+        /// fails to parse must not be discovered after the controller has already been
+        /// changed. Both parameter endpoints mutate before they would reach it -- a create,
+        /// a recreate on a type change, a rename and its reference rewrites -- so a check
+        /// made at the point of use is a check made too late.
         /// </summary>
-        private static bool TryApplyDefaultValue(
-            AnimatorController controller, string name, AnimatorControllerParameterType type,
-            string body, UnionAirResponse response)
+        private struct ParameterDefault
         {
+            public bool Present;
+            public float Float;
+            public int Int;
+            public bool Bool;
+        }
+
+        private static bool TryParseDefaultValue(
+            string body, AnimatorControllerParameterType type,
+            UnionAirResponse response, out ParameterDefault value)
+        {
+            value = default(ParameterDefault);
             if (!RequestBodyReader.HasTopLevelField(body, "defaultValue")) return true;
+
+            value.Present = true;
+            switch (type)
+            {
+                case AnimatorControllerParameterType.Float:
+                    if (!RequestBodyReader.TryGetFloatValue(body, "defaultValue", out value.Float, out _))
+                    {
+                        RestResponse.SendError(response, "defaultValue must be a number for a Float parameter.", 400);
+                        return false;
+                    }
+                    return true;
+
+                case AnimatorControllerParameterType.Int:
+                    if (!RequestBodyReader.TryGetIntValue(body, "defaultValue", out value.Int, out _))
+                    {
+                        RestResponse.SendError(response, "defaultValue must be an integer for an Int parameter.", 400);
+                        return false;
+                    }
+                    return true;
+
+                case AnimatorControllerParameterType.Bool:
+                    if (!RequestBodyReader.TryGetBoolValue(body, "defaultValue", out value.Bool, out _))
+                    {
+                        RestResponse.SendError(response, "defaultValue must be a boolean for a Bool parameter.", 400);
+                        return false;
+                    }
+                    return true;
+            }
+
+            // A Trigger keeps no default, so there is nothing to parse and nothing to
+            // refuse. The field is reported in "unsupported" instead.
+            value.Present = false;
+            return true;
+        }
+
+        /// <summary>
+        /// Writes a parsed default onto the named parameter, in place.
+        ///
+        /// Cannot fail: every check happened in <see cref="TryParseDefaultValue"/>. The
+        /// parameter array is a copy, so the value is set on the element and the array
+        /// assigned back, which is also what keeps the parameter where it sits.
+        /// </summary>
+        private static void ApplyDefaultValue(
+            AnimatorController controller, string name,
+            AnimatorControllerParameterType type, ParameterDefault value)
+        {
+            if (!value.Present) return;
 
             var all = controller.parameters;
             for (int i = 0; i < all.Length; i++)
@@ -246,38 +309,14 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 switch (type)
                 {
-                    case AnimatorControllerParameterType.Float:
-                        if (!RequestBodyReader.TryGetFloatValue(body, "defaultValue", out var f, out _))
-                        {
-                            RestResponse.SendError(response, "defaultValue must be a number for a Float parameter.", 400);
-                            return false;
-                        }
-                        all[i].defaultFloat = f;
-                        break;
-
-                    case AnimatorControllerParameterType.Int:
-                        if (!RequestBodyReader.TryGetIntValue(body, "defaultValue", out var n, out _))
-                        {
-                            RestResponse.SendError(response, "defaultValue must be an integer for an Int parameter.", 400);
-                            return false;
-                        }
-                        all[i].defaultInt = n;
-                        break;
-
-                    case AnimatorControllerParameterType.Bool:
-                        if (!RequestBodyReader.TryGetBoolValue(body, "defaultValue", out var b, out _))
-                        {
-                            RestResponse.SendError(response, "defaultValue must be a boolean for a Bool parameter.", 400);
-                            return false;
-                        }
-                        all[i].defaultBool = b;
-                        break;
+                    case AnimatorControllerParameterType.Float: all[i].defaultFloat = value.Float; break;
+                    case AnimatorControllerParameterType.Int: all[i].defaultInt = value.Int; break;
+                    case AnimatorControllerParameterType.Bool: all[i].defaultBool = value.Bool; break;
                 }
                 break;
             }
 
             controller.parameters = all;
-            return true;
         }
 
         // ── PATCH /api/assets/animator-controllers/{guid}/parameters ─────────
@@ -340,7 +379,10 @@ namespace LeonAkasaka.UnionAir.Editor
 
             // Everything is collected and checked before the first write. The rename is the
             // one operation here that touches many objects, and a half-applied one is the
-            // corruption the endpoint exists to prevent.
+            // corruption the endpoint exists to prevent -- including the half where the
+            // rename lands and a malformed defaultValue then answers 400.
+            if (!TryParseDefaultValue(body, parameter.type, response, out var defaultValue)) return;
+
             var references = renaming
                 ? AnimatorParameterReferences.Find(controller, name)
                 : new List<AnimatorParameterReferences.Reference>();
@@ -365,7 +407,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             var effectiveName = renaming ? newName : name;
-            if (!TryApplyDefaultValue(controller, effectiveName, parameter.type, body, response)) return;
+            ApplyDefaultValue(controller, effectiveName, parameter.type, defaultValue);
 
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();

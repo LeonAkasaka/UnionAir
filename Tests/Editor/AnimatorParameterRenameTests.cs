@@ -160,7 +160,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
-        public void APararameterNothingNamesHasNoReferences()
+        public void AParameterNothingNamesHasNoReferences()
         {
             Post("{\"name\":\"Unused\",\"type\":\"Bool\"}");
 
@@ -245,6 +245,46 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             foreach (var p in Reloaded().parameters)
                 if (p.name == name) return p;
             return null;
+        }
+
+        [Test]
+        public void AMalformedDefaultValueDoesNotLetTheRenameLand()
+        {
+            // The rename and the default value arrive in one request, so the request is
+            // atomic across both or it is not atomic at all. Checking the value where it was
+            // written meant a 400 whose rename had already gone through.
+            BuildEveryReferenceKind();
+
+            var response = Patch("{\"name\":\"Speed\",\"newName\":\"MoveSpeed\",\"defaultValue\":\"soon\"}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            Assert.IsNotNull(FindParameterByName("Speed"));
+            Assert.IsNull(FindParameterByName("MoveSpeed"));
+            Assert.AreEqual(6, AnimatorParameterReferences.Find(Reloaded(), "Speed").Count,
+                "no reference may have been rewritten");
+        }
+
+        [Test]
+        public void Post_AMalformedDefaultValueAddsNoParameter()
+        {
+            var response = Post("{\"name\":\"Ghost\",\"type\":\"Float\",\"defaultValue\":\"soon\"}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            Assert.IsNull(FindParameterByName("Ghost"), "a refused create must add nothing");
+        }
+
+        [Test]
+        public void Post_AMalformedDefaultValueDoesNotReplaceTheType()
+        {
+            // The worst of the three: the parameter was destroyed and recreated with the new
+            // type, orphaning every reference, and then the request answered 400.
+            BuildEveryReferenceKind();
+
+            var response = Post("{\"name\":\"Speed\",\"type\":\"Int\",\"defaultValue\":\"soon\"}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            Assert.AreEqual(AnimatorControllerParameterType.Float, FindParameterByName("Speed").type);
+            Assert.AreEqual(6, AnimatorParameterReferences.Find(Reloaded(), "Speed").Count);
         }
 
         [Test]

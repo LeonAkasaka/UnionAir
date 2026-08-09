@@ -659,6 +659,8 @@ Adds a parameter, or updates one that already exists.
 
 A parameter that already exists **with the same type** is updated in place and keeps its position in the parameter array. Only a `type` change destroys and recreates it, and that orphans every reference; see [Parameter references](#parameter-references).
 
+Every value is checked before anything is created or replaced, so a request rejected with `400` adds no parameter and changes no type.
+
 Use [`PATCH`](#patch-apiassetsanimator-controllersguidparameters) to rename.
 
 ### Response (HTTP 201)
@@ -696,7 +698,7 @@ Renames a parameter, or sets its default value, in place.
 
 Either or both of `newName` and `defaultValue`. The parameter keeps its position in the array in both cases.
 
-**A rename is atomic.** Every reference is collected and every check made before the first write, so a request that is refused leaves the parameter and all of its references exactly as they were. A half-applied rename is the corruption this endpoint exists to prevent.
+**A rename is atomic**, and so is a request that renames and sets a default value together. Every value is parsed and every check made before the first write, so a request that is refused — for a collision, or for a malformed `defaultValue` — leaves the parameter and all of its references exactly as they were. A half-applied rename is the corruption this endpoint exists to prevent.
 
 ### Response
 
