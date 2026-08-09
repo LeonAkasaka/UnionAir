@@ -38,11 +38,11 @@ namespace LeonAkasaka.UnionAir.Editor
 
         /// <summary>Fields <c>POST .../states</c> accepts, addressing included.</summary>
         internal static IEnumerable<string> AddFields => Concat(
-            new[] { "name", "layerIndex", "setAsDefault" }, SettingFields);
+            new[] { "name", "layerIndex", "stateMachinePath", "setAsDefault" }, SettingFields);
 
         /// <summary>Fields <c>PATCH .../states</c> accepts, addressing included.</summary>
         internal static IEnumerable<string> UpdateFields => Concat(
-            new[] { "name", "layerIndex", "newName", "setAsDefault" }, SettingFields);
+            new[] { "name", "layerIndex", "stateMachinePath", "newName", "setAsDefault" }, SettingFields);
 
         private static IEnumerable<string> Concat(string[] first, string[] second)
         {

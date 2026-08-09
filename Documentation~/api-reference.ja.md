@@ -72,7 +72,7 @@ GameObject の読み取り、検索、作成/更新/削除、コンポーネン�
 
 AnimationClip / AnimatorController のオーサリング:
 
-`POST /api/assets/animation-clips` · `GET /api/assets/animation-clips/{guid}` · `POST|DELETE .../curves` · `POST /api/assets/animator-controllers` · `GET /api/assets/animator-controllers/{guid}` · parameters / layers / states / transitions サブエンドポイント
+`POST /api/assets/animation-clips` · `GET /api/assets/animation-clips/{guid}` · `POST|DELETE .../curves` · `POST /api/assets/animator-controllers` · `GET /api/assets/animator-controllers/{guid}` · parameters / layers / states / transitions / blend-trees / state-machines / state-machine-transitions サブエンドポイント
 
 ### [Play Mode](api/playmode.ja.md)
 

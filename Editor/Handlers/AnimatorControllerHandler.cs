@@ -139,44 +139,12 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append($"\"syncedLayerIndex\":{layer.syncedLayerIndex},");
                 sb.Append($"\"syncedLayerAffectsTiming\":{RestResponse.FormatBool(layer.syncedLayerAffectsTiming)},");
 
-                // States
-                sb.Append("\"states\":[");
-                var states = sm.states;
-                for (int si = 0; si < states.Length; si++)
-                {
-                    if (si > 0) sb.Append(",");
-                    var state = states[si].state;
-                    sb.Append("{");
-                    sb.Append($"\"name\":\"{RestResponse.EscapeJson(state.name)}\",");
-                    sb.Append($"\"isDefault\":{(sm.defaultState == state ? "true" : "false")},");
-                    AppendStateSettings(sb, state, states[si].position);
-
-                    // Motion
-                    sb.Append("\"motion\":");
-                    MotionJson.Append(sb, controller.GetStateEffectiveMotion(state, li), clipCountByPath);
-                    sb.Append(",");
-
-                    // Transitions
-                    sb.Append("\"transitions\":[");
-                    var transitions = state.transitions;
-                    for (int ti = 0; ti < transitions.Length; ti++)
-                    {
-                        if (ti > 0) sb.Append(",");
-                        AppendTransition(sb, transitions[ti]);
-                    }
-                    sb.Append("]}");
-                }
-                sb.Append("],");
-
-                // AnyState transitions
-                sb.Append("\"anyStateTransitions\":[");
-                var anyTransitions = sm.anyStateTransitions;
-                for (int ti = 0; ti < anyTransitions.Length; ti++)
-                {
-                    if (ti > 0) sb.Append(",");
-                    AppendTransition(sb, anyTransitions[ti]);
-                }
-                sb.Append("]}");
+                // The layer's own fields end here; what follows is its root state machine,
+                // emitted in the same shape as every nested one so that a client walks one
+                // structure rather than two. The root has no name or position of its own --
+                // it is the layer -- so those belong to the layer fields above.
+                AppendStateMachineBody(sb, controller, sm, li, new List<string>(), 0, clipCountByPath);
+                sb.Append("}");
             }
             sb.Append("]}");
             RestResponse.Send(response, sb.ToString());
@@ -571,12 +539,12 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
 
+            if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var sm)) return;
+
             // Parsed before the state exists, so a rejected setting leaves nothing behind.
             // The state is null here for the same reason: there is nothing to check the
             // parameter overrides against but the request itself.
             if (!TryParseStateFields(controller, null, body, response, out var fields)) return;
-
-            var sm = controller.layers[layerIndex].stateMachine;
             var state = sm.AddState(name);
 
             ApplyStateFields(controller, sm, state, layerIndex, fields);
@@ -619,7 +587,8 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
 
-            var sm = controller.layers[layerIndex].stateMachine;
+            if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var sm)) return;
+
             var state = FindState(sm, name);
             if (state == null)
             {
@@ -672,7 +641,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var sm = controller.layers[layerIndex].stateMachine;
+            if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var sm)) return;
+
             var state = FindState(sm, name);
             if (state == null)
             {
@@ -719,9 +689,26 @@ namespace LeonAkasaka.UnionAir.Editor
             var fromName = RequestBodyReader.GetString(body, "from");
             var toName = RequestBodyReader.GetString(body, "to");
 
-            if (string.IsNullOrEmpty(fromName) || string.IsNullOrEmpty(toName))
+            // toStateMachine rather than an overloaded to: a destination may now be a state
+            // machine, and a controller is free to name a state and a machine alike. Which
+            // one a bare name meant would be decided by lookup order, which is not a
+            // contract worth having.
+            if (!RequestBodyReader.TryGetStringArray(body, "toStateMachine", out var toMachinePath))
             {
-                RestResponse.SendError(response, "Missing required fields: from, to", 400);
+                RestResponse.SendError(response, "toStateMachine must be an array of state machine names.", 400);
+                return;
+            }
+            var toIsMachine = RequestBodyReader.HasTopLevelField(body, "toStateMachine");
+
+            if (string.IsNullOrEmpty(fromName) || (string.IsNullOrEmpty(toName) && !toIsMachine))
+            {
+                RestResponse.SendError(response,
+                    "Missing required fields: from, and one of to or toStateMachine.", 400);
+                return;
+            }
+            if (!string.IsNullOrEmpty(toName) && toIsMachine)
+            {
+                RestResponse.SendError(response, "Send one destination: to, or toStateMachine.", 400);
                 return;
             }
 
@@ -732,23 +719,57 @@ namespace LeonAkasaka.UnionAir.Editor
             // sub-asset of the controller -- that the caller was told did not happen.
             if (!TryParseTransitionFields(body, response, out var fields)) return;
 
-            var sm = controller.layers[layerIndex].stateMachine;
+            if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var sm)) return;
+
+            AnimatorStateMachine toMachine = null;
+            if (toIsMachine)
+            {
+                if (toMachinePath.Length == 0)
+                {
+                    RestResponse.SendError(response,
+                        "toStateMachine is empty, which names the machine the transition already belongs to.", 400);
+                    return;
+                }
+                var result = AnimatorStateMachineRules.TryResolve(
+                    sm, toMachinePath, out toMachine, out var depth, out var matches);
+                if (result == AnimatorStateMachineRules.PathResult.Ambiguous)
+                {
+                    RestResponse.SendError(response,
+                        AnimatorStateMachineRules.AmbiguousMessage(toMachinePath, depth, matches), 409);
+                    return;
+                }
+                if (result != AnimatorStateMachineRules.PathResult.Resolved)
+                {
+                    RestResponse.SendNotFound(response,
+                        AnimatorStateMachineRules.NotFoundMessage(toMachinePath, depth));
+                    return;
+                }
+                toName = toMachine.name;
+            }
+
             AnimatorStateTransition transition;
 
             if (fromName == "AnyState")
             {
-                if (toName == "Exit")
+                if (!toIsMachine && toName == "Exit")
                 {
                     RestResponse.SendError(response, "AnyState to Exit transition is not valid", 400);
                     return;
                 }
-                var toState = FindState(sm, toName);
-                if (toState == null)
+                if (toIsMachine)
                 {
-                    RestResponse.SendNotFound(response, $"Destination state not found: {toName}");
-                    return;
+                    transition = sm.AddAnyStateTransition(toMachine);
                 }
-                transition = sm.AddAnyStateTransition(toState);
+                else
+                {
+                    var toState = FindState(sm, toName);
+                    if (toState == null)
+                    {
+                        RestResponse.SendNotFound(response, $"Destination state not found: {toName}");
+                        return;
+                    }
+                    transition = sm.AddAnyStateTransition(toState);
+                }
             }
             else
             {
@@ -759,7 +780,11 @@ namespace LeonAkasaka.UnionAir.Editor
                     return;
                 }
 
-                if (toName == "Exit")
+                if (toIsMachine)
+                {
+                    transition = fromState.AddTransition(toMachine);
+                }
+                else if (toName == "Exit")
                 {
                     transition = fromState.AddExitTransition();
                 }
@@ -848,7 +873,7 @@ namespace LeonAkasaka.UnionAir.Editor
             // AnimatorStateTransition in the .controller file with nothing referring to it.
             // These are the APIs that own the sub-asset's lifetime.
             if (found.Owner == null)
-                controller.layers[layerIndex].stateMachine.RemoveAnyStateTransition(found.Transition);
+                found.OwnerMachine.RemoveAnyStateTransition(found.Transition);
             else
                 found.Owner.RemoveTransition(found.Transition);
 
@@ -888,6 +913,172 @@ namespace LeonAkasaka.UnionAir.Editor
             foreach (var p in controller.parameters)
                 if (p.name == name) return p;
             return null;
+        }
+
+        // ── State machine serialization ──────────────────────────────────────
+
+        /// <summary>
+        /// Emits everything a state machine holds: its states, the machines nested inside
+        /// it, and the three kinds of transition it owns. Emitted without enclosing braces
+        /// and with no trailing comma, so a layer and a nested machine can each wrap it in
+        /// their own fields and read alike.
+        /// </summary>
+        /// <param name="path">
+        /// Names from the layer root down to this machine. Empty for the root itself. The
+        /// same array a request sends as <c>stateMachinePath</c>, so a path read out of a
+        /// response goes straight back into one.
+        /// </param>
+        private static void AppendStateMachineBody(
+            StringBuilder sb, AnimatorController controller, AnimatorStateMachine sm,
+            int layerIndex, List<string> path, int depth, Dictionary<string, int> clipCountByPath)
+        {
+            sb.Append("\"defaultState\":").Append(RestResponse.FormatNullableString(
+                sm.defaultState == null ? null : sm.defaultState.name)).Append(",");
+
+            sb.Append("\"states\":[");
+            var states = sm.states;
+            for (int si = 0; si < states.Length; si++)
+            {
+                if (si > 0) sb.Append(",");
+                var state = states[si].state;
+                sb.Append("{");
+                sb.Append($"\"name\":\"{RestResponse.EscapeJson(state.name)}\",");
+                sb.Append($"\"isDefault\":{(sm.defaultState == state ? "true" : "false")},");
+                AppendStateSettings(sb, state, states[si].position);
+
+                sb.Append("\"motion\":");
+                MotionJson.Append(sb, controller.GetStateEffectiveMotion(state, layerIndex), clipCountByPath);
+                sb.Append(",");
+
+                sb.Append("\"transitions\":[");
+                var transitions = state.transitions;
+                for (int ti = 0; ti < transitions.Length; ti++)
+                {
+                    if (ti > 0) sb.Append(",");
+                    AppendTransition(sb, transitions[ti]);
+                }
+                sb.Append("]}");
+            }
+            sb.Append("],");
+
+            // A property of the state machine rather than of the layer, which is why it is
+            // reported at every level: a sub-state machine has its own AnyState, and the
+            // response used to show only the root's.
+            sb.Append("\"anyStateTransitions\":[");
+            AppendTransitions(sb, sm.anyStateTransitions);
+            sb.Append("],");
+
+            sb.Append("\"entryTransitions\":[");
+            AppendAnimatorTransitions(sb, sm.entryTransitions);
+            sb.Append("],");
+
+            sb.Append("\"stateMachineTransitions\":[");
+            AppendStateMachineTransitions(sb, sm);
+            sb.Append("],");
+
+            sb.Append("\"behaviours\":[");
+            AppendBehaviourNames(sb, sm.behaviours);
+            sb.Append("],");
+
+            sb.Append("\"stateMachines\":[");
+            var children = sm.stateMachines;
+            for (int ci = 0; ci < children.Length; ci++)
+            {
+                if (ci > 0) sb.Append(",");
+                var child = children[ci].stateMachine;
+                sb.Append("{");
+                sb.Append("\"name\":").Append(RestResponse.FormatNullableString(child == null ? null : child.name)).Append(",");
+
+                var childPath = new List<string>(path);
+                if (child != null) childPath.Add(child.name);
+                sb.Append("\"path\":").Append(PathJson(childPath)).Append(",");
+
+                sb.Append("\"position\":{");
+                sb.Append($"\"x\":{RestResponse.FormatFloat(children[ci].position.x)},");
+                sb.Append($"\"y\":{RestResponse.FormatFloat(children[ci].position.y)}");
+                sb.Append("}");
+
+                if (child == null)
+                {
+                    sb.Append("}");
+                    continue;
+                }
+
+                // Bounded like blend trees are. A machine at the boundary says so rather
+                // than reporting empty arrays, because an empty state machine is legal and
+                // an empty array would be indistinguishable from one.
+                if (depth + 1 >= AnimatorStateMachineRules.MaxStateMachineDepth)
+                {
+                    sb.Append(",\"truncated\":true}");
+                    continue;
+                }
+
+                sb.Append(",");
+                AppendStateMachineBody(sb, controller, child, layerIndex, childPath, depth + 1, clipCountByPath);
+                sb.Append("}");
+            }
+            sb.Append("]");
+        }
+
+        private static void AppendTransitions(StringBuilder sb, AnimatorStateTransition[] transitions)
+        {
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                if (i > 0) sb.Append(",");
+                AppendTransition(sb, transitions[i]);
+            }
+        }
+
+        private static void AppendAnimatorTransitions(StringBuilder sb, AnimatorTransition[] transitions)
+        {
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                if (i > 0) sb.Append(",");
+                AppendAnimatorTransition(sb, transitions[i], null);
+            }
+        }
+
+        /// <summary>
+        /// Emits the transitions that leave the machines nested inside this one.
+        ///
+        /// Unity keys them by source machine rather than storing them in one array, so the
+        /// source travels with each entry; without it a client sees a list of destinations
+        /// and cannot tell what leaves what.
+        /// </summary>
+        private static void AppendStateMachineTransitions(StringBuilder sb, AnimatorStateMachine sm)
+        {
+            var first = true;
+            foreach (var child in sm.stateMachines)
+            {
+                if (child.stateMachine == null) continue;
+                foreach (var transition in sm.GetStateMachineTransitions(child.stateMachine))
+                {
+                    if (!first) sb.Append(",");
+                    first = false;
+                    AppendAnimatorTransition(sb, transition, child.stateMachine.name);
+                }
+            }
+        }
+
+        private static void AppendBehaviourNames(StringBuilder sb, UnityEngine.StateMachineBehaviour[] behaviours)
+        {
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(RestResponse.FormatNullableString(
+                    behaviours[i] == null ? null : behaviours[i].GetType().Name));
+            }
+        }
+
+        private static string PathJson(List<string> path)
+        {
+            var sb = new StringBuilder("[");
+            for (int i = 0; i < path.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(RestResponse.FormatNullableString(path[i]));
+            }
+            return sb.Append("]").ToString();
         }
 
         // ── State settings ───────────────────────────────────────────────────
@@ -1275,20 +1466,102 @@ namespace LeonAkasaka.UnionAir.Editor
             public AnimatorStateTransition Transition;
             /// <summary>The source state, or null when the transition leaves AnyState.</summary>
             public AnimatorState Owner;
+            /// <summary>The state machine holding it, which is what removes an AnyState transition.</summary>
+            public AnimatorStateMachine OwnerMachine;
+            /// <summary>Path of that machine from the layer root, so a response can report it back.</summary>
+            public List<string> MachinePath;
             public string FromName;
             public string ToName;
         }
 
         private static string DestinationName(AnimatorStateTransition t)
-            => t.isExit ? "Exit" : (t.destinationState != null ? t.destinationState.name : null);
+            => t.isExit ? "Exit"
+             : t.destinationState != null ? t.destinationState.name
+             : t.destinationStateMachine != null ? t.destinationStateMachine.name
+             : null;
 
         /// <summary>
-        /// Every AnimatorStateTransition a layer's top-level state machine carries, in the
-        /// order the read reports them. Sub-state machines are not traversed; they are not
-        /// described by any endpoint yet, and addressing what cannot be read would be a
-        /// contract this issue does not own.
+        /// Emits a transition's destination as a discriminated object rather than a name.
+        ///
+        /// A name alone cannot say what it names. Once a destination may be a state, a
+        /// state machine, or the Exit node, "Melee" is a state in one controller and a
+        /// sub-state machine in another, and a client walking the response cannot tell --
+        /// the same failure the motion field had before #63 gave it a type.
+        ///
+        /// Entry is not among the values. Unity offers no destination that is an Entry
+        /// node: entering a state machine is expressed as a destination of type
+        /// StateMachine, and the Entry node appears as the *source* of the entries in
+        /// <c>entryTransitions</c>. A value that nothing can produce would be worse than
+        /// its absence.
         /// </summary>
-        private static List<TransitionRef> EnumerateTransitions(AnimatorStateMachine sm)
+        private static void AppendDestination(
+            StringBuilder sb, AnimatorState state, AnimatorStateMachine machine, bool isExit)
+        {
+            sb.Append("{\"type\":");
+            if (isExit)
+            {
+                sb.Append("\"Exit\"}");
+                return;
+            }
+            if (state != null)
+            {
+                sb.Append("\"State\",\"name\":").Append(RestResponse.FormatNullableString(state.name)).Append("}");
+                return;
+            }
+            if (machine != null)
+            {
+                sb.Append("\"StateMachine\",\"name\":").Append(RestResponse.FormatNullableString(machine.name)).Append("}");
+                return;
+            }
+
+            // A transition whose destination was deleted. Reported as what it is rather
+            // than as a null name that reads like a missing field.
+            sb.Append("\"None\"}");
+        }
+
+        /// <summary>
+        /// Serializes an <see cref="AnimatorTransition"/>, the type that connects state
+        /// machines.
+        ///
+        /// It is a different type from <see cref="AnimatorStateTransition"/> and carries a
+        /// destination and conditions only -- no exit time, no duration, no offset, no
+        /// interruption. Those fields are not emitted as zeros here: a client reading a
+        /// duration of 0 would take it for a setting rather than for a field the type does
+        /// not have.
+        /// </summary>
+        /// <param name="fromStateMachine">
+        /// Source machine name for a state machine transition, null for an entry
+        /// transition, whose source is the Entry node.
+        /// </param>
+        private static void AppendAnimatorTransition(
+            StringBuilder sb, AnimatorTransition t, string fromStateMachine)
+        {
+            sb.Append("{");
+            sb.Append("\"transitionId\":").Append(
+                RestResponse.FormatNullableString(ObjectIdUtils.GetGlobalObjectId(t))).Append(",");
+            sb.Append("\"from\":");
+            if (fromStateMachine == null)
+                sb.Append("{\"type\":\"Entry\"}");
+            else
+                sb.Append("{\"type\":\"StateMachine\",\"name\":")
+                  .Append(RestResponse.FormatNullableString(fromStateMachine)).Append("}");
+            sb.Append(",\"destination\":");
+            AppendDestination(sb, t.destinationState, t.destinationStateMachine, t.isExit);
+            sb.Append(",\"solo\":").Append(RestResponse.FormatBool(t.solo));
+            sb.Append(",\"mute\":").Append(RestResponse.FormatBool(t.mute));
+            sb.Append(",\"conditions\":");
+            AppendConditions(sb, t.conditions);
+            sb.Append("}");
+        }
+
+        /// <summary>
+        /// Every AnimatorStateTransition one state machine carries, in the order the read
+        /// reports them. One machine only, because <c>from</c> plus <c>to</c> addresses
+        /// within the machine the request named: a name pair must not reach across a
+        /// boundary the caller did not mention.
+        /// </summary>
+        private static List<TransitionRef> EnumerateTransitions(
+            AnimatorStateMachine sm, List<string> machinePath = null)
         {
             var refs = new List<TransitionRef>();
             foreach (var cs in sm.states)
@@ -1299,6 +1572,8 @@ namespace LeonAkasaka.UnionAir.Editor
                     {
                         Transition = t,
                         Owner = cs.state,
+                        OwnerMachine = sm,
+                        MachinePath = machinePath,
                         FromName = cs.state.name,
                         ToName = DestinationName(t)
                     });
@@ -1310,9 +1585,33 @@ namespace LeonAkasaka.UnionAir.Editor
                 {
                     Transition = t,
                     Owner = null,
+                    OwnerMachine = sm,
+                    MachinePath = machinePath,
                     FromName = "AnyState",
                     ToName = DestinationName(t)
                 });
+            }
+            return refs;
+        }
+
+        /// <summary>
+        /// The same, for a machine and everything nested inside it.
+        ///
+        /// Used only where an id is the address. A <c>transitionId</c> names one transition
+        /// wherever it sits, so making the caller also state which state machine it is in
+        /// would be friction with nothing behind it — a client that read the id out of a
+        /// nested machine has no reason to expect the write to need more.
+        /// </summary>
+        private static List<TransitionRef> EnumerateTransitionsRecursive(
+            AnimatorStateMachine sm, List<string> path)
+        {
+            var refs = EnumerateTransitions(sm, path);
+            foreach (var child in sm.stateMachines)
+            {
+                if (child.stateMachine == null) continue;
+                var childPath = new List<string>(path);
+                childPath.Add(child.stateMachine.name);
+                refs.AddRange(EnumerateTransitionsRecursive(child.stateMachine, childPath));
             }
             return refs;
         }
@@ -1332,7 +1631,6 @@ namespace LeonAkasaka.UnionAir.Editor
             UnionAirRequest request, UnionAirResponse response, out TransitionRef found)
         {
             found = default(TransitionRef);
-            var sm = controller.layers[layerIndex].stateMachine;
 
             if (!RequestBodyReader.TryGetStringValue(body, "transitionId", out var transitionId, out var hasId))
             {
@@ -1341,8 +1639,13 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             if (!hasId) transitionId = request.QueryString["transitionId"];
 
+            // An id addresses one transition wherever it is, so it needs no
+            // stateMachinePath. The name pair does: it is unique only within a machine.
             if (!string.IsNullOrEmpty(transitionId))
                 return TryResolveById(controller, layerIndex, transitionId, response, out found);
+
+            if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var sm))
+                return false;
 
             var fromName = RequestBodyReader.GetString(body, "from") ?? request.QueryString["from"];
             var toName = RequestBodyReader.GetString(body, "to") ?? request.QueryString["to"];
@@ -1397,7 +1700,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            foreach (var candidate in EnumerateTransitions(controller.layers[layerIndex].stateMachine))
+            foreach (var candidate in EnumerateTransitionsRecursive(
+                         controller.layers[layerIndex].stateMachine, new List<string>()))
             {
                 if (candidate.Transition != transition) continue;
                 found = candidate;
@@ -1410,7 +1714,8 @@ namespace LeonAkasaka.UnionAir.Editor
             for (int i = 0; i < controller.layers.Length; i++)
             {
                 if (i == layerIndex) continue;
-                foreach (var candidate in EnumerateTransitions(controller.layers[i].stateMachine))
+                foreach (var candidate in EnumerateTransitionsRecursive(
+                             controller.layers[i].stateMachine, new List<string>()))
                 {
                     if (candidate.Transition != transition) continue;
                     RestResponse.SendNotFound(response,
@@ -1421,8 +1726,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             RestResponse.SendNotFound(response,
-                $"Transition {transitionId} is not in layer {layerIndex} of this controller. " +
-                "Sub-state machine transitions are not addressable.");
+                $"Transition {transitionId} is not in layer {layerIndex} of this controller.");
             return false;
         }
 
@@ -1550,56 +1854,14 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </summary>
         private static bool TryParseConditions(string body, UnionAirResponse response, ref TransitionFields fields)
         {
-            if (!RequestBodyReader.TryGetArrayElements(body, "conditions", out var elements, out var present, out var arrayError))
-            {
-                RestResponse.SendError(response, arrayError, 400);
+            if (!AnimatorTransitionRequest.TryParseConditions(body, response, out var conditions, out var present))
                 return false;
-            }
             if (!present) return true;
-
-            var parsed = new List<AnimatorCondition>();
-            for (int i = 0; i < elements.Count; i++)
-            {
-                var condJson = elements[i];
-                var paramName = RequestBodyReader.GetString(condJson, "parameter");
-                var modeStr = RequestBodyReader.GetString(condJson, "mode");
-                if (string.IsNullOrEmpty(paramName) || string.IsNullOrEmpty(modeStr))
-                {
-                    RestResponse.SendError(response, $"conditions[{i}] requires parameter and mode.", 400);
-                    return false;
-                }
-
-                if (!AnimatorTransitionRules.TryParseConditionMode(modeStr, out var mode))
-                {
-                    RestResponse.SendError(response,
-                        $"Unknown condition mode in conditions[{i}]: {modeStr}. " +
-                        $"Use one of {AnimatorTransitionRules.ConditionModeNames}.", 400);
-                    return false;
-                }
-
-                // Absent means 0, which is what If and IfNot use and what Unity writes for
-                // them. Present and unusable -- quoted, null, NaN -- is a different thing
-                // and is refused: reading it as 0 would move a Greater threshold to zero
-                // and report success, which is the silent skip this endpoint stopped doing
-                // one field above.
-                if (!RequestBodyReader.TryGetFloatValue(condJson, "threshold", out var threshold, out _))
-                {
-                    RestResponse.SendError(response, $"conditions[{i}].threshold must be a number.", 400);
-                    return false;
-                }
-
-                parsed.Add(new AnimatorCondition
-                {
-                    parameter = paramName,
-                    mode = mode,
-                    threshold = threshold
-                });
-            }
 
             // An empty array is a request to clear, not a request to leave alone: the array
             // replaces what the transition holds, and it can replace it with nothing.
             fields.SetConditions = true;
-            fields.Conditions = parsed.ToArray();
+            fields.Conditions = conditions;
             return true;
         }
 
@@ -1654,7 +1916,9 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append("\"transitionId\":").Append(
                 RestResponse.FormatNullableString(ObjectIdUtils.GetGlobalObjectId(t))).Append(",");
-            sb.Append("\"to\":").Append(RestResponse.FormatNullableString(DestinationName(t))).Append(",");
+            sb.Append("\"destination\":");
+            AppendDestination(sb, t.destinationState, t.destinationStateMachine, t.isExit);
+            sb.Append(",");
             sb.Append($"\"hasExitTime\":{RestResponse.FormatBool(t.hasExitTime)},");
             sb.Append($"\"exitTime\":{RestResponse.FormatFloat(t.exitTime)},");
 

@@ -818,7 +818,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Summary = "Creates a blend tree as the motion of an existing state, or adds a child to one. A blend tree has no GUID, so it is addressed by 'layerIndex' plus 'state', then 'childPath' -- an array of child indices from that state's root tree, where [] is the root itself. Without 'addChild' the request creates the state's root tree. With 'addChild' it appends to the addressed tree: a nested tree by default, or a clip when 'motion' carries a guid. childPath is positional, so removing or reordering children invalidates a path a client is holding.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "state" },
-            OptionalBody = new string[] { "layerIndex", "childPath", "addChild", "name", "blendType", "blendParameter", "blendParameterY", "useAutomaticThresholds", "minThreshold", "maxThreshold", "threshold", "position", "timeScale", "cycleOffset", "mirror", "directBlendParameter", "motion" },
+            OptionalBody = new string[] { "layerIndex", "stateMachinePath", "childPath", "addChild", "name", "blendType", "blendParameter", "blendParameterY", "useAutomaticThresholds", "minThreshold", "maxThreshold", "threshold", "position", "timeScale", "cycleOffset", "mirror", "directBlendParameter", "motion" },
             RequestExample = "{\"layerIndex\":0,\"state\":\"Locomotion\",\"name\":\"Locomotion\",\"blendType\":\"Simple1D\",\"blendParameter\":\"Speed\"}",
             ResponseExample = "{\"created\":\"BlendTree\",\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[],\"name\":\"Locomotion\",\"ignored\":[]}")]
         private void AddBlendTree(UnionAirRequestContext ctx)
@@ -830,7 +830,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Summary = "Updates the blend tree addressed by 'layerIndex', 'state', and 'childPath'. Tree fields are 'name', 'blendType', 'blendParameter', 'blendParameterY', 'useAutomaticThresholds', 'minThreshold', 'maxThreshold'; child fields, which need a non-empty childPath, are 'threshold', 'position', 'timeScale', 'cycleOffset', 'mirror', 'directBlendParameter', and 'motion' to swap in a clip -- a blend tree the swap displaces is destroyed with its descendants. Every value is validated before anything is written, so a request that fails applies nothing. A field the addressed blend type does not consult is stored and reported in 'ignored' rather than dropped silently.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "state" },
-            OptionalBody = new string[] { "layerIndex", "childPath", "name", "blendType", "blendParameter", "blendParameterY", "useAutomaticThresholds", "minThreshold", "maxThreshold", "threshold", "position", "timeScale", "cycleOffset", "mirror", "directBlendParameter", "motion" },
+            OptionalBody = new string[] { "layerIndex", "stateMachinePath", "childPath", "name", "blendType", "blendParameter", "blendParameterY", "useAutomaticThresholds", "minThreshold", "maxThreshold", "threshold", "position", "timeScale", "cycleOffset", "mirror", "directBlendParameter", "motion" },
             RequestExample = "{\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[1],\"threshold\":0.8}",
             ResponseExample = "{\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[1],\"ignored\":[]}")]
         private void UpdateBlendTree(UnionAirRequestContext ctx)
@@ -842,12 +842,60 @@ namespace LeonAkasaka.UnionAir.Editor
             Summary = "Removes the blend tree or child addressed by 'layerIndex', 'state', and 'childPath'. An empty or omitted childPath clears the state's motion, which Unity destroys along with every descendant. A non-empty childPath removes that child; Unity leaves the detached subtree in the asset, so it is destroyed here and 'destroyedSubTrees' reports how many blend trees went with it.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "state" },
-            OptionalBody = new string[] { "layerIndex", "childPath" },
+            OptionalBody = new string[] { "layerIndex", "stateMachinePath", "childPath" },
             RequestExample = "{\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[1]}",
             ResponseExample = "{\"removed\":\"child\",\"layerIndex\":0,\"state\":\"Locomotion\",\"childPath\":[1],\"destroyedSubTrees\":2}")]
         private void DeleteBlendTree(UnionAirRequestContext ctx)
             => new BlendTreeHandler().HandleDelete(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 
+
+        [UnionAirEndpoint("POST", "{guid}/state-machines",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Creates a sub-state machine inside the machine addressed by 'layerIndex' and 'stateMachinePath'. The path is an array of state machine names from the layer root, and an omitted or empty one means that root. 'position' is {x,y} graph layout. A name a sibling already carries is a 409, because the path addresses by name and a second one could not be addressed at all.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "name" },
+            OptionalBody = new string[] { "layerIndex", "stateMachinePath", "position" },
+            RequestExample = "{\"layerIndex\":0,\"stateMachinePath\":[\"Combat\"],\"name\":\"Melee\",\"position\":{\"x\":300,\"y\":120}}",
+            ResponseExample = "{\"added\":\"Melee\",\"layerIndex\":0,\"stateMachinePath\":[\"Combat\",\"Melee\"]}")]
+        private void AddStateMachine(UnionAirRequestContext ctx)
+            => new AnimatorStateMachineHandler().HandleCreate(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("DELETE", "{guid}/state-machines",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Removes the sub-state machine addressed by 'stateMachinePath', with the states, transitions, nested machines, and blend trees it holds -- all sub-assets of the controller. A machine that holds anything answers 409 listing its contents unless 'recursive' is true, because this is not the same size of operation as deleting one state. An empty path names the layer's root and is refused; delete the layer instead.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "stateMachinePath" },
+            OptionalBody = new string[] { "layerIndex", "recursive" },
+            RequestExample = "{\"layerIndex\":0,\"stateMachinePath\":[\"Combat\",\"Melee\"],\"recursive\":true}",
+            ResponseExample = "{\"removed\":\"Melee\",\"layerIndex\":0,\"stateMachinePath\":[\"Combat\",\"Melee\"],\"removedStates\":3,\"removedStateMachines\":0,\"destroyedBlendTrees\":1}")]
+        private void DeleteStateMachine(UnionAirRequestContext ctx)
+            => new AnimatorStateMachineHandler().HandleDelete(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("POST", "{guid}/state-machine-transitions",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Adds an AnimatorTransition to the machine addressed by 'stateMachinePath' -- the type that connects state machines, which carries a destination and conditions and no timing at all. 'from' is 'Entry' for an entry transition, or the name of a nested state machine. The destination is exactly one of 'to' (a state name), 'toStateMachine' (a path), or 'toExit'. Without one of these a created sub-state machine can never be entered.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "from" },
+            OptionalBody = new string[] { "layerIndex", "stateMachinePath", "to", "toStateMachine", "toExit", "solo", "mute", "conditions" },
+            RequestExample = "{\"layerIndex\":0,\"stateMachinePath\":[\"Combat\"],\"from\":\"Entry\",\"to\":\"Idle\"}",
+            ResponseExample = "{\"added\":true,\"transitionId\":\"GlobalObjectId_V1-3-...\",\"layerIndex\":0,\"from\":\"Entry\"}")]
+        private void AddStateMachineTransition(UnionAirRequestContext ctx)
+            => new AnimatorStateMachineHandler().HandleAddTransition(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("DELETE", "{guid}/state-machine-transitions",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Removes an AnimatorTransition by 'transitionId', which the read reports on every entry and state machine transition. There is no name-pair form: these transitions have no source state to name. The transition is a sub-asset of the controller and is destroyed with the removal.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "transitionId" },
+            OptionalBody = new string[] { "layerIndex" },
+            RequestExample = "{\"transitionId\":\"GlobalObjectId_V1-3-...\"}",
+            ResponseExample = "{\"removed\":true,\"transitionId\":\"GlobalObjectId_V1-3-...\",\"kind\":\"entry\",\"layerIndex\":0}")]
+        private void DeleteStateMachineTransition(UnionAirRequestContext ctx)
+            => new AnimatorStateMachineHandler().HandleDeleteTransition(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 
         [UnionAirEndpoint("POST", "{guid}/states",
             Category = UnionAirEndpointCategories.AssetWrite,
@@ -855,7 +903,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Summary = "Adds a state to a layer of an AnimatorController, fully formed: every setting PATCH accepts may be supplied here. 'motion' is an object with a 'guid' referencing an AnimationClip. 'position' is {x,y} graph layout, so a controller authored through the API does not stack every state at the origin. A '*Parameter' naming a parameter the controller does not have is a 400, and so is a '*Active' flag that would be left true with an empty name, which is an override that drives nothing. Every value is checked before the state is created, so a rejected request adds nothing. 'behaviours' is read-only and reported in 'unsupported'. An unknown field is a 400 listing the accepted ones.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "name" },
-            OptionalBody = new string[] { "layerIndex", "setAsDefault", "motion", "speed", "tag", "writeDefaultValues", "iKOnFeet", "mirror", "cycleOffset", "speedParameter", "speedParameterActive", "cycleOffsetParameter", "cycleOffsetParameterActive", "mirrorParameter", "mirrorParameterActive", "timeParameter", "timeParameterActive", "position", "behaviours" },
+            OptionalBody = new string[] { "layerIndex", "stateMachinePath", "setAsDefault", "motion", "speed", "tag", "writeDefaultValues", "iKOnFeet", "mirror", "cycleOffset", "speedParameter", "speedParameterActive", "cycleOffsetParameter", "cycleOffsetParameterActive", "mirrorParameter", "mirrorParameterActive", "timeParameter", "timeParameterActive", "position", "behaviours" },
             RequestExample = "{\"name\":\"Walk\",\"layerIndex\":0,\"motion\":{\"guid\":\"abc123...\"},\"speed\":1.0,\"writeDefaultValues\":false,\"tag\":\"Locomotion\",\"position\":{\"x\":300,\"y\":120}}",
             ResponseExample = "{\"added\":\"Walk\",\"layerIndex\":0,\"isDefault\":false,\"unsupported\":[]}")]
         private void AddState(UnionAirRequestContext ctx)
@@ -867,7 +915,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Summary = "Updates a state in an AnimatorController, addressed by 'name' and optionally 'layerIndex'. Every other field is optional and an omitted field is left unchanged. A '*Parameter' and its '*Active' flag are one decision, judged on the pair the request would leave behind rather than the halves it carries: a name the controller does not have is a 400 and neither half is written, and so is leaving the flag true with an empty name. Every value is checked before the first is written, so a rejected field leaves the state as it was. 'behaviours' is read-only and reported in 'unsupported'. An unknown field is a 400 listing the accepted ones.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "name" },
-            OptionalBody = new string[] { "layerIndex", "newName", "setAsDefault", "motion", "speed", "tag", "writeDefaultValues", "iKOnFeet", "mirror", "cycleOffset", "speedParameter", "speedParameterActive", "cycleOffsetParameter", "cycleOffsetParameterActive", "mirrorParameter", "mirrorParameterActive", "timeParameter", "timeParameterActive", "position", "behaviours" },
+            OptionalBody = new string[] { "layerIndex", "stateMachinePath", "newName", "setAsDefault", "motion", "speed", "tag", "writeDefaultValues", "iKOnFeet", "mirror", "cycleOffset", "speedParameter", "speedParameterActive", "cycleOffsetParameter", "cycleOffsetParameterActive", "mirrorParameter", "mirrorParameterActive", "timeParameter", "timeParameterActive", "position", "behaviours" },
             RequestExample = "{\"name\":\"Walk\",\"layerIndex\":0,\"writeDefaultValues\":false,\"cycleOffset\":0.25,\"speedParameter\":\"Speed\",\"speedParameterActive\":true}",
             ResponseExample = "{\"updated\":\"Walk\",\"layerIndex\":0,\"unsupported\":[]}")]
         private void UpdateState(UnionAirRequestContext ctx)
@@ -879,7 +927,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Summary = "Removes a state from an AnimatorController layer.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "name" },
-            OptionalBody = new string[] { "layerIndex" },
+            OptionalBody = new string[] { "layerIndex", "stateMachinePath" },
             RequestExample = "{\"name\":\"Walk\",\"layerIndex\":0}",
             ResponseExample = "{\"removed\":\"Walk\",\"layerIndex\":0}")]
         private void DeleteState(UnionAirRequestContext ctx)
@@ -891,7 +939,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Summary = "Adds a transition between states in an AnimatorController. Use 'AnyState' as 'from' for any-state transitions, and 'Exit' as 'to' for exit transitions. Condition modes: If, IfNot, Greater, Less, Equals, NotEqual. 'duration' is seconds when 'fixedDuration' is true and a fraction of the source state when it is false. A state pair may carry any number of transitions, so the response returns the new transition's 'transitionId' to address it by later. Every setting is validated before the transition is created, so a rejected request adds nothing. 'canTransitionToSelf' applies to AnyState transitions and is reported in 'unsupported' elsewhere.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "from", "to" },
-            OptionalBody = new string[] { "layerIndex", "hasExitTime", "exitTime", "duration", "fixedDuration", "offset", "interruptionSource", "orderedInterruption", "canTransitionToSelf", "mute", "solo", "conditions" },
+            OptionalBody = new string[] { "layerIndex", "stateMachinePath", "toStateMachine", "hasExitTime", "exitTime", "duration", "fixedDuration", "offset", "interruptionSource", "orderedInterruption", "canTransitionToSelf", "mute", "solo", "conditions" },
             RequestExample = "{\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0,\"hasExitTime\":false,\"duration\":0.25,\"fixedDuration\":true,\"conditions\":[{\"parameter\":\"Speed\",\"mode\":\"Greater\",\"threshold\":0.1}]}",
             ResponseExample = "{\"added\":true,\"transitionId\":\"GlobalObjectId_V1-3-...\",\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0,\"unsupported\":[]}")]
         private void AddTransition(UnionAirRequestContext ctx)
@@ -902,7 +950,7 @@ namespace LeonAkasaka.UnionAir.Editor
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
             Summary = "Updates one transition, addressed by 'transitionId' from the read response, or by 'from' plus 'to' while that pair carries exactly one transition. A pair carrying several answers 409 listing every candidate's transitionId and conditions; it no longer updates the first silently. Every value is validated before the first is written, so a rejected field leaves the transition as it was. 'conditions' replaces the whole array, and an empty array clears it.",
             PathParams = new string[] { "guid" },
-            OptionalBody = new string[] { "transitionId", "from", "to", "layerIndex", "hasExitTime", "exitTime", "duration", "fixedDuration", "offset", "interruptionSource", "orderedInterruption", "canTransitionToSelf", "mute", "solo", "conditions" },
+            OptionalBody = new string[] { "transitionId", "from", "to", "layerIndex", "stateMachinePath", "hasExitTime", "exitTime", "duration", "fixedDuration", "offset", "interruptionSource", "orderedInterruption", "canTransitionToSelf", "mute", "solo", "conditions" },
             RequestExample = "{\"transitionId\":\"GlobalObjectId_V1-3-...\",\"duration\":0.1,\"fixedDuration\":false,\"interruptionSource\":\"Destination\"}",
             ResponseExample = "{\"updated\":true,\"transitionId\":\"GlobalObjectId_V1-3-...\",\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0,\"unsupported\":[]}")]
         private void UpdateTransition(UnionAirRequestContext ctx)
@@ -913,7 +961,7 @@ namespace LeonAkasaka.UnionAir.Editor
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
             Summary = "Removes one transition, addressed by 'transitionId' from the read response, or by 'from' plus 'to' while that pair carries exactly one transition. A pair carrying several answers 409 listing every candidate; it no longer removes them all. The transition is a sub-asset of the controller and is destroyed with the removal.",
             PathParams = new string[] { "guid" },
-            OptionalBody = new string[] { "transitionId", "from", "to", "layerIndex" },
+            OptionalBody = new string[] { "transitionId", "from", "to", "layerIndex", "stateMachinePath" },
             RequestExample = "{\"transitionId\":\"GlobalObjectId_V1-3-...\"}",
             ResponseExample = "{\"removed\":true,\"transitionId\":\"GlobalObjectId_V1-3-...\",\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0}")]
         private void DeleteTransition(UnionAirRequestContext ctx)
