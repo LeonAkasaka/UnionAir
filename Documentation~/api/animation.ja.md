@@ -87,9 +87,45 @@ AnimationClip のメタデータを、すべての float カーブおよびオ�
 {
   "assetPath": "Assets/Animations/Walk.anim",
   "guid": "a1b2c3...",
+  "name": "Walk",
+  "clipsAtPath": 1,
+  "clipNames": ["Walk"],
+  "imported": false,
+  "importer": null,
+  "writable": true,
   "frameRate": 60.0,
   "length": 1.0,
   "wrapMode": "Loop",
+  "settings": {
+    "loopTime": true,
+    "loopBlend": false,
+    "cycleOffset": 0.0,
+    "loopBlendOrientation": false,
+    "loopBlendPositionY": false,
+    "loopBlendPositionXZ": false,
+    "keepOriginalOrientation": false,
+    "keepOriginalPositionY": true,
+    "keepOriginalPositionXZ": false,
+    "heightFromFeet": false,
+    "mirror": false,
+    "level": 0.0,
+    "orientationOffsetY": 0.0,
+    "startTime": 0.0,
+    "stopTime": 1.0,
+    "additiveReferencePoseTime": 0.0,
+    "hasAdditiveReferencePose": false
+  },
+  "events": [
+    {
+      "time": 0.5,
+      "functionName": "Footstep",
+      "stringParameter": "left",
+      "floatParameter": 0.0,
+      "intParameter": 0,
+      "objectReferenceParameter": null,
+      "messageOptions": "RequireReceiver"
+    }
+  ],
   "curveCount": 1,
   "curves": [
     {
@@ -119,12 +155,153 @@ AnimationClip のメタデータを、すべての float カーブおよびオ�
 }
 ```
 
+### `wrapMode` は Loop Time ではありません
+
+`wrapMode` はクリップオブジェクト上の `WrapMode` です。**そのクリップがループするかどうかは `settings.loopTime`** で、Animation Inspector が Loop Time と表示している項目です。6000.0.80f1 で計測: インポートされた待機クリップは `"wrapMode": "Default"` かつ `"settings": { "loopTime": true }` を返します。ループするかを知るために `wrapMode` を読むクライアントは、別のことについての答えを受け取ります。
+
+両方を隣り合わせで返すのは、この 2 つを取り違えられないようにするためです。
+
+### `settings`
+
+Animation Inspector がカーブ一覧の上に表示するものすべてです: `loopTime`, `loopBlend`, `cycleOffset`, `loopBlendOrientation`, `loopBlendPositionY`, `loopBlendPositionXZ`, `keepOriginalOrientation`, `keepOriginalPositionY`, `keepOriginalPositionXZ`, `heightFromFeet`, `mirror`, `level`, `orientationOffsetY`, `startTime`, `stopTime`, `additiveReferencePoseTime`, `hasAdditiveReferencePose`。任意の部分集合を [`PATCH`](#patch-apiassetsanimation-clipsguid) で設定できます。
+
+### `imported` / `writable` とクリップの所有者
+
+| フィールド | 説明 |
+|---|---|
+| `name` | クリップ自身の名前。`assetPath` と `guid` は**ファイル**を指し、`.fbx` の中ではそれはクリップではありません |
+| `clipsAtPath`, `clipNames` | 同じパスを共有する AnimationClip の数と名前 |
+| `imported` | インポータが生成したクリップかどうか |
+| `importer` | インポータの型名、または `null` |
+| `writable` | この API が書き込むかどうか |
+
+`.fbx` の中のクリップは `ModelImporter` が生成し、その設定はインポータが所有します。そのクリップに `AnimationUtility.SetAnimationClipSettings` を呼んでも、次の再インポートで破棄されるメモリ上のオブジェクトを変更するだけです。したがって**すべての書き込みエンドポイントはインポート済みクリップを `409` で拒否します** — 従来は書き込みを受け付けて黙って失っていた `POST` / `DELETE .../curves` も含みます。インポート済みクリップを変更するにはインポータを変更する必要があり、UnionAir はまだそれを公開していません。
+
+所有者の判定は拡張子ではなく `AssetImporter.GetAtPath` が何をそのパスのインポータと答えるかで行います。`.anim` もインポートはされますが、そのインポータ(`NativeFormatImporter`)はクリップの設定を所有していません。
+
+`LoadAssetAtPath` はインポータが最初に列挙したクリップを返すため、複数のテイクを持つパスは 1 つだけを GUID で公開し残りを隠します。`clipsAtPath` が `1` より大きければそれを示しています。インポート済みファイル内の個々のクリップをアドレス指定することは、このエンドポイントが解決しないサブアセットの問題です。
+
 ### エラー
 
 | ステータス | 原因 |
 |--------|-------|
 | 400 | アセットが AnimationClip でない |
 | 404 | 指定 GUID のアセットが見つからない |
+
+---
+
+## PATCH /api/assets/animation-clips/{guid}
+
+クリップの `frameRate`、`wrapMode`、および `settings` の任意の部分集合を設定します。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### リクエストボディ(JSON)
+
+```json
+{
+  "frameRate": 30.0,
+  "wrapMode": "Loop",
+  "settings": { "loopTime": true, "cycleOffset": 0.0 }
+}
+```
+
+| フィールド | 必須 | 説明 |
+|-------|----------|-------------|
+| `frameRate` | ❌ | 1 秒あたりのサンプル数。0 より大きい必要があります |
+| `wrapMode` | ❌ | `Once`、`Loop`、`PingPong`、`ClampForever`、`Default`。**Loop Time ではありません** |
+| `settings` | ❌ | [`settings`](#settings) に挙げたフィールドの任意の部分集合 |
+
+省略したフィールドは変更されません。未知のフィールド(settings のフィールドをトップレベルに送った場合を含む)は、その名前を挙げて `400` になります。すべての値は最初の書き込みの前に検証されるため、拒否されたリクエストはクリップを元のまま残します。
+
+### レスポンス
+
+```json
+{
+  "assetPath": "Assets/Animations/Walk.anim",
+  "name": "Walk",
+  "applied": ["frameRate", "settings.loopTime"],
+  "settings": { "loopTime": true }
+}
+```
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | 値が不正、`wrapMode` が未知、またはボディに未知のフィールドがある |
+| 404 | 指定 GUID のアセットが見つからない |
+| 409 | クリップがインポータによって生成されている |
+
+---
+
+## POST /api/assets/animation-clips/{guid}/events
+
+クリップのアニメーションイベントをすべて置き換えます。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### リクエストボディ(JSON)
+
+```json
+{
+  "events": [
+    { "time": 0.25, "functionName": "Footstep", "stringParameter": "left" },
+    { "time": 0.75, "functionName": "Hit", "objectReferenceParameter": { "guid": "a1b2c3..." },
+      "messageOptions": "DontRequireReceiver" }
+  ]
+}
+```
+
+| フィールド | 必須 | 説明 |
+|-------|----------|-------------|
+| `time` | ✅ | 秒単位の時間 |
+| `functionName` | ✅ | アニメーション対象 GameObject のコンポーネントで呼び出すメソッド |
+| `stringParameter`, `floatParameter`, `intParameter` | ❌ | パラメータ |
+| `objectReferenceParameter` | ❌ | アセットの `{guid}`、または `null` |
+| `messageOptions` | ❌ | `RequireReceiver` または `DontRequireReceiver`。既定は `RequireReceiver` で、これはこのエンドポイントの選択ではなく新規イベントに対する Unity の既定値です |
+
+**配列はリスト全体を置き換えます。** Unity はイベントを「要素ごとの識別子を持たない順序付き配列」として保存し、まるごと書き換えます。個々の要素をアドレス指定することは、フォーマットに存在しない識別子を発明することになります。クリアするには `[]` を送るか `DELETE` を使ってください。`events` の省略はクリアではなく `400` です。配列が無いことを「全部消せ」と読むべきではないからです。
+
+すべての要素は 1 つも書き込む前に解析・解決されるため、4 番目の要素が存在しないアセットを指しているリストは何も置き換えません。
+
+### レスポンス
+
+```json
+{ "assetPath": "Assets/Animations/Walk.anim", "eventCount": 2, "events": [] }
+```
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | `events` の欠落や不正、要素に `time` / `functionName` が無い、または `messageOptions` が未知 |
+| 404 | `objectReferenceParameter` の GUID が解決しない |
+| 409 | クリップがインポータによって生成されている |
+
+---
+
+## DELETE /api/assets/animation-clips/{guid}/events
+
+クリップからアニメーションイベントをすべて削除します。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### レスポンス
+
+```json
+{ "assetPath": "Assets/Animations/Walk.anim", "removed": 2 }
+```
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 404 | 指定 GUID のアセットが見つからない |
+| 409 | クリップがインポータによって生成されている |
 
 ---
 
