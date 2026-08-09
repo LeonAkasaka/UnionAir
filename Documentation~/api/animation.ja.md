@@ -347,8 +347,23 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
       "states": [
         {
           "name": "Idle",
-          "speed": 1.0,
           "isDefault": true,
+          "tag": "",
+          "writeDefaultValues": true,
+          "iKOnFeet": false,
+          "mirror": false,
+          "cycleOffset": 0.0,
+          "speed": 1.0,
+          "speedParameter": "",
+          "speedParameterActive": false,
+          "cycleOffsetParameter": "",
+          "cycleOffsetParameterActive": false,
+          "mirrorParameter": "",
+          "mirrorParameterActive": false,
+          "timeParameter": "",
+          "timeParameterActive": false,
+          "position": { "x": 156.0, "y": -48.0 },
+          "behaviours": [],
           "motion": {
             "type": "AnimationClip",
             "guid": "d4e5f6...",
@@ -449,6 +464,37 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
 ```
 
 入れ子は深さ 10 まで返します。その深さにあるブレンドツリーは `"truncated": true` を持ち、`children` を**持ちません**。境界と葉を区別できるようにするためで、空の `children` 配列は文字どおり「子が無い」という意味のまま残ります。
+
+### ステートのフィールド
+
+| フィールド | 説明 |
+|---|---|
+| `name` | ステート名。`PATCH` と `DELETE` のアドレスでもあります |
+| `isDefault` | そのレイヤーのデフォルトステートかどうか |
+| `tag` | ランタイムが `AnimatorStateInfo.IsTag` で照合する文字列 |
+| `writeDefaultValues` | そのステートがアニメーションさせないプロパティを既定値に戻すかどうか |
+| `iKOnFeet` | Foot IK |
+| `mirror` | モーションを左右反転して再生するかどうか |
+| `cycleOffset` | モーションのサイクルに対する正規化オフセット |
+| `speed` | 再生速度。**`speedParameterActive` が `true` のときは実効値ではありません** |
+| `speedParameter`, `cycleOffsetParameter`, `mirrorParameter`, `timeParameter` | 各値を駆動するパラメータ |
+| `speedParameterActive`, `cycleOffsetParameterActive`, `mirrorParameterActive`, `timeParameterActive` | そのオーバーライドが有効かどうか |
+| `position` | Animator ウィンドウのグラフ上の位置。下記参照 |
+| `behaviours` | アタッチされている `StateMachineBehaviour` の型名。**読み取り専用。** スクリプトが失われているものは `null` |
+| `motion` | [モーション](#モーション)を参照 |
+| `transitions` | [トランジションのフィールド](#トランジションのフィールド)を参照 |
+
+各 `*Parameter` は、無効なときに空文字へ畳まず、対応する `*Active` フラグと並べて返します。Unity は両方を保存しており、無効なパラメータ名もアセットが保持する内容です。ステートを再現するクライアントにはそれが必要です。
+
+#### `position` はグラフ上のレイアウト
+
+`position` はステートのプロパティではありません。ステートマシンの配列の要素である `ChildAnimatorState` が持っており、Animator ウィンドウはこれを読んでグラフを配置します。つまり書き込むとノードが移動します。API だけで組み立てたコントローラーは、これが無いと全ステートが原点に重なります。
+
+Unity のフィールドは `Vector3` ですが、グラフは平面です。`z` はそこでは使われないため返しません。書き込みは `x` と `y` を設定し、`z` は保持します。
+
+#### `behaviours` は読み取り専用
+
+スクリプトを実行するステートとそうでないステートを区別できるように、アタッチされているものを返します。アタッチ操作は提供しません。スクリプト型を解決してコントローラーのサブアセットとして生成する必要があり、それ自体が別の所有権の問題だからです。リクエストボディの `behaviours` は無視せず `unsupported` に報告します。
 
 ### トランジションのフィールド
 
@@ -905,6 +951,9 @@ AnimatorController のレイヤーにステートを追加します。
   "layerIndex": 0,
   "motion": { "guid": "d4e5f6..." },
   "speed": 1.0,
+  "writeDefaultValues": false,
+  "tag": "Locomotion",
+  "position": { "x": 300, "y": 120 },
   "setAsDefault": false
 }
 ```
@@ -913,21 +962,23 @@ AnimatorController のレイヤーにステートを追加します。
 |-------|----------|-------------|
 | `name` | ✅ | ステート名 |
 | `layerIndex` | ❌ | 対象レイヤーのインデックス(既定: 0) |
-| `motion` | ❌ | AnimationClip アセットを参照する `guid` を持つオブジェクト |
-| `speed` | ❌ | 再生速度(既定: 1.0) |
 | `setAsDefault` | ❌ | `true` の場合、このステートをレイヤーの既定(エントリ)ステートに設定 |
+
+[ステートのフィールド](#ステートのフィールド)の書き込み可能な設定はすべてここでも指定できます。作成してから PATCH で整える必要はありません: `motion`、`speed`、`tag`、`writeDefaultValues`、`iKOnFeet`、`mirror`、`cycleOffset`、4 つの `*Parameter` とその `*Active` フラグ、`position`。各項目の詳細は [PATCH](#patch-apiassetsanimator-controllersguidstates) を参照してください。
 
 ### レスポンス(HTTP 201)
 
 ```json
-{ "added": "Walk", "layerIndex": 0, "isDefault": false }
+{ "added": "Walk", "layerIndex": 0, "isDefault": false, "unsupported": [] }
 ```
 
 ### エラー
 
 | ステータス | 原因 |
 |--------|-------|
-| 400 | `name` の欠落、`layerIndex` が範囲外、または motion の GUID が見つからない |
+| 400 | `name` の欠落、`layerIndex` が範囲外、motion の GUID が見つからない、設定値が不正、`*Parameter` がコントローラーに存在しないパラメータを指している、またはボディに未知のフィールドがある |
+
+すべての値はステートを作成する前に検証されます。したがって `400` で拒否されたリクエストは何も追加しません。
 
 ---
 
@@ -953,6 +1004,11 @@ AnimatorController の既存ステートを更新します。
   "newName": "Run",
   "motion": { "guid": "e5f6a7..." },
   "speed": 1.5,
+  "writeDefaultValues": false,
+  "cycleOffset": 0.25,
+  "speedParameter": "Speed",
+  "speedParameterActive": true,
+  "position": { "x": 300, "y": 120 },
   "setAsDefault": true
 }
 ```
@@ -962,20 +1018,48 @@ AnimatorController の既存ステートを更新します。
 | `name` | ✅ | 現在のステート名(ステートの特定に使用) |
 | `layerIndex` | ❌ | レイヤーインデックス(既定: 0) |
 | `newName` | ❌ | ステートの新しい名前 |
-| `motion` | ❌ | 割り当てられたモーションクリップを差し替え |
-| `speed` | ❌ | 再生速度 |
 | `setAsDefault` | ❌ | このステートをレイヤーの既定に設定 |
+| `motion` | ❌ | Motion アセットを参照する `guid` を持つオブジェクト。割り当てを差し替えます |
+| `speed` | ❌ | 再生速度 |
+| `tag` | ❌ | ランタイムが `AnimatorStateInfo.IsTag` で照合する文字列。`""` でクリア |
+| `writeDefaultValues` | ❌ | そのステートがアニメーションさせないプロパティを既定値に戻すかどうか |
+| `iKOnFeet` | ❌ | Foot IK |
+| `mirror` | ❌ | モーションを左右反転して再生するかどうか |
+| `cycleOffset` | ❌ | モーションのサイクルに対する正規化オフセット |
+| `speedParameter`, `cycleOffsetParameter`, `mirrorParameter`, `timeParameter` | ❌ | 各値を駆動するパラメータ。`""` でオーバーライドを解除 |
+| `speedParameterActive`, `cycleOffsetParameterActive`, `mirrorParameterActive`, `timeParameterActive` | ❌ | そのオーバーライドを有効にするか |
+| `position` | ❌ | `{x, y}` のグラフ位置。[`position` はグラフ上のレイアウト](#position-はグラフ上のレイアウト)を参照 |
+| `behaviours` | ❌ | 受け付けますが**適用しません**。読み取り専用で、`unsupported` に報告されます |
+
+省略したフィールドは変更されません。すべての値は最初の 1 つが書き込まれる前に検証されるため、`400` で拒否されたリクエストはステートを中途半端に更新した状態にはせず、元のまま残します。
+
+`*Parameter` とその `*Active` フラグは 1 つの決定として扱い、判定はリクエストが持つ半分ずつではなく**リクエスト適用後に残る組**に対して行います(送られたフィールドはその値、送られなかったフィールドはステートの現在値)。有効なのに名前が空のオーバーライドは再生できないステートであり、どちらの半分も単独では不正に見えないまま作れてしまうためです。
+
+| リクエスト | 結果 |
+|---|---|
+| コントローラーに無い名前 | `400`。名前もフラグも書き込みません |
+| リクエストにもステートにも名前が無い状態で `*Active: true` | `400`。何も駆動しないオーバーライドになります |
+| フラグが `true` のまま `*Parameter: ""` | 同じ理由で `400`。まとめて解除するには同じリクエストで `*Active: false` も送ってください |
+| ステートが既に実在するパラメータ名を持つ状態で `*Active: true` だけ | 受理。名前を送り直す必要はありません |
+| `*Parameter: ""` と `*Active: false` | 受理。オーバーライドを解除します |
+
+オーバーライドが無効のままなら、ステートが既に持っている名前は再検証しません。休眠中のオーバーライドが指すパラメータを誰かが削除していても、無関係なフィールドの更新が拒否されないようにするためです。
+
+**未知のフィールドは拒否します。** `400` で受け付けるフィールド一覧を返すため、`writeDefaults` のような綴り違いが「効かない設定」として通ってしまうことはありません。
 
 ### レスポンス
 
 ```json
-{ "updated": "Run", "layerIndex": 0 }
+{ "updated": "Run", "layerIndex": 0, "unsupported": [] }
 ```
+
+`unsupported` は、受け付けたが適用されなかったフィールドを列挙します。現在該当するのは `behaviours` だけです。
 
 ### エラー
 
 | ステータス | 原因 |
 |--------|-------|
+| 400 | 設定値が不正、`*Parameter` がコントローラーに存在しないパラメータを指している、またはボディに未知のフィールドがある |
 | 404 | ステートが見つからない |
 
 ---

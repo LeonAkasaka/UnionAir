@@ -344,8 +344,23 @@ Returns the full AnimatorController structure: parameters, layers, states, trans
       "states": [
         {
           "name": "Idle",
-          "speed": 1.0,
           "isDefault": true,
+          "tag": "",
+          "writeDefaultValues": true,
+          "iKOnFeet": false,
+          "mirror": false,
+          "cycleOffset": 0.0,
+          "speed": 1.0,
+          "speedParameter": "",
+          "speedParameterActive": false,
+          "cycleOffsetParameter": "",
+          "cycleOffsetParameterActive": false,
+          "mirrorParameter": "",
+          "mirrorParameterActive": false,
+          "timeParameter": "",
+          "timeParameterActive": false,
+          "position": { "x": 156.0, "y": -48.0 },
+          "behaviours": [],
           "motion": {
             "type": "AnimationClip",
             "guid": "d4e5f6...",
@@ -446,6 +461,37 @@ Each child carries `threshold`, `position` (`{x, y}`, used by the 2D types), `ti
 ```
 
 Nesting is serialized to a depth of 10. A blend tree at that depth is reported with `"truncated": true` and **no** `children`, so a boundary is distinguishable from a leaf; an empty `children` array keeps meaning what it says, since a blend tree may genuinely have none.
+
+### State fields
+
+| Field | Description |
+|-------|-------------|
+| `name` | State name. Also its address on `PATCH` and `DELETE` |
+| `isDefault` | Whether this is the layer's default state |
+| `tag` | The string runtime code matches with `AnimatorStateInfo.IsTag` |
+| `writeDefaultValues` | Whether properties the state does not animate are reset to their defaults |
+| `iKOnFeet` | Foot IK |
+| `mirror` | Whether the motion plays mirrored |
+| `cycleOffset` | Normalized offset into the motion's cycle |
+| `speed` | Playback speed. **Not the speed in effect when `speedParameterActive` is `true`** |
+| `speedParameter`, `cycleOffsetParameter`, `mirrorParameter`, `timeParameter` | Parameter driving each value |
+| `speedParameterActive`, `cycleOffsetParameterActive`, `mirrorParameterActive`, `timeParameterActive` | Whether that override is in effect |
+| `position` | Where the state sits in the Animator window's graph. See below |
+| `behaviours` | Type names of the attached `StateMachineBehaviour` instances. **Read-only.** A `null` entry is one whose script is missing |
+| `motion` | See [Motion](#motion) |
+| `transitions` | See [Transition fields](#transition-fields) |
+
+Each `*Parameter` is reported beside its own `*Active` flag rather than folded to an empty string when inactive. Unity stores both, and an inactive parameter name is content the asset holds — a client reproducing the state needs it.
+
+#### `position` is graph layout
+
+`position` is not a property of the state. It lives on `ChildAnimatorState`, the entry in the state machine's array, which is what the Animator window reads to lay out the graph — so writing it moves the node, and a controller authored entirely through the API otherwise stacks every state at the origin.
+
+Unity's field is a `Vector3` and the graph is flat: `z` is unused there, so it is not reported. A write sets `x` and `y` and leaves whatever `z` holds.
+
+#### `behaviours` is read-only
+
+The read reports what is attached so that a state which runs script is distinguishable from one that does not. Attaching one is not offered: it means resolving a script type and instantiating it as a sub-asset of the controller, which is an ownership problem of its own. `behaviours` sent in a request body is reported in `unsupported` rather than ignored.
 
 ### Transition fields
 
@@ -902,6 +948,9 @@ Adds a state to a layer of an AnimatorController.
   "layerIndex": 0,
   "motion": { "guid": "d4e5f6..." },
   "speed": 1.0,
+  "writeDefaultValues": false,
+  "tag": "Locomotion",
+  "position": { "x": 300, "y": 120 },
   "setAsDefault": false
 }
 ```
@@ -910,21 +959,23 @@ Adds a state to a layer of an AnimatorController.
 |-------|----------|-------------|
 | `name` | ✅ | State name |
 | `layerIndex` | ❌ | Target layer index (default: 0) |
-| `motion` | ❌ | Object with `guid` referencing an AnimationClip asset |
-| `speed` | ❌ | Playback speed (default: 1.0) |
 | `setAsDefault` | ❌ | If `true`, sets this state as the layer's default (entry) state |
+
+Every writable setting from [State fields](#state-fields) may also be supplied, so a state can be created fully formed rather than created and then patched: `motion`, `speed`, `tag`, `writeDefaultValues`, `iKOnFeet`, `mirror`, `cycleOffset`, the four `*Parameter` fields with their `*Active` flags, and `position`. See [PATCH](#patch-apiassetsanimator-controllersguidstates) for what each accepts.
 
 ### Response (HTTP 201)
 
 ```json
-{ "added": "Walk", "layerIndex": 0, "isDefault": false }
+{ "added": "Walk", "layerIndex": 0, "isDefault": false, "unsupported": [] }
 ```
 
 ### Errors
 
 | Status | Cause |
 |--------|-------|
-| 400 | `name` is missing, `layerIndex` is out of range, or motion GUID is not found |
+| 400 | `name` is missing, `layerIndex` is out of range, a motion GUID is not found, a setting is malformed, a `*Parameter` names no parameter on the controller, or the body carries an unknown field |
+
+Every value is checked before the state is created, so a request rejected with `400` adds nothing.
 
 ---
 
@@ -950,6 +1001,11 @@ Updates an existing state in an AnimatorController.
   "newName": "Run",
   "motion": { "guid": "e5f6a7..." },
   "speed": 1.5,
+  "writeDefaultValues": false,
+  "cycleOffset": 0.25,
+  "speedParameter": "Speed",
+  "speedParameterActive": true,
+  "position": { "x": 300, "y": 120 },
   "setAsDefault": true
 }
 ```
@@ -959,20 +1015,48 @@ Updates an existing state in an AnimatorController.
 | `name` | ✅ | Current state name (used to identify the state) |
 | `layerIndex` | ❌ | Layer index (default: 0) |
 | `newName` | ❌ | New name for the state |
-| `motion` | ❌ | Replace the assigned motion clip |
-| `speed` | ❌ | Playback speed |
 | `setAsDefault` | ❌ | Set this state as the layer default |
+| `motion` | ❌ | Object with `guid` referencing a Motion asset. Replaces the assigned motion |
+| `speed` | ❌ | Playback speed |
+| `tag` | ❌ | The string runtime code matches with `AnimatorStateInfo.IsTag`. `""` clears it |
+| `writeDefaultValues` | ❌ | Whether properties the state does not animate are reset to their defaults |
+| `iKOnFeet` | ❌ | Foot IK |
+| `mirror` | ❌ | Whether the motion plays mirrored |
+| `cycleOffset` | ❌ | Normalized offset into the motion's cycle |
+| `speedParameter`, `cycleOffsetParameter`, `mirrorParameter`, `timeParameter` | ❌ | Parameter driving each value. `""` clears the override |
+| `speedParameterActive`, `cycleOffsetParameterActive`, `mirrorParameterActive`, `timeParameterActive` | ❌ | Whether that override is in effect |
+| `position` | ❌ | `{x, y}` graph position. See [`position` is graph layout](#position-is-graph-layout) |
+| `behaviours` | ❌ | Accepted and **not applied** — read-only, and reported in `unsupported` |
+
+An omitted field is left unchanged. Every value is checked before the first is written, so a request rejected with `400` leaves the state exactly as it was rather than partly updated.
+
+A `*Parameter` and its `*Active` flag are one decision, and the check is made on the pair the request would leave behind — the value it carries where it carries one, the state's current value otherwise. An override that is on and names nothing is a state that cannot play, and neither half has to look wrong on its own to produce one.
+
+| Request | Result |
+|---|---|
+| A name the controller does not have | `400`. Neither half is written |
+| `*Active: true` with no name in the request and none on the state | `400` — the override would drive nothing |
+| `*Parameter: ""` while the flag stays `true` | `400`, for the same reason. Send `*Active: false` in the same request to clear both |
+| `*Active: true` alone, where the state already names a parameter that exists | Accepted. The name does not have to be resent |
+| `*Parameter: ""` with `*Active: false` | Accepted. Clears the override |
+
+A name already on the state is not re-checked while the override stays off, so a patch to an unrelated field is not refused because someone deleted the parameter a dormant override still names.
+
+**Unknown fields are rejected** with a `400` that lists the accepted ones, so a typo such as `writeDefaults` cannot pass for a setting that did nothing.
 
 ### Response
 
 ```json
-{ "updated": "Run", "layerIndex": 0 }
+{ "updated": "Run", "layerIndex": 0, "unsupported": [] }
 ```
+
+`unsupported` names each field that was accepted but not applied — today only `behaviours`.
 
 ### Errors
 
 | Status | Cause |
 |--------|-------|
+| 400 | A setting is malformed, a `*Parameter` names no parameter on the controller, or the body carries an unknown field |
 | 404 | State not found |
 
 ---

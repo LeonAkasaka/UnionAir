@@ -148,8 +148,8 @@ namespace LeonAkasaka.UnionAir.Editor
                     var state = states[si].state;
                     sb.Append("{");
                     sb.Append($"\"name\":\"{RestResponse.EscapeJson(state.name)}\",");
-                    sb.Append($"\"speed\":{RestResponse.FormatFloat(state.speed)},");
                     sb.Append($"\"isDefault\":{(sm.defaultState == state ? "true" : "false")},");
+                    AppendStateSettings(sb, state, states[si].position);
 
                     // Motion
                     sb.Append("\"motion\":");
@@ -556,6 +556,12 @@ namespace LeonAkasaka.UnionAir.Editor
             if (controller == null) return;
 
             var body = RequestBodyReader.ReadString(request);
+            if (!RequestBodyReader.TryValidateObjectFields(body, AnimatorStateRules.AddFields, out var fieldError))
+            {
+                RestResponse.SendError(response, fieldError, 400);
+                return;
+            }
+
             var name = RequestBodyReader.GetString(body, "name");
             if (string.IsNullOrEmpty(name))
             {
@@ -563,35 +569,17 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var layerIndex = RequestBodyReader.GetInt(body, "layerIndex") ?? 0;
-            if (layerIndex < 0 || layerIndex >= controller.layers.Length)
-            {
-                RestResponse.SendError(response, $"layerIndex {layerIndex} is out of range (0-{controller.layers.Length - 1})", 400);
-                return;
-            }
+            if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
+
+            // Parsed before the state exists, so a rejected setting leaves nothing behind.
+            // The state is null here for the same reason: there is nothing to check the
+            // parameter overrides against but the request itself.
+            if (!TryParseStateFields(controller, null, body, response, out var fields)) return;
 
             var sm = controller.layers[layerIndex].stateMachine;
             var state = sm.AddState(name);
 
-            var speed = RequestBodyReader.GetFloat(body, "speed");
-            if (speed.HasValue) state.speed = speed.Value;
-
-            var motionObj = RequestBodyReader.GetObject(body, "motion");
-            if (!string.IsNullOrEmpty(motionObj))
-            {
-                var motionGuid = RequestBodyReader.GetString(motionObj, "guid");
-                if (!string.IsNullOrEmpty(motionGuid))
-                {
-                    var motionPath = AssetDatabase.GUIDToAssetPath(motionGuid);
-                    var motion = AssetDatabase.LoadAssetAtPath<Motion>(motionPath);
-                    if (motion == null)
-                    {
-                        RestResponse.SendError(response, $"Motion asset not found for GUID: {motionGuid}", 400);
-                        return;
-                    }
-                    controller.SetStateEffectiveMotion(state, motion, layerIndex);
-                }
-            }
+            ApplyStateFields(controller, sm, state, layerIndex, fields);
 
             var setAsDefault = RequestBodyReader.GetBool(body, "setAsDefault") ?? false;
             if (setAsDefault) sm.defaultState = state;
@@ -599,9 +587,13 @@ namespace LeonAkasaka.UnionAir.Editor
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
 
-            RestResponse.Send(response,
-                $"{{\"added\":\"{RestResponse.EscapeJson(name)}\",\"layerIndex\":{layerIndex},\"isDefault\":{(sm.defaultState == state ? "true" : "false")}}}",
-                201);
+            var sb = new StringBuilder();
+            sb.Append("{\"added\":").Append(RestResponse.FormatNullableString(name));
+            sb.Append(",\"layerIndex\":").Append(layerIndex);
+            sb.Append(",\"isDefault\":").Append(RestResponse.FormatBool(sm.defaultState == state));
+            AppendUnsupported(sb, AnimatorStateRules.CollectUnsupported(fields.SetBehaviours));
+            sb.Append("}");
+            RestResponse.Send(response, sb.ToString(), 201);
         }
 
         // ── PATCH /api/assets/animator-controllers/{guid}/states ─────────────
@@ -612,6 +604,12 @@ namespace LeonAkasaka.UnionAir.Editor
             if (controller == null) return;
 
             var body = RequestBodyReader.ReadString(request);
+            if (!RequestBodyReader.TryValidateObjectFields(body, AnimatorStateRules.UpdateFields, out var fieldError))
+            {
+                RestResponse.SendError(response, fieldError, 400);
+                return;
+            }
+
             var name = RequestBodyReader.GetString(body, "name");
             if (string.IsNullOrEmpty(name))
             {
@@ -619,12 +617,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var layerIndex = RequestBodyReader.GetInt(body, "layerIndex") ?? 0;
-            if (layerIndex < 0 || layerIndex >= controller.layers.Length)
-            {
-                RestResponse.SendError(response, $"layerIndex {layerIndex} is out of range", 400);
-                return;
-            }
+            if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
 
             var sm = controller.layers[layerIndex].stateMachine;
             var state = FindState(sm, name);
@@ -634,37 +627,27 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            // Everything is checked before the first field is written, so a request that
+            // sets several and fails on one leaves the state as it was.
+            if (!TryParseStateFields(controller, state, body, response, out var fields)) return;
+
             var newName = RequestBodyReader.GetString(body, "newName");
             if (!string.IsNullOrEmpty(newName)) state.name = newName;
 
-            var speed = RequestBodyReader.GetFloat(body, "speed");
-            if (speed.HasValue) state.speed = speed.Value;
+            ApplyStateFields(controller, sm, state, layerIndex, fields);
 
             var setAsDefault = RequestBodyReader.GetBool(body, "setAsDefault");
             if (setAsDefault == true) sm.defaultState = state;
 
-            var motionObj = RequestBodyReader.GetObject(body, "motion");
-            if (!string.IsNullOrEmpty(motionObj))
-            {
-                var motionGuid = RequestBodyReader.GetString(motionObj, "guid");
-                if (!string.IsNullOrEmpty(motionGuid))
-                {
-                    var motionPath = AssetDatabase.GUIDToAssetPath(motionGuid);
-                    var motion = AssetDatabase.LoadAssetAtPath<Motion>(motionPath);
-                    if (motion == null)
-                    {
-                        RestResponse.SendError(response, $"Motion asset not found for GUID: {motionGuid}", 400);
-                        return;
-                    }
-                    controller.SetStateEffectiveMotion(state, motion, layerIndex);
-                }
-            }
-
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
 
-            RestResponse.Send(response,
-                $"{{\"updated\":\"{RestResponse.EscapeJson(state.name)}\",\"layerIndex\":{layerIndex}}}");
+            var sb = new StringBuilder();
+            sb.Append("{\"updated\":").Append(RestResponse.FormatNullableString(state.name));
+            sb.Append(",\"layerIndex\":").Append(layerIndex);
+            AppendUnsupported(sb, AnimatorStateRules.CollectUnsupported(fields.SetBehaviours));
+            sb.Append("}");
+            RestResponse.Send(response, sb.ToString());
         }
 
         // ── DELETE /api/assets/animator-controllers/{guid}/states ────────────
@@ -905,6 +888,333 @@ namespace LeonAkasaka.UnionAir.Editor
             foreach (var p in controller.parameters)
                 if (p.name == name) return p;
             return null;
+        }
+
+        // ── State settings ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// The state settings a request carries, parsed and checked but not applied.
+        ///
+        /// Separating the two is what makes a request atomic: nothing is written until
+        /// every value has been accepted, so a <c>POST</c> rejected for one bad field adds
+        /// no state and a <c>PATCH</c> rejected for one leaves the others unapplied.
+        /// </summary>
+        private struct StateFields
+        {
+            public bool SetTag; public string Tag;
+            public bool SetWriteDefaultValues; public bool WriteDefaultValues;
+            public bool SetIkOnFeet; public bool IkOnFeet;
+            public bool SetMirror; public bool Mirror;
+            public bool SetCycleOffset; public float CycleOffset;
+            public bool SetSpeed; public float Speed;
+            public bool SetSpeedParameter; public string SpeedParameter;
+            public bool SetSpeedParameterActive; public bool SpeedParameterActive;
+            public bool SetCycleOffsetParameter; public string CycleOffsetParameter;
+            public bool SetCycleOffsetParameterActive; public bool CycleOffsetParameterActive;
+            public bool SetMirrorParameter; public string MirrorParameter;
+            public bool SetMirrorParameterActive; public bool MirrorParameterActive;
+            public bool SetTimeParameter; public string TimeParameter;
+            public bool SetTimeParameterActive; public bool TimeParameterActive;
+            public bool SetPosition; public Vector2 Position;
+            public bool SetMotion; public Motion Motion;
+            public bool SetBehaviours;
+        }
+
+        /// <param name="state">
+        /// The state being updated, or null when one is being created. The parameter
+        /// overrides are checked against what the state already holds as well as against
+        /// what the request carries, so this is what makes "activate the override that is
+        /// already named" legal and "activate nothing" not.
+        /// </param>
+        private static bool TryParseStateFields(
+            AnimatorController controller, AnimatorState state, string body,
+            UnionAirResponse response, out StateFields fields)
+        {
+            fields = default(StateFields);
+            fields.SetBehaviours = RequestBodyReader.HasTopLevelField(body, "behaviours");
+
+            if (!RequestBodyReader.TryGetStringValue(body, "tag", out fields.Tag, out fields.SetTag))
+            {
+                RestResponse.SendError(response, "tag must be a string.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetBoolValue(body, "writeDefaultValues", out fields.WriteDefaultValues, out fields.SetWriteDefaultValues))
+            {
+                RestResponse.SendError(response, "writeDefaultValues must be a boolean.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetBoolValue(body, "iKOnFeet", out fields.IkOnFeet, out fields.SetIkOnFeet))
+            {
+                RestResponse.SendError(response, "iKOnFeet must be a boolean.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetBoolValue(body, "mirror", out fields.Mirror, out fields.SetMirror))
+            {
+                RestResponse.SendError(response, "mirror must be a boolean.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetFloatValue(body, "cycleOffset", out fields.CycleOffset, out fields.SetCycleOffset))
+            {
+                RestResponse.SendError(response, "cycleOffset must be a number.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetFloatValue(body, "speed", out fields.Speed, out fields.SetSpeed))
+            {
+                RestResponse.SendError(response, "speed must be a number.", 400);
+                return false;
+            }
+
+            if (!TryReadStateParameter(controller, body, "speedParameter", response,
+                    state == null ? null : state.speedParameter,
+                    state != null && state.speedParameterActive,
+                    ref fields.SpeedParameter, ref fields.SetSpeedParameter,
+                    ref fields.SpeedParameterActive, ref fields.SetSpeedParameterActive)) return false;
+            if (!TryReadStateParameter(controller, body, "cycleOffsetParameter", response,
+                    state == null ? null : state.cycleOffsetParameter,
+                    state != null && state.cycleOffsetParameterActive,
+                    ref fields.CycleOffsetParameter, ref fields.SetCycleOffsetParameter,
+                    ref fields.CycleOffsetParameterActive, ref fields.SetCycleOffsetParameterActive)) return false;
+            if (!TryReadStateParameter(controller, body, "mirrorParameter", response,
+                    state == null ? null : state.mirrorParameter,
+                    state != null && state.mirrorParameterActive,
+                    ref fields.MirrorParameter, ref fields.SetMirrorParameter,
+                    ref fields.MirrorParameterActive, ref fields.SetMirrorParameterActive)) return false;
+            if (!TryReadStateParameter(controller, body, "timeParameter", response,
+                    state == null ? null : state.timeParameter,
+                    state != null && state.timeParameterActive,
+                    ref fields.TimeParameter, ref fields.SetTimeParameter,
+                    ref fields.TimeParameterActive, ref fields.SetTimeParameterActive)) return false;
+
+            if (!TryReadStatePosition(body, response, ref fields)) return false;
+            return TryReadStateMotion(body, response, ref fields);
+        }
+
+        /// <summary>
+        /// Reads one parameter override and its Active flag together, and checks the pair
+        /// the request would leave behind rather than the halves it happens to carry.
+        ///
+        /// Checking only what was sent is not enough. The two fields are independent in the
+        /// request and inseparable in the asset: an override that is on and names nothing
+        /// is a state that cannot play, and it can be produced without either half looking
+        /// wrong on its own -- by activating with no name in the request and none on the
+        /// state, or by clearing the name of an override that is already active. So the
+        /// effective name and the effective flag are resolved first, the request's value
+        /// where it carries one and the state's otherwise, and the check is made on those.
+        /// </summary>
+        /// <param name="currentValue">The state's name today, or null when it is being created.</param>
+        /// <param name="currentActive">The state's flag today, false when it is being created.</param>
+        private static bool TryReadStateParameter(
+            AnimatorController controller, string body, string field, UnionAirResponse response,
+            string currentValue, bool currentActive,
+            ref string value, ref bool valueSet, ref bool active, ref bool activeSet)
+        {
+            if (!RequestBodyReader.TryGetStringValue(body, field, out value, out valueSet))
+            {
+                RestResponse.SendError(response, $"{field} must be a string.", 400);
+                return false;
+            }
+
+            var activeField = AnimatorStateRules.ActiveFieldFor(field);
+            if (!RequestBodyReader.TryGetBoolValue(body, activeField, out active, out activeSet))
+            {
+                RestResponse.SendError(response, $"{activeField} must be a boolean.", 400);
+                return false;
+            }
+
+            var effectiveValue = valueSet ? value : currentValue;
+            var effectiveActive = activeSet ? active : currentActive;
+
+            if (string.IsNullOrEmpty(effectiveValue))
+            {
+                // An override with no name is only coherent while it is off, which is how a
+                // state without one is stored.
+                if (!effectiveActive) return true;
+
+                RestResponse.SendError(response,
+                    $"{activeField} would be true with {field} empty, which is an override that drives nothing. " +
+                    $"Send {field} as well, or send {activeField} false.", 400);
+                return false;
+            }
+
+            // Looked up only where this request is answerable for the pair: it named the
+            // parameter, or it leaves the override on. A name the state already carries for
+            // an override that stays off is left alone -- it may point at a parameter
+            // someone deleted, and refusing an unrelated patch over that would make the
+            // state unwritable rather than repairable.
+            if (!valueSet && !effectiveActive) return true;
+
+            foreach (var p in controller.parameters)
+                if (p.name == effectiveValue) return true;
+
+            // Reported whether the name arrived in this request or was already on the state:
+            // a request that activates an override the controller cannot satisfy is refused
+            // either way.
+            RestResponse.SendError(response,
+                $"{field} '{effectiveValue}' names no parameter on this controller. Add it first with " +
+                "POST /api/assets/animator-controllers/{guid}/parameters.", 400);
+            return false;
+        }
+
+        private static bool TryReadStatePosition(string body, UnionAirResponse response, ref StateFields fields)
+        {
+            var positionJson = RequestBodyReader.GetObject(body, "position");
+            if (positionJson == null)
+            {
+                if (!RequestBodyReader.HasTopLevelField(body, "position")) return true;
+                RestResponse.SendError(response, "position must be an object such as {\"x\":300,\"y\":120}.", 400);
+                return false;
+            }
+
+            var x = RequestBodyReader.GetFloat(positionJson, "x");
+            var y = RequestBodyReader.GetFloat(positionJson, "y");
+            if (!x.HasValue || !y.HasValue)
+            {
+                RestResponse.SendError(response, "position requires x and y.", 400);
+                return false;
+            }
+
+            fields.SetPosition = true;
+            fields.Position = new Vector2(x.Value, y.Value);
+            return true;
+        }
+
+        private static bool TryReadStateMotion(string body, UnionAirResponse response, ref StateFields fields)
+        {
+            var motionJson = RequestBodyReader.GetObject(body, "motion");
+            if (motionJson == null)
+            {
+                if (!RequestBodyReader.HasTopLevelField(body, "motion")) return true;
+                RestResponse.SendError(response, "motion must be an object such as {\"guid\":\"...\"}.", 400);
+                return false;
+            }
+
+            var motionGuid = RequestBodyReader.GetString(motionJson, "guid");
+            if (string.IsNullOrEmpty(motionGuid))
+            {
+                RestResponse.SendError(response, "motion requires a guid.", 400);
+                return false;
+            }
+
+            var motionPath = AssetDatabase.GUIDToAssetPath(motionGuid);
+            var motion = string.IsNullOrEmpty(motionPath) ? null : AssetDatabase.LoadAssetAtPath<Motion>(motionPath);
+            if (motion == null)
+            {
+                RestResponse.SendError(response, $"Motion asset not found for GUID: {motionGuid}", 400);
+                return false;
+            }
+
+            fields.SetMotion = true;
+            fields.Motion = motion;
+            return true;
+        }
+
+        /// <summary>
+        /// Writes parsed settings. Cannot fail, which is the point: every check happened in
+        /// <see cref="TryParseStateFields"/>, before anything was mutated.
+        /// </summary>
+        private static void ApplyStateFields(
+            AnimatorController controller, AnimatorStateMachine sm, AnimatorState state,
+            int layerIndex, StateFields fields)
+        {
+            if (fields.SetTag) state.tag = fields.Tag;
+            if (fields.SetWriteDefaultValues) state.writeDefaultValues = fields.WriteDefaultValues;
+            if (fields.SetIkOnFeet) state.iKOnFeet = fields.IkOnFeet;
+            if (fields.SetMirror) state.mirror = fields.Mirror;
+            if (fields.SetCycleOffset) state.cycleOffset = fields.CycleOffset;
+            if (fields.SetSpeed) state.speed = fields.Speed;
+
+            if (fields.SetSpeedParameter) state.speedParameter = fields.SpeedParameter;
+            if (fields.SetSpeedParameterActive) state.speedParameterActive = fields.SpeedParameterActive;
+            if (fields.SetCycleOffsetParameter) state.cycleOffsetParameter = fields.CycleOffsetParameter;
+            if (fields.SetCycleOffsetParameterActive) state.cycleOffsetParameterActive = fields.CycleOffsetParameterActive;
+            if (fields.SetMirrorParameter) state.mirrorParameter = fields.MirrorParameter;
+            if (fields.SetMirrorParameterActive) state.mirrorParameterActive = fields.MirrorParameterActive;
+            if (fields.SetTimeParameter) state.timeParameter = fields.TimeParameter;
+            if (fields.SetTimeParameterActive) state.timeParameterActive = fields.TimeParameterActive;
+
+            if (fields.SetMotion) controller.SetStateEffectiveMotion(state, fields.Motion, layerIndex);
+
+            if (fields.SetPosition) ApplyStatePosition(sm, state, fields.Position);
+        }
+
+        /// <summary>
+        /// Moves a state in the graph.
+        ///
+        /// The position is on the <see cref="ChildAnimatorState"/> struct rather than on the
+        /// state, so it takes reading the array, mutating the entry, and assigning the whole
+        /// array back -- the same shape the layer writes use. The struct's z is preserved
+        /// rather than zeroed: the graph does not use it, and nothing here has grounds to
+        /// discard what the asset holds.
+        /// </summary>
+        private static void ApplyStatePosition(AnimatorStateMachine sm, AnimatorState state, Vector2 position)
+        {
+            var states = sm.states;
+            for (int i = 0; i < states.Length; i++)
+            {
+                if (states[i].state != state) continue;
+                states[i].position = new Vector3(position.x, position.y, states[i].position.z);
+                sm.states = states;
+                return;
+            }
+        }
+
+        /// <summary>
+        /// Serializes the settings that decide how a state plays, plus its place in the
+        /// graph. Emits a trailing comma, because every caller follows it with more fields.
+        /// </summary>
+        /// <param name="position">
+        /// From the owning <see cref="ChildAnimatorState"/> rather than from the state: the
+        /// graph position belongs to the entry in the state machine's array, not to the
+        /// state object.
+        /// </param>
+        private static void AppendStateSettings(StringBuilder sb, AnimatorState state, Vector3 position)
+        {
+            sb.Append("\"tag\":").Append(RestResponse.FormatNullableString(state.tag)).Append(",");
+
+            // The setting most likely to be the reason a controller misbehaves, and until
+            // now the API could neither see nor set it.
+            sb.Append($"\"writeDefaultValues\":{RestResponse.FormatBool(state.writeDefaultValues)},");
+            sb.Append($"\"iKOnFeet\":{RestResponse.FormatBool(state.iKOnFeet)},");
+            sb.Append($"\"mirror\":{RestResponse.FormatBool(state.mirror)},");
+            sb.Append($"\"cycleOffset\":{RestResponse.FormatFloat(state.cycleOffset)},");
+            sb.Append($"\"speed\":{RestResponse.FormatFloat(state.speed)},");
+
+            // Each name travels with its own Active flag rather than being folded to an
+            // empty string when inactive. Unity stores both, and a client cannot reproduce
+            // the state from one of them: an inactive parameter name is content the asset
+            // holds, and a literal speed beside an active speedParameter is not the speed in
+            // effect.
+            AppendParameterOverride(sb, "speedParameter", state.speedParameter, state.speedParameterActive);
+            AppendParameterOverride(sb, "cycleOffsetParameter", state.cycleOffsetParameter, state.cycleOffsetParameterActive);
+            AppendParameterOverride(sb, "mirrorParameter", state.mirrorParameter, state.mirrorParameterActive);
+            AppendParameterOverride(sb, "timeParameter", state.timeParameter, state.timeParameterActive);
+
+            // Unity's field is a Vector3, and the Animator window's graph is flat: z is
+            // unused there. It is left out of the response rather than reported as a number
+            // that means nothing, and a write preserves whatever it holds.
+            sb.Append("\"position\":{");
+            sb.Append($"\"x\":{RestResponse.FormatFloat(position.x)},");
+            sb.Append($"\"y\":{RestResponse.FormatFloat(position.y)}");
+            sb.Append("},");
+
+            // Read-only. A state that runs script on entry was previously indistinguishable
+            // from one that does not; a null entry is a behaviour whose script is missing,
+            // which is worth reporting rather than dropping from the array.
+            sb.Append("\"behaviours\":[");
+            var behaviours = state.behaviours;
+            for (int bi = 0; bi < behaviours.Length; bi++)
+            {
+                if (bi > 0) sb.Append(",");
+                sb.Append(RestResponse.FormatNullableString(
+                    behaviours[bi] == null ? null : behaviours[bi].GetType().Name));
+            }
+            sb.Append("],");
+        }
+
+        private static void AppendParameterOverride(StringBuilder sb, string field, string parameter, bool active)
+        {
+            sb.Append($"\"{field}\":").Append(RestResponse.FormatNullableString(parameter)).Append(",");
+            sb.Append($"\"{field}Active\":{RestResponse.FormatBool(active)},");
         }
 
         private static AnimatorState FindState(AnimatorStateMachine sm, string name)
