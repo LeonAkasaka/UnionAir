@@ -355,10 +355,18 @@ Returns the full AnimatorController structure: parameters, layers, states, trans
           },
           "transitions": [
             {
+              "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
               "to": "Walk",
               "hasExitTime": false,
               "exitTime": 0.0,
               "duration": 0.25,
+              "fixedDuration": true,
+              "offset": 0.0,
+              "interruptionSource": "None",
+              "orderedInterruption": true,
+              "canTransitionToSelf": true,
+              "mute": false,
+              "solo": false,
               "conditions": [
                 { "parameter": "Speed", "mode": "Greater", "threshold": 0.1 }
               ]
@@ -438,6 +446,40 @@ Each child carries `threshold`, `position` (`{x, y}`, used by the 2D types), `ti
 ```
 
 Nesting is serialized to a depth of 10. A blend tree at that depth is reported with `"truncated": true` and **no** `children`, so a boundary is distinguishable from a leaf; an empty `children` array keeps meaning what it says, since a blend tree may genuinely have none.
+
+### Transition fields
+
+Every transition, on a state and on AnyState alike, carries these.
+
+| Field | Description |
+|-------|-------------|
+| `transitionId` | Stable address for this transition. See [Addressing a transition](#addressing-a-transition) |
+| `to` | Destination state name, `"Exit"` for an exit transition, or `null` when the destination is missing |
+| `hasExitTime` | Whether exit time triggers the transition |
+| `exitTime` | Normalized time at which exit time triggers |
+| `duration` | Blend duration. **Seconds when `fixedDuration` is `true`, a fraction of the source state when it is `false`** |
+| `fixedDuration` | `AnimatorStateTransition.hasFixedDuration`. Unity gives a new transition `true` |
+| `offset` | Normalized time offset in the destination state |
+| `interruptionSource` | `None`, `Source`, `Destination`, `SourceThenDestination`, or `DestinationThenSource` |
+| `orderedInterruption` | Whether interruption respects transition order |
+| `canTransitionToSelf` | Consulted on AnyState transitions only; stored and reported on every transition |
+| `mute`, `solo` | The serialized values, as they are. What the Animator window computes from them across a layer is not reported |
+| `conditions` | Array of `{parameter, mode, threshold}` |
+
+`duration` and `fixedDuration` always travel together, because neither means anything alone: the same number is seconds under one and a fraction of the source state under the other.
+
+### Addressing a transition
+
+A state pair may carry any number of transitions — that is how a pair gets several routes, one per condition set — so `from` plus `to` names one transition only while there is one. `transitionId` names exactly one, always.
+
+The id is a Unity `GlobalObjectId` for the transition, which is a sub-asset of the controller. Measured on 6000.0.80f1:
+
+- it resolves to the same transition after a domain reload;
+- it follows the transition when the state's `transitions` array is reordered, rather than the position;
+- it is already valid on the transition `POST` just created, before `SaveAssets`;
+- it stops resolving once the transition is deleted, which is what makes a stale id a `404` rather than a wrong hit.
+
+Treat it as opaque and re-read it after deleting transitions.
 
 ### Not described by this response
 
@@ -992,6 +1034,7 @@ Use `"AnyState"` as `from` for any-state transitions. Use `"Exit"` as `to` for e
   "layerIndex": 0,
   "hasExitTime": false,
   "duration": 0.25,
+  "fixedDuration": true,
   "offset": 0.0,
   "conditions": [
     { "parameter": "Speed", "mode": "Greater", "threshold": 0.1 }
@@ -1006,30 +1049,49 @@ Use `"AnyState"` as `from` for any-state transitions. Use `"Exit"` as `to` for e
 | `layerIndex` | ❌ | Layer index (default: 0) |
 | `hasExitTime` | ❌ | Whether the transition has an exit time trigger |
 | `exitTime` | ❌ | Normalized time at which exit time triggers (when `hasExitTime: true`) |
-| `duration` | ❌ | Transition blend duration in seconds |
+| `duration` | ❌ | Blend duration. Seconds when `fixedDuration` is `true`, a fraction of the source state when it is `false` |
+| `fixedDuration` | ❌ | Whether `duration` is seconds. Unity gives a new transition `true` |
 | `offset` | ❌ | Normalized time offset in the destination state |
-| `conditions` | ❌ | Array of condition objects |
+| `interruptionSource` | ❌ | `None`, `Source`, `Destination`, `SourceThenDestination`, or `DestinationThenSource` |
+| `orderedInterruption` | ❌ | Whether interruption respects transition order |
+| `canTransitionToSelf` | ❌ | AnyState transitions only. Sent for any other transition it is stored and named in `unsupported` |
+| `mute` | ❌ | Mute the transition |
+| `solo` | ❌ | Solo the transition |
+| `conditions` | ❌ | Array of condition objects. Replaces the whole array |
 
 **Condition modes:** `If`, `IfNot` (Bool/Trigger), `Greater`, `Less`, `Equals`, `NotEqual` (Float/Int)
+
+Every field is parsed and checked before the transition is created, so a request rejected with `400` adds nothing to the controller. A condition whose `mode` is not one of the six above is rejected rather than skipped.
+
+Adding a second transition between a pair that already has one is legal and stays legal. The response returns the new transition's `transitionId`, which is how it can be addressed afterwards.
 
 ### Response (HTTP 201)
 
 ```json
-{ "added": true, "from": "Idle", "to": "Walk", "layerIndex": 0 }
+{
+  "added": true,
+  "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
+  "from": "Idle",
+  "to": "Walk",
+  "layerIndex": 0,
+  "unsupported": []
+}
 ```
+
+`unsupported` names each field that was stored but will not be consulted — today only `canTransitionToSelf` on a transition that does not leave AnyState.
 
 ### Errors
 
 | Status | Cause |
 |--------|-------|
-| 400 | `from` or `to` is missing, or `"AnyState"` → `"Exit"` was requested |
+| 400 | `from` or `to` is missing, a setting is malformed, `interruptionSource` or a condition `mode` is unknown, or `"AnyState"` → `"Exit"` was requested |
 | 404 | Source or destination state not found |
 
 ---
 
 ## PATCH /api/assets/animator-controllers/{guid}/transitions
 
-Updates an existing transition. The transition is identified by the `from` and `to` state names.
+Updates one transition.
 
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
@@ -1044,35 +1106,78 @@ Updates an existing transition. The transition is identified by the `from` and `
 
 ```json
 {
-  "from": "Idle",
-  "to": "Walk",
-  "layerIndex": 0,
+  "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
   "duration": 0.1,
+  "fixedDuration": false,
+  "interruptionSource": "Destination",
   "conditions": [
     { "parameter": "Speed", "mode": "Greater", "threshold": 0.5 }
   ]
 }
 ```
 
-All fields except `from` and `to` are optional; only provided fields are updated.
+| Field | Required | Description |
+|-------|----------|-------------|
+| `transitionId` | ❌ | Address from the read response. Names exactly one transition |
+| `from`, `to` | ❌ | Address by state names. Accepted while the pair carries exactly one transition |
+| `layerIndex` | ❌ | Layer to look in (default: 0) |
+
+Either `transitionId` or both `from` and `to` must be present; `transitionId` wins when both are sent. Every setting listed for `POST` is accepted, and an omitted setting is left unchanged.
+
+`conditions` replaces the whole array. An **empty array clears the conditions** — it is not treated as "leave them alone", which is what omitting the field means.
+
+Every value is parsed and checked before the first one is written, so a request rejected with `400` leaves the transition exactly as it was rather than partly updated.
 
 ### Response
 
 ```json
-{ "updated": true, "from": "Idle", "to": "Walk", "layerIndex": 0 }
+{
+  "updated": true,
+  "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
+  "from": "Idle",
+  "to": "Walk",
+  "layerIndex": 0,
+  "unsupported": []
+}
 ```
 
 ### Errors
 
 | Status | Cause |
 |--------|-------|
-| 404 | Transition not found |
+| 400 | No address was sent, `transitionId` is malformed, or a setting is malformed or unknown |
+| 404 | No transition matched, or `transitionId` no longer resolves. An id belonging to another layer says which layer it is in |
+| 409 | `from` plus `to` matched more than one transition — see below |
+| 422 | `transitionId` resolves to something that is not an `AnimatorStateTransition` |
+
+### 409 on an ambiguous name pair
+
+```json
+{
+  "error": "2 transitions match Idle -> Walk. Address one by transitionId; 'matches' lists every candidate with its conditions.",
+  "from": "Idle",
+  "to": "Walk",
+  "layerIndex": 0,
+  "matches": [
+    {
+      "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
+      "conditions": [ { "parameter": "Speed", "mode": "Greater", "threshold": 0.1 } ]
+    },
+    {
+      "transitionId": "GlobalObjectId_V1-3-a1b2c3...-10875748444440948623-0",
+      "conditions": [ { "parameter": "Jump", "mode": "If", "threshold": 0.0 } ]
+    }
+  ]
+}
+```
+
+`409` rather than `400`: the request is well formed, and what makes the address unusable is the controller's own shape. The conditions travel with each candidate because they are what tells the routes apart, so a client can pick without a second request. Nothing is written.
 
 ---
 
 ## DELETE /api/assets/animator-controllers/{guid}/transitions
 
-Removes a transition from an AnimatorController. The transition is identified by the `from` and `to` state names.
+Removes one transition. The transition is a sub-asset of the controller and is destroyed with the removal.
 
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
@@ -1086,19 +1191,32 @@ Removes a transition from an AnimatorController. The transition is identified by
 ### Request Body (JSON)
 
 ```json
-{ "from": "Idle", "to": "Walk", "layerIndex": 0 }
+{ "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0" }
 ```
+
+Addressed exactly as `PATCH` is: `transitionId`, or `from` plus `to` while that pair carries one transition. `transitionId`, `from`, and `to` may also be sent as query parameters.
 
 ### Response
 
 ```json
-{ "removed": true, "from": "Idle", "to": "Walk", "layerIndex": 0 }
+{
+  "removed": true,
+  "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
+  "from": "Idle",
+  "to": "Walk",
+  "layerIndex": 0
+}
 ```
+
+The `transitionId` is the one that was removed; it no longer resolves.
 
 ### Errors
 
 | Status | Cause |
 |--------|-------|
-| 404 | Transition not found |
+| 400 | No address was sent, or `transitionId` is malformed |
+| 404 | No transition matched, or `transitionId` no longer resolves |
+| 409 | `from` plus `to` matched more than one transition. The body is the shape shown for `PATCH`, and nothing is removed |
+| 422 | `transitionId` resolves to something that is not an `AnimatorStateTransition` |
 
 ---
