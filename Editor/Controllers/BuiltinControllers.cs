@@ -790,23 +790,35 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "{guid}/parameters",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Adds or replaces a parameter on an AnimatorController. type must be Float, Int, Bool, or Trigger.",
+            Summary = "Adds or replaces a parameter on an AnimatorController. type must be Float, Int, Bool, or Trigger. A parameter that already exists with the same type is updated in place and keeps its position in the array; only a type change destroys and recreates it, which orphans every condition, blend parameter, and state override naming it -- those are listed in 'orphanedReferences' rather than left silent. A 'defaultValue' sent for a Trigger is reported in 'unsupported': Unity stores no default for one. Use PATCH to rename.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "name", "type" },
             OptionalBody = new string[] { "defaultValue" },
             RequestExample = "{\"name\":\"Speed\",\"type\":\"Float\",\"defaultValue\":0.0}",
-            ResponseExample = "{\"added\":\"Speed\",\"type\":\"Float\"}")]
+            ResponseExample = "{\"added\":\"Speed\",\"type\":\"Float\",\"unsupported\":[]}")]
         private void AddParameter(UnionAirRequestContext ctx)
             => new AnimatorControllerHandler().HandleAddParameter(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("PATCH", "{guid}/parameters",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            Summary = "Renames a parameter, or sets its default value, in place. A rename rewrites every site that names it -- conditions on state, AnyState, entry, and state machine transitions at every nesting level of every layer, a blend tree's blendParameter and blendParameterY including nested trees, and a state's speedParameter, cycleOffsetParameter, mirrorParameter, and timeParameter -- and reports each one in 'references'. None of those is a reference Unity maintains, so a delete-then-add rename leaves them naming what no longer exists. 'newName' colliding with an existing parameter is a 409. 'type' cannot be changed here and is rejected with the reason.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "name" },
+            OptionalBody = new string[] { "newName", "defaultValue" },
+            RequestExample = "{\"name\":\"Speed\",\"newName\":\"MoveSpeed\",\"defaultValue\":0.5}",
+            ResponseExample = "{\"name\":\"MoveSpeed\",\"type\":\"Float\",\"renamed\":{\"from\":\"Speed\",\"to\":\"MoveSpeed\"},\"referencesUpdated\":3,\"references\":[{\"kind\":\"condition\",\"layerIndex\":0,\"stateMachinePath\":[],\"transitionId\":\"GlobalObjectId_V1-3-...\",\"conditionIndex\":0}],\"unsupported\":[]}")]
+        private void UpdateParameter(UnionAirRequestContext ctx)
+            => new AnimatorControllerHandler().HandleUpdateParameter(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 
         [UnionAirEndpoint("DELETE", "{guid}/parameters",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Removes a parameter from an AnimatorController by name.",
+            Summary = "Removes a parameter from an AnimatorController by name, and reports the references it orphans. Unity's RemoveParameter does not touch them: a condition naming a deleted parameter still serializes and simply never evaluates again. The delete still happens -- what a condition should become without its parameter is not a decision this API can make -- but 'references' names every site so it is at least visible.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "name" },
             RequestExample = "{\"name\":\"Speed\"}",
-            ResponseExample = "{\"removed\":\"Speed\"}")]
+            ResponseExample = "{\"removed\":\"Speed\",\"orphanedReferences\":2,\"references\":[{\"kind\":\"blendParameter\",\"layerIndex\":0,\"stateMachinePath\":[],\"state\":\"Locomotion\",\"childPath\":[]}]}")]
         private void DeleteParameter(UnionAirRequestContext ctx)
             => new AnimatorControllerHandler().HandleDeleteParameter(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 
