@@ -374,7 +374,7 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
           "transitions": [
             {
               "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
-              "to": "Walk",
+              "destination": { "type": "State", "name": "Walk" },
               "hasExitTime": false,
               "exitTime": 0.0,
               "duration": 0.25,
@@ -392,7 +392,33 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
           ]
         }
       ],
-      "anyStateTransitions": []
+      "anyStateTransitions": [],
+      "entryTransitions": [],
+      "stateMachineTransitions": [],
+      "behaviours": [],
+      "stateMachines": [
+        {
+          "name": "Combat",
+          "path": ["Combat"],
+          "position": { "x": 300.0, "y": 60.0 },
+          "defaultState": null,
+          "states": [],
+          "anyStateTransitions": [],
+          "entryTransitions": [
+            {
+              "transitionId": "GlobalObjectId_V1-3-a1b2c3...-1355314737468677203-0",
+              "from": { "type": "Entry" },
+              "destination": { "type": "StateMachine", "name": "Melee" },
+              "solo": false,
+              "mute": false,
+              "conditions": []
+            }
+          ],
+          "stateMachineTransitions": [],
+          "behaviours": [],
+          "stateMachines": []
+        }
+      ]
     }
   ]
 }
@@ -465,6 +491,72 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
 
 入れ子は深さ 10 まで返します。その深さにあるブレンドツリーは `"truncated": true` を持ち、`children` を**持ちません**。境界と葉を区別できるようにするためで、空の `children` 配列は文字どおり「子が無い」という意味のまま残ります。
 
+### サブステートマシン
+
+レイヤーのルートステートマシンと、その中に入れ子になったすべてのマシンは同じフィールドを持ちます。クライアントが 2 種類ではなく 1 種類の構造をたどれるようにするためです。ルートの `name` と `position` はレイヤーのもの(ルートはレイヤーそのもの)で、入れ子のマシンは自分のものを返します。
+
+| フィールド | 説明 |
+|---|---|
+| `name` | マシン名。`path` の 1 セグメントでもあります |
+| `path` | レイヤールートからこのマシンまでの名前の配列。リクエストの `stateMachinePath` と同じもの |
+| `position` | 親マシン内のグラフ位置 `{x, y}` |
+| `defaultState` | 開始ステート名、または `null` |
+| `states` | [ステートのフィールド](#ステートのフィールド)を参照 |
+| `stateMachines` | 入れ子のマシン。同じ形 |
+| `anyStateTransitions` | **このマシンの** AnyState トランジション。マシンごとに固有です |
+| `entryTransitions` | このマシンの Entry ノードから出るトランジション。[ステートマシン間のトランジション](#ステートマシン間のトランジション)を参照 |
+| `stateMachineTransitions` | このマシンに入れ子になったマシンから出るトランジション |
+| `behaviours` | アタッチされた `StateMachineBehaviour` の型名。ステートと同じく**読み取り専用** |
+
+### `stateMachinePath`
+
+ステートを名前で指定するすべてのエンドポイントが `stateMachinePath` を受け付けます。レイヤールートからのステートマシン名の配列です:
+
+```json
+{ "layerIndex": 0, "stateMachinePath": ["Combat", "Melee"], "name": "Swing" }
+```
+
+省略または `[]` はレイヤーのルートステートマシンを意味します。これはこのフィールドが存在する前のすべてのリクエストが意味していたものなので、動いていたリクエストの意味は変わりません。
+
+**`/` 区切りの文字列ではなく配列です。** Unity はステートマシン名に `/` を禁止していないため、連結したパスにはエスケープ規則が必要になり、エスケープ規則はクライアントが静かに間違えるものです。配列なら衝突する区切り文字がありません。
+
+読み取りレスポンスは同じ配列を `path` として返すので、レスポンスから読んだパスをそのままリクエストに送れます。
+
+Unity は兄弟のマシンが同じ名前を持つことを許します(この API 経由では作成を拒否しますが、Animator ウィンドウでのリネームでは起こり得ます)。その組に到達したパスは、どちらかを黙って選ばずに、曖昧さを示す `409` を返します。
+
+**ステートマシンをリネームすると、クライアントが保持しているパスはすべて無効になります。** その中のステートに対して保持しているパスも同様です。トランジションと違いステートマシンには安定した ID がないため、リネーム後はコントローラーを読み直してください。
+
+### ステートマシン間のトランジション
+
+Unity の型が 2 つ関わっており、レスポンスは両者を区別します。
+
+`AnimatorStateTransition` はステート同士をつなぎます。`states[].transitions` と `anyStateTransitions` が持つのがこれで、[トランジションのフィールド](#トランジションのフィールド)に記載したタイミングや割り込みのフィールドを持ちます。
+
+`AnimatorTransition` はステートマシンをつなぎます。`entryTransitions` と `stateMachineTransitions` が持つのがこれで、**遷移元・遷移先・`solo`・`mute`・`conditions` だけ**を持ちます。`hasExitTime`、`duration`、`offset`、割り込み系は存在せず、0 としても出力しません。`"duration": 0` は「型に無いフィールド」ではなく「設定値」として読まれてしまうためです。同じ仕組みによる `transitionId` を持ちます。
+
+| フィールド | 説明 |
+|---|---|
+| `transitionId` | `DELETE .../state-machine-transitions` のアドレス |
+| `from` | エントリトランジションは `{"type": "Entry"}`、入れ子マシンから出るものは `{"type": "StateMachine", "name": "..."}` |
+| `destination` | 下記参照 |
+| `solo`, `mute` | シリアライズされた値 |
+| `conditions` | `{parameter, mode, threshold}` の配列 |
+
+### `destination`
+
+どちらの型のトランジションも、遷移先を名前ではなく判別子つきのオブジェクトとして返します:
+
+| `type` | 意味 |
+|---|---|
+| `State` | `name` は同じマシン内のステート |
+| `StateMachine` | `name` はステートマシン。入るとそのマシンの Entry から開始します |
+| `Exit` | そのマシンの Exit ノード。`name` はありません |
+| `None` | 遷移先が削除済み。欠落フィールドに見える `null` ではなく、そう報告します |
+
+名前だけでは何を指しているか分かりません。遷移先がステートにもステートマシンにもなり得る以上、`"Melee"` はあるコントローラーではステート、別のコントローラーではステートマシンであり、レスポンスをたどるクライアントには区別できません。これは `motion` フィールドが既に従っている方針です。
+
+**`Entry` は値に含まれません。** Unity には Entry ノードを遷移先とする経路がなく、ステートマシンに入ることは `StateMachine` 型の遷移先として表現され、Entry ノードはエントリトランジションの*遷移元*としてのみ現れます。何も生成できない値は、無いことより悪くなります。
+
 ### ステートのフィールド
 
 | フィールド | 説明 |
@@ -503,7 +595,7 @@ Unity のフィールドは `Vector3` ですが、グラフは平面です。`z`
 | フィールド | 説明 |
 |---|---|
 | `transitionId` | このトランジションの安定したアドレス。[トランジションのアドレス指定](#トランジションのアドレス指定)を参照 |
-| `to` | 遷移先ステート名。Exit トランジションは `"Exit"`、遷移先が失われている場合は `null` |
+| `destination` | 判別子つきの遷移先。[`destination`](#destination) を参照 |
 | `hasExitTime` | Exit Time で遷移するかどうか |
 | `exitTime` | Exit Time が発火する正規化時間 |
 | `duration` | ブレンド時間。**`fixedDuration` が `true` なら秒、`false` なら遷移元ステートに対する割合** |
@@ -1132,8 +1224,10 @@ Any State トランジションには `from` に `"AnyState"` を使用します
 | フィールド | 必須 | 説明 |
 |-------|----------|-------------|
 | `from` | ✅ | 遷移元ステート名、または `"AnyState"` |
-| `to` | ✅ | 遷移先ステート名、または `"Exit"` |
+| `to` | ❌ | 遷移先ステート名、または `"Exit"` |
+| `toStateMachine` | ❌ | 遷移先をステートマシンにする。このトランジションが属するマシンからのパス。ステートがサブステートマシンに入る方法です |
 | `layerIndex` | ❌ | レイヤーインデックス(既定: 0) |
+| `stateMachinePath` | ❌ | どのステートマシンがこのトランジションを持つか。[`stateMachinePath`](#statemachinepath) を参照 |
 | `hasExitTime` | ❌ | トランジションが exit time トリガーを持つかどうか |
 | `exitTime` | ❌ | exit time が発火する正規化時間(`hasExitTime: true` の場合) |
 | `duration` | ❌ | ブレンド時間。`fixedDuration` が `true` なら秒、`false` なら遷移元ステートに対する割合 |
@@ -1145,6 +1239,8 @@ Any State トランジションには `from` に `"AnyState"` を使用します
 | `mute` | ❌ | トランジションをミュートする |
 | `solo` | ❌ | トランジションをソロにする |
 | `conditions` | ❌ | 条件オブジェクトの配列。配列全体を置き換えます |
+
+**`to` と `toStateMachine` はそれぞれ任意で、どちらか一方が必須です。** 単体で必須のものはありません(ステートへの遷移は `to`、サブステートマシンへの遷移は `toStateMachine`)。両方送った場合も、どちらも送らなかった場合も `400` です。
 
 **条件の mode:** `If`、`IfNot`(Bool/Trigger)、`Greater`、`Less`、`Equals`、`NotEqual`(Float/Int)
 
@@ -1305,3 +1401,202 @@ Any State トランジションには `from` に `"AnyState"` を使用します
 | 404 | 一致するトランジションが無い、または `transitionId` がもう解決できない |
 | 409 | `from` と `to` が 2 本以上に一致した。ボディは `PATCH` と同じ形で、何も削除されません |
 | 422 | `transitionId` が `AnimatorStateTransition` 以外に解決された |
+
+## POST /api/assets/animator-controllers/{guid}/state-machines
+
+サブステートマシンを作成します。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### パスパラメータ
+
+| パラメータ | 説明 |
+|-----------|-------------|
+| `guid` | AnimatorController アセットの GUID |
+
+### リクエストボディ(JSON)
+
+```json
+{
+  "layerIndex": 0,
+  "stateMachinePath": ["Combat"],
+  "name": "Melee",
+  "position": { "x": 300, "y": 120 }
+}
+```
+
+| フィールド | 必須 | 説明 |
+|-------|----------|-------------|
+| `name` | ✅ | 新しいマシンの名前 |
+| `layerIndex` | ❌ | レイヤーインデックス(既定: 0) |
+| `stateMachinePath` | ❌ | どのマシンの中に作るか。省略または `[]` はレイヤーのルート |
+| `position` | ❌ | 親マシン内のグラフ位置 `{x, y}` |
+
+兄弟が既に持っている `name` は `409` を返します。Unity の `AddStateMachine` は名前を重複させず、6000.0.80f1 で計測したところ黙って別の名前を返します。したがって選択肢は「呼び出し側が要求していない名前を報告する」か「拒否する」かであり、パスは名前でアドレス指定するため、要求した名前で組み立てたアドレスは機能しません。
+
+### レスポンス(HTTP 201)
+
+```json
+{ "added": "Melee", "layerIndex": 0, "stateMachinePath": ["Combat", "Melee"] }
+```
+
+返された `stateMachinePath` が新しいマシンのアドレスです。
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | `name` の欠落、`position` が不正、またはボディに未知のフィールドがある |
+| 404 | `stateMachinePath` が解決しない |
+| 409 | 兄弟が既に `name` を持っている、またはパスが曖昧 |
+
+---
+
+## DELETE /api/assets/animator-controllers/{guid}/state-machines
+
+サブステートマシンと、それが保持するすべてを削除します。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### リクエストボディ(JSON)
+
+```json
+{ "layerIndex": 0, "stateMachinePath": ["Combat", "Melee"], "recursive": true }
+```
+
+| フィールド | 必須 | 説明 |
+|-------|----------|-------------|
+| `stateMachinePath` | ✅ | 削除するマシン。`[]` はレイヤーのルートを指し、拒否されます |
+| `layerIndex` | ❌ | レイヤーインデックス(既定: 0) |
+| `recursive` | ❌ | 中身のあるマシンの削除を承認する |
+
+ステートマシンは自身のステート、トランジション、入れ子のマシン、そしてそれらのステートが持つブレンドツリーを所有しており、いずれもコントローラーのサブアセットです。`DELETE .../states` より大きな操作なので、中身のあるマシンは `recursive` が `true` でない限り `409` を返します:
+
+```json
+{
+  "error": "State machine 'Combat' holds 2 state(s) and 1 nested state machine(s) in total, which removing it would take with it. Send recursive true to confirm.",
+  "layerIndex": 0,
+  "stateMachinePath": ["Combat"],
+  "totalStates": 2,
+  "totalStateMachines": 1,
+  "states": [],
+  "stateMachines": ["Melee"]
+}
+```
+
+`totalStates` と `totalStateMachines` はサブツリー全体を数えます。それが削除の代償だからです。`states` と `stateMachines` は直下の子を名前で並べます。こちらは呼び出し側が見分けられるものです。直下にステートを持たないが 5 つ持つマシンを 1 つ抱えているマシンは、5 と報告されます。
+
+### レスポンス
+
+```json
+{
+  "removed": "Melee",
+  "layerIndex": 0,
+  "stateMachinePath": ["Combat", "Melee"],
+  "removedStates": 3,
+  "removedStateMachines": 0,
+  "destroyedBlendTrees": 1
+}
+```
+
+`destroyedBlendTrees` は、Unity の削除がアセットに残したブレンドツリーをこのエンドポイントが手で破棄した数です。`DELETE .../states` と同じ意味です。
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | `stateMachinePath` が空または不正、またはボディに未知のフィールドがある |
+| 404 | `stateMachinePath` が解決しない |
+| 409 | マシンが中身を持っていて `recursive` が `true` でない、またはパスが曖昧 |
+
+---
+
+## POST /api/assets/animator-controllers/{guid}/state-machine-transitions
+
+ステートマシン同士をつなぐ型である `AnimatorTransition` を追加します。これが無いと、作成したサブステートマシンには決して入れません。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### リクエストボディ(JSON)
+
+```json
+{
+  "layerIndex": 0,
+  "stateMachinePath": ["Combat"],
+  "from": "Entry",
+  "toStateMachine": ["Melee"],
+  "conditions": []
+}
+```
+
+| フィールド | 必須 | 説明 |
+|-------|----------|-------------|
+| `from` | ✅ | エントリトランジションは `"Entry"`、または対象マシンに入れ子になったステートマシンの名前 |
+| `layerIndex` | ❌ | レイヤーインデックス(既定: 0) |
+| `stateMachinePath` | ❌ | このトランジションを持つマシン |
+| `to` | ❌ | 対象マシン内の遷移先ステート名 |
+| `toStateMachine` | ❌ | 遷移先ステートマシン。対象マシンからのパス |
+| `toExit` | ❌ | 遷移先をそのマシンの Exit ノードにする |
+| `solo`, `mute` | ❌ | |
+| `conditions` | ❌ | 条件オブジェクトの配列。配列全体を置き換えます |
+
+`to`、`toStateMachine`、`toExit` のうち**ちょうど 1 つ**を指定します。読み取りが遷移先に判別子を付けるのと同じ理由です。名前だけではステートかステートマシンかを言えず、コントローラーは両方に同じ名前を使えます。
+
+エントリトランジションは Exit を指せません。Entry はマシンがどこから始まるかを決めるものだからです。
+
+### レスポンス(HTTP 201)
+
+```json
+{ "added": true, "transitionId": "GlobalObjectId_V1-3-...", "layerIndex": 0, "from": "Entry" }
+```
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | `from` の欠落、遷移先が無いか複数、`"Entry"` が Exit を指した、またはボディに未知のフィールドがある |
+| 404 | 遷移元マシン、遷移先ステート、またはパスが解決しない |
+| 409 | パスまたは遷移元名が曖昧 |
+
+---
+
+## DELETE /api/assets/animator-controllers/{guid}/state-machine-transitions
+
+`AnimatorTransition` を削除します。トランジションはコントローラーのサブアセットであり、削除と同時に破棄されます。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### リクエストボディ(JSON)
+
+```json
+{ "transitionId": "GlobalObjectId_V1-3-..." }
+```
+
+| フィールド | 必須 | 説明 |
+|-------|----------|-------------|
+| `transitionId` | ✅ | 読み取りの `entryTransitions` または `stateMachineTransitions` から |
+| `layerIndex` | ❌ | 探索するレイヤー(既定: 0) |
+
+名前の組による指定はありません。これらのトランジションには名前を挙げられる遷移元ステートが無く、エントリトランジションに至っては Entry ノード以外に遷移元がありません。
+
+### レスポンス
+
+```json
+{ "removed": true, "transitionId": "GlobalObjectId_V1-3-...", "kind": "entry", "layerIndex": 0 }
+```
+
+`kind` は `entry` または `stateMachine` です。
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | `transitionId` の欠落または形式不正、またはボディに未知のフィールドがある |
+| 404 | そのレイヤーにトランジションが無い、または ID がもう解決できない |
+| 422 | ID が `AnimatorStateTransition` に解決された。それらは `DELETE .../transitions` を使ってください |
+
+---

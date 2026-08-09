@@ -371,7 +371,7 @@ Returns the full AnimatorController structure: parameters, layers, states, trans
           "transitions": [
             {
               "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
-              "to": "Walk",
+              "destination": { "type": "State", "name": "Walk" },
               "hasExitTime": false,
               "exitTime": 0.0,
               "duration": 0.25,
@@ -389,7 +389,33 @@ Returns the full AnimatorController structure: parameters, layers, states, trans
           ]
         }
       ],
-      "anyStateTransitions": []
+      "anyStateTransitions": [],
+      "entryTransitions": [],
+      "stateMachineTransitions": [],
+      "behaviours": [],
+      "stateMachines": [
+        {
+          "name": "Combat",
+          "path": ["Combat"],
+          "position": { "x": 300.0, "y": 60.0 },
+          "defaultState": null,
+          "states": [],
+          "anyStateTransitions": [],
+          "entryTransitions": [
+            {
+              "transitionId": "GlobalObjectId_V1-3-a1b2c3...-1355314737468677203-0",
+              "from": { "type": "Entry" },
+              "destination": { "type": "StateMachine", "name": "Melee" },
+              "solo": false,
+              "mute": false,
+              "conditions": []
+            }
+          ],
+          "stateMachineTransitions": [],
+          "behaviours": [],
+          "stateMachines": []
+        }
+      ]
     }
   ]
 }
@@ -462,6 +488,72 @@ Each child carries `threshold`, `position` (`{x, y}`, used by the 2D types), `ti
 
 Nesting is serialized to a depth of 10. A blend tree at that depth is reported with `"truncated": true` and **no** `children`, so a boundary is distinguishable from a leaf; an empty `children` array keeps meaning what it says, since a blend tree may genuinely have none.
 
+### Sub-state machines
+
+A layer's root state machine and every machine nested in it carry the same fields, so a client walks one structure rather than two. The root's `name` and `position` belong to the layer, which is what it is; a nested machine reports its own.
+
+| Field | Description |
+|-------|-------------|
+| `name` | The machine's name. Also a segment of its `path` |
+| `path` | Names from the layer root down to this machine. The same array a request sends as `stateMachinePath` |
+| `position` | `{x, y}` graph position of the node in the parent machine |
+| `defaultState` | Name of the state the machine starts in, or `null` |
+| `states` | See [State fields](#state-fields) |
+| `stateMachines` | Nested machines, in the same shape |
+| `anyStateTransitions` | AnyState transitions **of this machine**. Every machine has its own |
+| `entryTransitions` | Transitions from this machine's Entry node. See [Transitions between state machines](#transitions-between-state-machines) |
+| `stateMachineTransitions` | Transitions that leave the machines nested in this one |
+| `behaviours` | Type names of the attached `StateMachineBehaviour` instances. **Read-only**, as on a state |
+
+### `stateMachinePath`
+
+Every endpoint that names a state accepts `stateMachinePath`, an array of state machine names from the layer root:
+
+```json
+{ "layerIndex": 0, "stateMachinePath": ["Combat", "Melee"], "name": "Swing" }
+```
+
+Omitted or `[]` means the layer's root state machine, which is what every request meant before the field existed — so no request that worked changes meaning.
+
+**It is an array, not a `/`-joined string.** Unity does not forbid `/` in a state machine name, so a joined path would need an escaping rule, and an escaping rule is a thing clients get wrong quietly. An array has no separator to collide with.
+
+Read responses report the same array as `path`, so a path read out of a response goes straight back into a request.
+
+Unity permits two sibling machines to carry the same name — not through this API, which refuses to create one, but through a rename in the Animator window. A path that reaches such a pair is a `409` naming the ambiguity rather than a silent choice between them.
+
+**Renaming a state machine invalidates every path a client holds**, including paths held for states inside it. There is no stable id for a state machine the way there is for a transition; re-read the controller after a rename.
+
+### Transitions between state machines
+
+Two different Unity types are involved, and the response keeps them apart.
+
+`AnimatorStateTransition` connects states. It is what `states[].transitions` and `anyStateTransitions` hold, and it carries the timing and interruption fields documented under [Transition fields](#transition-fields).
+
+`AnimatorTransition` connects state machines. It is what `entryTransitions` and `stateMachineTransitions` hold, and it carries **only** a source, a destination, `solo`, `mute`, and `conditions`. It has no `hasExitTime`, `duration`, `offset`, or interruption, and those fields are not emitted as zeros — a `"duration": 0` would read as a setting rather than as a field the type does not have. It carries its own `transitionId`, from the same mechanism.
+
+| Field | Description |
+|-------|-------------|
+| `transitionId` | Address for `DELETE .../state-machine-transitions` |
+| `from` | `{"type": "Entry"}` on an entry transition, or `{"type": "StateMachine", "name": "..."}` on one leaving a nested machine |
+| `destination` | See below |
+| `solo`, `mute` | The serialized values |
+| `conditions` | Array of `{parameter, mode, threshold}` |
+
+### `destination`
+
+Every transition, of either type, reports its destination as a discriminated object rather than a name:
+
+| `type` | Meaning |
+|--------|---------|
+| `State` | `name` is a state in the same machine |
+| `StateMachine` | `name` is a state machine. Entering one starts it at its own Entry |
+| `Exit` | The machine's Exit node. No `name` |
+| `None` | The destination was deleted. Reported as what it is rather than as a `null` name |
+
+A name alone cannot say what it names: once a destination may be a state or a state machine, `"Melee"` is one in one controller and the other in another, and a client walking the response cannot tell. This is the discipline the `motion` field already follows.
+
+**`Entry` is not among the values.** Unity offers no destination that is an Entry node — entering a state machine is a destination of type `StateMachine`, and the Entry node appears only as the *source* of an entry transition. A value nothing can produce would be worse than its absence.
+
 ### State fields
 
 | Field | Description |
@@ -500,7 +592,7 @@ Every transition, on a state and on AnyState alike, carries these.
 | Field | Description |
 |-------|-------------|
 | `transitionId` | Stable address for this transition. See [Addressing a transition](#addressing-a-transition) |
-| `to` | Destination state name, `"Exit"` for an exit transition, or `null` when the destination is missing |
+| `destination` | Discriminated destination. See [`destination`](#destination) |
 | `hasExitTime` | Whether exit time triggers the transition |
 | `exitTime` | Normalized time at which exit time triggers |
 | `duration` | Blend duration. **Seconds when `fixedDuration` is `true`, a fraction of the source state when it is `false`** |
@@ -1129,8 +1221,10 @@ Use `"AnyState"` as `from` for any-state transitions. Use `"Exit"` as `to` for e
 | Field | Required | Description |
 |-------|----------|-------------|
 | `from` | ✅ | Source state name, or `"AnyState"` |
-| `to` | ✅ | Destination state name, or `"Exit"` |
+| `to` | ❌ | Destination state name, or `"Exit"` |
+| `toStateMachine` | ❌ | Destination is a state machine, addressed as a path from the machine this transition belongs to. This is how a state enters a sub-state machine |
 | `layerIndex` | ❌ | Layer index (default: 0) |
+| `stateMachinePath` | ❌ | Which state machine owns the transition. See [`stateMachinePath`](#statemachinepath) |
 | `hasExitTime` | ❌ | Whether the transition has an exit time trigger |
 | `exitTime` | ❌ | Normalized time at which exit time triggers (when `hasExitTime: true`) |
 | `duration` | ❌ | Blend duration. Seconds when `fixedDuration` is `true`, a fraction of the source state when it is `false` |
@@ -1142,6 +1236,8 @@ Use `"AnyState"` as `from` for any-state transitions. Use `"Exit"` as `to` for e
 | `mute` | ❌ | Mute the transition |
 | `solo` | ❌ | Solo the transition |
 | `conditions` | ❌ | Array of condition objects. Replaces the whole array |
+
+**`to` and `toStateMachine` are each optional and exactly one is required.** Neither alone is mandatory — a transition to a state sends `to`, a transition into a sub-state machine sends `toStateMachine` — and sending both, or neither, is a `400`.
 
 **Condition modes:** `If`, `IfNot` (Bool/Trigger), `Greater`, `Less`, `Equals`, `NotEqual` (Float/Int)
 
@@ -1302,5 +1398,204 @@ The `transitionId` is the one that was removed; it no longer resolves.
 | 404 | No transition matched, or `transitionId` no longer resolves |
 | 409 | `from` plus `to` matched more than one transition. The body is the shape shown for `PATCH`, and nothing is removed |
 | 422 | `transitionId` resolves to something that is not an `AnimatorStateTransition` |
+
+---
+
+## POST /api/assets/animator-controllers/{guid}/state-machines
+
+Creates a sub-state machine.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Path Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `guid` | GUID of the AnimatorController asset |
+
+### Request Body (JSON)
+
+```json
+{
+  "layerIndex": 0,
+  "stateMachinePath": ["Combat"],
+  "name": "Melee",
+  "position": { "x": 300, "y": 120 }
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | ✅ | Name of the new machine |
+| `layerIndex` | ❌ | Layer index (default: 0) |
+| `stateMachinePath` | ❌ | The machine to create it inside. Omitted or `[]` is the layer's root |
+| `position` | ❌ | `{x, y}` graph position of the node in the parent |
+
+A `name` a sibling already carries answers `409`. Unity's own `AddStateMachine` does not duplicate it — measured on 6000.0.80f1, it quietly hands back a different name — so the alternative would be reporting a name the caller did not ask for, and a path addresses by name, so an address built on the requested name would not work.
+
+### Response (HTTP 201)
+
+```json
+{ "added": "Melee", "layerIndex": 0, "stateMachinePath": ["Combat", "Melee"] }
+```
+
+The returned `stateMachinePath` addresses the new machine.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `name` is missing, `position` is malformed, or the body carries an unknown field |
+| 404 | `stateMachinePath` does not resolve |
+| 409 | A sibling already carries `name`, or the path is ambiguous |
+
+---
+
+## DELETE /api/assets/animator-controllers/{guid}/state-machines
+
+Removes a sub-state machine and everything it holds.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Request Body (JSON)
+
+```json
+{ "layerIndex": 0, "stateMachinePath": ["Combat", "Melee"], "recursive": true }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `stateMachinePath` | ✅ | The machine to remove. `[]` names the layer's root and is refused |
+| `layerIndex` | ❌ | Layer index (default: 0) |
+| `recursive` | ❌ | Confirms removing a machine that holds anything |
+
+A state machine owns its states, its transitions, the machines nested in it, and the blend trees those states hold — all sub-assets of the controller. That makes this a larger operation than `DELETE .../states`, so a machine that holds anything answers `409` unless `recursive` is `true`:
+
+```json
+{
+  "error": "State machine 'Combat' holds 2 state(s) and 1 nested state machine(s) in total, which removing it would take with it. Send recursive true to confirm.",
+  "layerIndex": 0,
+  "stateMachinePath": ["Combat"],
+  "totalStates": 2,
+  "totalStateMachines": 1,
+  "states": [],
+  "stateMachines": ["Melee"]
+}
+```
+
+`totalStates` and `totalStateMachines` count the whole subtree, because that is what the removal costs. `states` and `stateMachines` name the direct children, which is what a caller recognises. A machine that directly holds no states but holds one that holds five is reported as costing five.
+
+### Response
+
+```json
+{
+  "removed": "Melee",
+  "layerIndex": 0,
+  "stateMachinePath": ["Combat", "Melee"],
+  "removedStates": 3,
+  "removedStateMachines": 0,
+  "destroyedBlendTrees": 1
+}
+```
+
+`destroyedBlendTrees` counts the blend trees this endpoint destroyed by hand after Unity's removal left them in the asset, exactly as `DELETE .../states` reports.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `stateMachinePath` is empty or malformed, or the body carries an unknown field |
+| 404 | `stateMachinePath` does not resolve |
+| 409 | The machine holds something and `recursive` was not `true`, or the path is ambiguous |
+
+---
+
+## POST /api/assets/animator-controllers/{guid}/state-machine-transitions
+
+Adds an `AnimatorTransition` — the type that connects state machines. Without one, a sub-state machine can be created and never entered.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Request Body (JSON)
+
+```json
+{
+  "layerIndex": 0,
+  "stateMachinePath": ["Combat"],
+  "from": "Entry",
+  "toStateMachine": ["Melee"],
+  "conditions": []
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `from` | ✅ | `"Entry"` for an entry transition, or the name of a state machine nested in the addressed one |
+| `layerIndex` | ❌ | Layer index (default: 0) |
+| `stateMachinePath` | ❌ | The machine that owns the transition |
+| `to` | ❌ | Destination state name, in the owning machine |
+| `toStateMachine` | ❌ | Destination state machine, as a path from the owning machine |
+| `toExit` | ❌ | Destination is the machine's Exit node |
+| `solo`, `mute` | ❌ | |
+| `conditions` | ❌ | Array of condition objects. Replaces the whole array |
+
+Exactly one of `to`, `toStateMachine`, and `toExit` — the same reason the read gives a destination a discriminator: a bare name cannot say whether it means a state or a state machine, and a controller may use one name for both.
+
+An entry transition cannot target Exit: Entry chooses where the machine starts.
+
+### Response (HTTP 201)
+
+```json
+{ "added": true, "transitionId": "GlobalObjectId_V1-3-...", "layerIndex": 0, "from": "Entry" }
+```
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `from` is missing, no destination or several were sent, `"Entry"` targeted Exit, or the body carries an unknown field |
+| 404 | The source machine, destination state, or a path does not resolve |
+| 409 | A path or the source name is ambiguous |
+
+---
+
+## DELETE /api/assets/animator-controllers/{guid}/state-machine-transitions
+
+Removes an `AnimatorTransition`. The transition is a sub-asset of the controller and is destroyed with the removal.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Request Body (JSON)
+
+```json
+{ "transitionId": "GlobalObjectId_V1-3-..." }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `transitionId` | ✅ | From `entryTransitions` or `stateMachineTransitions` in the read |
+| `layerIndex` | ❌ | Layer to search (default: 0) |
+
+There is no name-pair form. These transitions have no source state to name, and an entry transition has no source at all beyond the Entry node.
+
+### Response
+
+```json
+{ "removed": true, "transitionId": "GlobalObjectId_V1-3-...", "kind": "entry", "layerIndex": 0 }
+```
+
+`kind` is `entry` or `stateMachine`.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `transitionId` is missing or malformed, or the body carries an unknown field |
+| 404 | The transition is not in that layer, or the id no longer resolves |
+| 422 | The id resolves to an `AnimatorStateTransition`. Use `DELETE .../transitions` for those |
 
 ---

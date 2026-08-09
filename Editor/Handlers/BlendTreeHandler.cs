@@ -325,13 +325,28 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            foreach (var child in controller.layers[layerIndex].stateMachine.states)
+            // Through the same address the state endpoints use, so that a state inside a
+            // sub-state machine is reachable here too. Searching the layer root alone
+            // answered "state not found" for a state the Animator window plainly shows, and
+            // made a blend tree impossible to author anywhere but the top level.
+            if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var sm))
+                return false;
+
+            foreach (var child in sm.states)
             {
                 if (child.state.name == name) { state = child.state; return true; }
             }
 
-            RestResponse.SendNotFound(response, $"State not found in layer {layerIndex}: {name}");
+            RestResponse.SendNotFound(response,
+                $"State not found in layer {layerIndex} at " +
+                $"{AnimatorStateMachineRules.Describe(ReadPath(body))}: {name}");
             return false;
+        }
+
+        private static string[] ReadPath(string body)
+        {
+            RequestBodyReader.TryGetStringArray(body, "stateMachinePath", out var path);
+            return path;
         }
 
         private static bool TryReadChildPath(string body, UnionAirResponse response, out int[] path)
