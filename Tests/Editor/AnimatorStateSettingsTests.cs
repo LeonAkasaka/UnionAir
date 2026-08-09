@@ -219,6 +219,72 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void ActivatingAnOverrideWithNoNameAnywhereIsRejected()
+        {
+            // Checking only the halves the request carries let this through: neither
+            // "activate" nor an absent name looks wrong alone, and the pair they leave
+            // behind is an override that drives nothing.
+            Post("{\"name\":\"Idle\"}");
+
+            var response = Patch("{\"name\":\"Idle\",\"speedParameterActive\":true}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("drives nothing", response.Body);
+            Assert.IsFalse(State("Idle").speedParameterActive);
+        }
+
+        [Test]
+        public void ActivatingAnOverrideWithAnExplicitlyEmptyNameIsRejected()
+        {
+            Post("{\"name\":\"Idle\"}");
+
+            var response = Patch("{\"name\":\"Idle\",\"mirrorParameter\":\"\",\"mirrorParameterActive\":true}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            Assert.IsFalse(State("Idle").mirrorParameterActive);
+            Assert.AreEqual("", State("Idle").mirrorParameter);
+        }
+
+        [Test]
+        public void ClearingTheNameOfAnActiveOverrideIsRejected()
+        {
+            // The same broken pair reached from the other side.
+            Post("{\"name\":\"Idle\",\"timeParameter\":\"Speed\",\"timeParameterActive\":true}");
+
+            var response = Patch("{\"name\":\"Idle\",\"timeParameter\":\"\"}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            Assert.AreEqual("Speed", State("Idle").timeParameter);
+            Assert.IsTrue(State("Idle").timeParameterActive);
+        }
+
+        [Test]
+        public void ActivatingAnOverrideTheStateAlreadyNamesIsAccepted()
+        {
+            // The name does not have to be resent to turn the override on.
+            Post("{\"name\":\"Idle\",\"speedParameter\":\"Speed\",\"speedParameterActive\":false}");
+
+            Assert.AreEqual(200, Patch("{\"name\":\"Idle\",\"speedParameterActive\":true}").StatusCode);
+            Assert.IsTrue(State("Idle").speedParameterActive);
+            Assert.AreEqual("Speed", State("Idle").speedParameter);
+        }
+
+        [Test]
+        public void ADormantOverrideNamingADeletedParameterDoesNotBlockAnUnrelatedPatch()
+        {
+            // Re-checking a name the request did not send would make the state unwritable
+            // rather than repairable.
+            Post("{\"name\":\"Idle\",\"speedParameter\":\"Speed\",\"speedParameterActive\":false}");
+            var controller = Reloaded();
+            foreach (var p in controller.parameters)
+                if (p.name == "Speed") { controller.RemoveParameter(p); break; }
+            AssetDatabase.SaveAssets();
+
+            Assert.AreEqual(200, Patch("{\"name\":\"Idle\",\"tag\":\"Still writable\"}").StatusCode);
+            Assert.AreEqual("Still writable", State("Idle").tag);
+        }
+
+        [Test]
         public void AnEmptyParameterNameClearsTheOverrideWithoutALookup()
         {
             Post("{\"name\":\"Idle\",\"speedParameter\":\"Speed\",\"speedParameterActive\":true}");

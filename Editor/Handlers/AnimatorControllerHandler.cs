@@ -572,7 +572,9 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
 
             // Parsed before the state exists, so a rejected setting leaves nothing behind.
-            if (!TryParseStateFields(controller, body, response, out var fields)) return;
+            // The state is null here for the same reason: there is nothing to check the
+            // parameter overrides against but the request itself.
+            if (!TryParseStateFields(controller, null, body, response, out var fields)) return;
 
             var sm = controller.layers[layerIndex].stateMachine;
             var state = sm.AddState(name);
@@ -627,7 +629,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             // Everything is checked before the first field is written, so a request that
             // sets several and fails on one leaves the state as it was.
-            if (!TryParseStateFields(controller, body, response, out var fields)) return;
+            if (!TryParseStateFields(controller, state, body, response, out var fields)) return;
 
             var newName = RequestBodyReader.GetString(body, "newName");
             if (!string.IsNullOrEmpty(newName)) state.name = newName;
@@ -918,8 +920,15 @@ namespace LeonAkasaka.UnionAir.Editor
             public bool SetBehaviours;
         }
 
+        /// <param name="state">
+        /// The state being updated, or null when one is being created. The parameter
+        /// overrides are checked against what the state already holds as well as against
+        /// what the request carries, so this is what makes "activate the override that is
+        /// already named" legal and "activate nothing" not.
+        /// </param>
         private static bool TryParseStateFields(
-            AnimatorController controller, string body, UnionAirResponse response, out StateFields fields)
+            AnimatorController controller, AnimatorState state, string body,
+            UnionAirResponse response, out StateFields fields)
         {
             fields = default(StateFields);
             fields.SetBehaviours = RequestBodyReader.HasTopLevelField(body, "behaviours");
@@ -956,15 +965,23 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             if (!TryReadStateParameter(controller, body, "speedParameter", response,
+                    state == null ? null : state.speedParameter,
+                    state != null && state.speedParameterActive,
                     ref fields.SpeedParameter, ref fields.SetSpeedParameter,
                     ref fields.SpeedParameterActive, ref fields.SetSpeedParameterActive)) return false;
             if (!TryReadStateParameter(controller, body, "cycleOffsetParameter", response,
+                    state == null ? null : state.cycleOffsetParameter,
+                    state != null && state.cycleOffsetParameterActive,
                     ref fields.CycleOffsetParameter, ref fields.SetCycleOffsetParameter,
                     ref fields.CycleOffsetParameterActive, ref fields.SetCycleOffsetParameterActive)) return false;
             if (!TryReadStateParameter(controller, body, "mirrorParameter", response,
+                    state == null ? null : state.mirrorParameter,
+                    state != null && state.mirrorParameterActive,
                     ref fields.MirrorParameter, ref fields.SetMirrorParameter,
                     ref fields.MirrorParameterActive, ref fields.SetMirrorParameterActive)) return false;
             if (!TryReadStateParameter(controller, body, "timeParameter", response,
+                    state == null ? null : state.timeParameter,
+                    state != null && state.timeParameterActive,
                     ref fields.TimeParameter, ref fields.SetTimeParameter,
                     ref fields.TimeParameterActive, ref fields.SetTimeParameterActive)) return false;
 
@@ -973,15 +990,22 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// Reads one parameter override and its Active flag together.
+        /// Reads one parameter override and its Active flag together, and checks the pair
+        /// the request would leave behind rather than the halves it happens to carry.
         ///
-        /// Together because the pair is one decision: a name that does not exist must be
-        /// refused whichever half of the request carries it, and activating an override on
-        /// a parameter the controller does not have leaves a state that cannot play. An
-        /// empty name clears the override and is not looked up.
+        /// Checking only what was sent is not enough. The two fields are independent in the
+        /// request and inseparable in the asset: an override that is on and names nothing
+        /// is a state that cannot play, and it can be produced without either half looking
+        /// wrong on its own -- by activating with no name in the request and none on the
+        /// state, or by clearing the name of an override that is already active. So the
+        /// effective name and the effective flag are resolved first, the request's value
+        /// where it carries one and the state's otherwise, and the check is made on those.
         /// </summary>
+        /// <param name="currentValue">The state's name today, or null when it is being created.</param>
+        /// <param name="currentActive">The state's flag today, false when it is being created.</param>
         private static bool TryReadStateParameter(
             AnimatorController controller, string body, string field, UnionAirResponse response,
+            string currentValue, bool currentActive,
             ref string value, ref bool valueSet, ref bool active, ref bool activeSet)
         {
             if (!RequestBodyReader.TryGetStringValue(body, field, out value, out valueSet))
@@ -997,13 +1021,36 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            if (!valueSet || string.IsNullOrEmpty(value)) return true;
+            var effectiveValue = valueSet ? value : currentValue;
+            var effectiveActive = activeSet ? active : currentActive;
+
+            if (string.IsNullOrEmpty(effectiveValue))
+            {
+                // An override with no name is only coherent while it is off, which is how a
+                // state without one is stored.
+                if (!effectiveActive) return true;
+
+                RestResponse.SendError(response,
+                    $"{activeField} would be true with {field} empty, which is an override that drives nothing. " +
+                    $"Send {field} as well, or send {activeField} false.", 400);
+                return false;
+            }
+
+            // Looked up only where this request is answerable for the pair: it named the
+            // parameter, or it leaves the override on. A name the state already carries for
+            // an override that stays off is left alone -- it may point at a parameter
+            // someone deleted, and refusing an unrelated patch over that would make the
+            // state unwritable rather than repairable.
+            if (!valueSet && !effectiveActive) return true;
 
             foreach (var p in controller.parameters)
-                if (p.name == value) return true;
+                if (p.name == effectiveValue) return true;
 
+            // Reported whether the name arrived in this request or was already on the state:
+            // a request that activates an override the controller cannot satisfy is refused
+            // either way.
             RestResponse.SendError(response,
-                $"{field} '{value}' names no parameter on this controller. Add it first with " +
+                $"{field} '{effectiveValue}' names no parameter on this controller. Add it first with " +
                 "POST /api/assets/animator-controllers/{guid}/parameters.", 400);
             return false;
         }

@@ -1030,7 +1030,17 @@ Updates an existing state in an AnimatorController.
 
 An omitted field is left unchanged. Every value is checked before the first is written, so a request rejected with `400` leaves the state exactly as it was rather than partly updated.
 
-A `*Parameter` and its `*Active` flag are one decision: a name the controller does not have is rejected, and neither the name nor the flag is written. Activating an override on a parameter that does not exist would leave a state that cannot play. A `""` name clears the override and is not looked up.
+A `*Parameter` and its `*Active` flag are one decision, and the check is made on the pair the request would leave behind — the value it carries where it carries one, the state's current value otherwise. An override that is on and names nothing is a state that cannot play, and neither half has to look wrong on its own to produce one.
+
+| Request | Result |
+|---|---|
+| A name the controller does not have | `400`. Neither half is written |
+| `*Active: true` with no name in the request and none on the state | `400` — the override would drive nothing |
+| `*Parameter: ""` while the flag stays `true` | `400`, for the same reason. Send `*Active: false` in the same request to clear both |
+| `*Active: true` alone, where the state already names a parameter that exists | Accepted. The name does not have to be resent |
+| `*Parameter: ""` with `*Active: false` | Accepted. Clears the override |
+
+A name already on the state is not re-checked while the override stays off, so a patch to an unrelated field is not refused because someone deleted the parameter a dormant override still names.
 
 **Unknown fields are rejected** with a `400` that lists the accepted ones, so a typo such as `writeDefaults` cannot pass for a setting that did nothing.
 
