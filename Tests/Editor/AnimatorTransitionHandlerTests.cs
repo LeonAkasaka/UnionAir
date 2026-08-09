@@ -331,6 +331,34 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
                 "a refused request must not leave its other fields applied");
         }
 
+        [TestCase("\"0.5\"", TestName = "AMalformedConditionThresholdAnswers400AndAppliesNothing(quoted)")]
+        [TestCase("null", TestName = "AMalformedConditionThresholdAnswers400AndAppliesNothing(null)")]
+        [TestCase("\"soon\"", TestName = "AMalformedConditionThresholdAnswers400AndAppliesNothing(text)")]
+        public void AMalformedConditionThresholdAnswers400AndAppliesNothing(string threshold)
+        {
+            // Reading an unusable threshold as 0 would move a Greater threshold to zero and
+            // report success, which is the same silent skip an unknown mode used to be.
+            Post("{\"from\":\"Idle\",\"to\":\"Walk\",\"conditions\":[{\"parameter\":\"Speed\",\"mode\":\"Greater\",\"threshold\":0.1}]}");
+            var id = IdOf(State("Idle").transitions[0]);
+
+            var response = Patch("{\"transitionId\":\"" + id + "\",\"duration\":9.0," +
+                                 "\"conditions\":[{\"parameter\":\"Speed\",\"mode\":\"Greater\",\"threshold\":" + threshold + "}]}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("conditions[0].threshold", response.Body);
+            Assert.AreEqual(0.1f, State("Idle").transitions[0].conditions[0].threshold);
+            Assert.AreNotEqual(9.0f, State("Idle").transitions[0].duration);
+        }
+
+        [Test]
+        public void AnOmittedConditionThresholdIsZero()
+        {
+            // Which is what If and IfNot use, and what Unity writes for them.
+            Post("{\"from\":\"Idle\",\"to\":\"Walk\",\"conditions\":[{\"parameter\":\"Jump\",\"mode\":\"If\"}]}");
+
+            Assert.AreEqual(0f, State("Idle").transitions[0].conditions[0].threshold);
+        }
+
         [Test]
         public void AnEmptyConditionsArrayClearsTheConditions()
         {

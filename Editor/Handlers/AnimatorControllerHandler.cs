@@ -1267,11 +1267,22 @@ namespace LeonAkasaka.UnionAir.Editor
                     return false;
                 }
 
+                // Absent means 0, which is what If and IfNot use and what Unity writes for
+                // them. Present and unusable -- quoted, null, NaN -- is a different thing
+                // and is refused: reading it as 0 would move a Greater threshold to zero
+                // and report success, which is the silent skip this endpoint stopped doing
+                // one field above.
+                if (!RequestBodyReader.TryGetFloatValue(condJson, "threshold", out var threshold, out _))
+                {
+                    RestResponse.SendError(response, $"conditions[{i}].threshold must be a number.", 400);
+                    return false;
+                }
+
                 parsed.Add(new AnimatorCondition
                 {
                     parameter = paramName,
                     mode = mode,
-                    threshold = RequestBodyReader.GetFloat(condJson, "threshold") ?? 0f
+                    threshold = threshold
                 });
             }
 

@@ -1061,7 +1061,7 @@ Use `"AnyState"` as `from` for any-state transitions. Use `"Exit"` as `to` for e
 
 **Condition modes:** `If`, `IfNot` (Bool/Trigger), `Greater`, `Less`, `Equals`, `NotEqual` (Float/Int)
 
-Every field is parsed and checked before the transition is created, so a request rejected with `400` adds nothing to the controller. A condition whose `mode` is not one of the six above is rejected rather than skipped.
+Every field is parsed and checked before the transition is created, so a request rejected with `400` adds nothing to the controller. A condition whose `mode` is not one of the six above is rejected rather than skipped, and so is a `threshold` that is present but not a number — a quoted `"0.5"`, a `null`, `NaN`. An **omitted** `threshold` is `0`, which is what `If` and `IfNot` use.
 
 Adding a second transition between a pair that already has one is legal and stays legal. The response returns the new transition's `transitionId`, which is how it can be addressed afterwards.
 
