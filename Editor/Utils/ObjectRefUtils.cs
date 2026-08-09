@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Specialized;
+using System.Reflection;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -310,8 +311,26 @@ namespace LeonAkasaka.UnionAir.Editor
                 t = asm.GetType(typeName);
                 if (Matches(t, requiredBaseType)) return t;
 
-                foreach (var candidate in asm.GetTypes())
+                // Assembly.GetTypes throws rather than returning what loaded when any type
+                // in the assembly does not, and one assembly in that state used to take the
+                // whole lookup with it: a name that resolves to nothing answered 500 with
+                // the reflection exception in the body instead of "Unknown type". Unity's
+                // own expression evaluator puts such an assembly in the domain -- a dynamic
+                // one holding an uncreated TypeBuilder -- so it appears and disappears
+                // during a session with nothing in the project to explain it.
+                //
+                // ReflectionTypeLoadException.Types carries the types that did load with
+                // null in the gaps, so the assembly still contributes its candidates. This
+                // is the guard EditorMenuItemsHandler and UnionAirRouteRegistry already use
+                // on the same call.
+                Type[] candidates;
+                try { candidates = asm.GetTypes(); }
+                catch (ReflectionTypeLoadException ex) { candidates = ex.Types; }
+                catch { continue; }
+
+                foreach (var candidate in candidates)
                 {
+                    if (candidate == null) continue;
                     if ((candidate.Name == typeName || candidate.FullName == typeName) &&
                         Matches(candidate, requiredBaseType))
                         return candidate;
