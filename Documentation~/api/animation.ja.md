@@ -566,6 +566,7 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
       "iKPass": false,
       "syncedLayerIndex": -1,
       "syncedLayerAffectsTiming": false,
+      "defaultState": "Idle",
       "states": [
         {
           "name": "Idle",
@@ -693,7 +694,7 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
   "name": "Locomotion",
   "blendType": "Simple1D",
   "blendParameter": "Speed",
-  "blendParameterY": "",
+  "blendParameterY": "Blend",
   "useAutomaticThresholds": true,
   "minThreshold": 0.0,
   "maxThreshold": 0.8,
@@ -704,7 +705,7 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
       "timeScale": 1.0,
       "cycleOffset": 0.0,
       "mirror": false,
-      "directBlendParameter": "",
+      "directBlendParameter": "Blend",
       "motion": { "type": "AnimationClip", "guid": "...", "name": "Walk", "assetPath": "...", "clipsAtPath": 1 }
     }
   ]
@@ -846,7 +847,14 @@ Unity のフィールドは `Vector3` ですが、グラフは平面です。`z`
 
 ### このレスポンスが記述しないもの
 
-サブステートマシンは列挙されません。各レイヤーのルートステートマシン直下のステートだけが現れるため、ステートがサブステートマシンの中にあるレイヤーは `states` が空配列になります。
+このレスポンスが記述するのは**アセット**であり、動作中の Animator ではありません。ランタイムの面はありません。Play mode で Animator が実際にいるステート、その正規化時間、実効のレイヤーウェイトを読むエンドポイントはなく、パラメータを駆動したり `CrossFade` を呼ぶものもありません。`defaultWeight` は格納された値で、ベースレイヤーでは実効ウェイトと一致しません。[ベースレイヤーの `defaultWeight`](#ベースレイヤーの-defaultweight) を参照してください。
+
+このほかに 2 つの制限がありますが、いずれも隠されずに報告され、該当箇所で説明しています。
+
+- `behaviours` は型名だけを返します。ステートでもステートマシンでも同じです。[`behaviours` は読み取り専用](#behaviours-は読み取り専用)を参照してください。
+- ブレンドツリーとステートマシンのネストは深さ 10 までシリアライズされます。その深さのノードは中身の代わりに `"truncated": true` を持つため、境界を「中身が空」と取り違えることはありません。
+
+`mute` と `solo` はシリアライズされた値そのものです。Animator ウィンドウがレイヤー全体から計算する結果は報告しません。
 
 ### エラー
 

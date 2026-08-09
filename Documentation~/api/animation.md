@@ -563,6 +563,7 @@ Returns the full AnimatorController structure: parameters, layers, states, trans
       "iKPass": false,
       "syncedLayerIndex": -1,
       "syncedLayerAffectsTiming": false,
+      "defaultState": "Idle",
       "states": [
         {
           "name": "Idle",
@@ -690,7 +691,7 @@ Each child carries `threshold`, `position` (`{x, y}`, used by the 2D types), `ti
   "name": "Locomotion",
   "blendType": "Simple1D",
   "blendParameter": "Speed",
-  "blendParameterY": "",
+  "blendParameterY": "Blend",
   "useAutomaticThresholds": true,
   "minThreshold": 0.0,
   "maxThreshold": 0.8,
@@ -701,7 +702,7 @@ Each child carries `threshold`, `position` (`{x, y}`, used by the 2D types), `ti
       "timeScale": 1.0,
       "cycleOffset": 0.0,
       "mirror": false,
-      "directBlendParameter": "",
+      "directBlendParameter": "Blend",
       "motion": { "type": "AnimationClip", "guid": "...", "name": "Walk", "assetPath": "...", "clipsAtPath": 1 }
     }
   ]
@@ -843,7 +844,14 @@ Treat it as opaque and re-read it after deleting transitions.
 
 ### Not described by this response
 
-Sub-state machines are not enumerated. Only the states directly on each layer's root state machine appear, so a layer whose states live inside a sub-state machine reports an empty `states` array.
+The response describes the **asset**, not a playing Animator. There is no runtime surface: no endpoint reads the state a live Animator is in, its normalized time, or the effective layer weights in Play mode, and none drives parameters or `CrossFade`. `defaultWeight` is the stored field, which on the base layer is not the weight in effect — see [`defaultWeight` on the base layer](#defaultweight-on-the-base-layer).
+
+Two further limits are reported rather than hidden, and each is described where it applies:
+
+- `behaviours` gives type names only, on states and on state machines alike. See [`behaviours` is read-only](#behaviours-is-read-only).
+- Blend tree and state machine nesting is serialized to a depth of 10. A node at that depth carries `"truncated": true` instead of its contents, so a boundary is never mistaken for an empty one.
+
+`mute` and `solo` are the serialized values. What the Animator window computes from them across a whole layer is not reported.
 
 ### Errors
 
