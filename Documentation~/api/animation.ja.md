@@ -358,10 +358,18 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
           },
           "transitions": [
             {
+              "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
               "to": "Walk",
               "hasExitTime": false,
               "exitTime": 0.0,
               "duration": 0.25,
+              "fixedDuration": true,
+              "offset": 0.0,
+              "interruptionSource": "None",
+              "orderedInterruption": true,
+              "canTransitionToSelf": true,
+              "mute": false,
+              "solo": false,
               "conditions": [
                 { "parameter": "Speed", "mode": "Greater", "threshold": 0.1 }
               ]
@@ -441,6 +449,40 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
 ```
 
 入れ子は深さ 10 まで返します。その深さにあるブレンドツリーは `"truncated": true` を持ち、`children` を**持ちません**。境界と葉を区別できるようにするためで、空の `children` 配列は文字どおり「子が無い」という意味のまま残ります。
+
+### トランジションのフィールド
+
+ステートのトランジションも AnyState のトランジションも、次のフィールドを持ちます。
+
+| フィールド | 説明 |
+|---|---|
+| `transitionId` | このトランジションの安定したアドレス。[トランジションのアドレス指定](#トランジションのアドレス指定)を参照 |
+| `to` | 遷移先ステート名。Exit トランジションは `"Exit"`、遷移先が失われている場合は `null` |
+| `hasExitTime` | Exit Time で遷移するかどうか |
+| `exitTime` | Exit Time が発火する正規化時間 |
+| `duration` | ブレンド時間。**`fixedDuration` が `true` なら秒、`false` なら遷移元ステートに対する割合** |
+| `fixedDuration` | `AnimatorStateTransition.hasFixedDuration`。Unity が新規トランジションに与える既定値は `true` |
+| `offset` | 遷移先ステートでの正規化された開始オフセット |
+| `interruptionSource` | `None`, `Source`, `Destination`, `SourceThenDestination`, `DestinationThenSource` |
+| `orderedInterruption` | 割り込みがトランジションの順序に従うかどうか |
+| `canTransitionToSelf` | 参照されるのは AnyState トランジションのみ。値自体はすべてのトランジションで保存され、返されます |
+| `mute`, `solo` | シリアライズされた値そのもの。Animator ウィンドウがレイヤー全体から算出する結果は返しません |
+| `conditions` | `{parameter, mode, threshold}` の配列 |
+
+`duration` と `fixedDuration` は必ず一緒に返されます。どちらも単独では意味が定まらず、同じ数値が一方では秒、他方では遷移元ステートに対する割合になるためです。
+
+### トランジションのアドレス指定
+
+1 つのステートの組は任意の個数のトランジションを持てます。条件セットごとに経路を分けるのが通常の作り方だからです。したがって `from` と `to` の組は、それが 1 本だけのあいだしかアドレスになりません。`transitionId` は常にちょうど 1 本を指します。
+
+この ID は、コントローラーのサブアセットであるトランジションに対する Unity の `GlobalObjectId` です。6000.0.80f1 で確認した挙動:
+
+- ドメインリロード後も同じトランジションに解決されます
+- ステートの `transitions` 配列を並べ替えても、位置ではなくトランジション自体に追従します
+- `POST` が作成した直後、`SaveAssets` の前でもすでに有効です
+- トランジションを削除すると解決されなくなります。古い ID が誤って別のトランジションに当たるのではなく `404` になるのはこのためです
+
+内容は不透明な文字列として扱い、トランジションを削除した後は読み直してください。
 
 ### このレスポンスが記述しないもの
 
@@ -995,6 +1037,7 @@ Any State トランジションには `from` に `"AnyState"` を使用します
   "layerIndex": 0,
   "hasExitTime": false,
   "duration": 0.25,
+  "fixedDuration": true,
   "offset": 0.0,
   "conditions": [
     { "parameter": "Speed", "mode": "Greater", "threshold": 0.1 }
@@ -1009,30 +1052,49 @@ Any State トランジションには `from` に `"AnyState"` を使用します
 | `layerIndex` | ❌ | レイヤーインデックス(既定: 0) |
 | `hasExitTime` | ❌ | トランジションが exit time トリガーを持つかどうか |
 | `exitTime` | ❌ | exit time が発火する正規化時間(`hasExitTime: true` の場合) |
-| `duration` | ❌ | トランジションのブレンド時間(秒) |
+| `duration` | ❌ | ブレンド時間。`fixedDuration` が `true` なら秒、`false` なら遷移元ステートに対する割合 |
+| `fixedDuration` | ❌ | `duration` を秒として扱うかどうか。Unity が新規トランジションに与える既定値は `true` |
 | `offset` | ❌ | 遷移先ステートでの正規化時間オフセット |
-| `conditions` | ❌ | 条件オブジェクトの配列 |
+| `interruptionSource` | ❌ | `None`, `Source`, `Destination`, `SourceThenDestination`, `DestinationThenSource` |
+| `orderedInterruption` | ❌ | 割り込みがトランジションの順序に従うかどうか |
+| `canTransitionToSelf` | ❌ | AnyState トランジション専用。それ以外に送った場合は保存はされますが `unsupported` に列挙されます |
+| `mute` | ❌ | トランジションをミュートする |
+| `solo` | ❌ | トランジションをソロにする |
+| `conditions` | ❌ | 条件オブジェクトの配列。配列全体を置き換えます |
 
 **条件の mode:** `If`、`IfNot`(Bool/Trigger)、`Greater`、`Less`、`Equals`、`NotEqual`(Float/Int)
+
+すべてのフィールドはトランジションを作成する前に解析・検証されます。したがって `400` で拒否されたリクエストはコントローラーに何も追加しません。`mode` が上記 6 種のいずれでもない条件は、読み飛ばさずに拒否します。`threshold` が存在するのに数値でない場合(クォート付きの `"0.5"`、`null`、`NaN`)も同様に拒否します。`threshold` を**省略**した場合は `0` で、これは `If` と `IfNot` が使う値です。
+
+すでにトランジションがあるステートの組に 2 本目を追加することは正当な操作であり、これまでどおり可能です。レスポンスは新しいトランジションの `transitionId` を返します。以後はこれでアドレス指定します。
 
 ### レスポンス(HTTP 201)
 
 ```json
-{ "added": true, "from": "Idle", "to": "Walk", "layerIndex": 0 }
+{
+  "added": true,
+  "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
+  "from": "Idle",
+  "to": "Walk",
+  "layerIndex": 0,
+  "unsupported": []
+}
 ```
+
+`unsupported` は、保存はされたが参照されないフィールドを列挙します。現在該当するのは、AnyState 以外のトランジションに送られた `canTransitionToSelf` だけです。
 
 ### エラー
 
 | ステータス | 原因 |
 |--------|-------|
-| 400 | `from` または `to` の欠落、または `"AnyState"` → `"Exit"` が要求された |
+| 400 | `from` または `to` の欠落、設定値が不正、`interruptionSource` または条件の `mode` が未知、あるいは `"AnyState"` → `"Exit"` が要求された |
 | 404 | 遷移元または遷移先のステートが見つからない |
 
 ---
 
 ## PATCH /api/assets/animator-controllers/{guid}/transitions
 
-既存のトランジションを更新します。トランジションは `from` と `to` のステート名で特定されます。
+トランジションを 1 本更新します。
 
 > Asset Write カテゴリが有効な場合のみ呼び出せます。
 > Play モード中は `409 Conflict` を返します。
@@ -1047,35 +1109,78 @@ Any State トランジションには `from` に `"AnyState"` を使用します
 
 ```json
 {
-  "from": "Idle",
-  "to": "Walk",
-  "layerIndex": 0,
+  "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
   "duration": 0.1,
+  "fixedDuration": false,
+  "interruptionSource": "Destination",
   "conditions": [
     { "parameter": "Speed", "mode": "Greater", "threshold": 0.5 }
   ]
 }
 ```
 
-`from` と `to` 以外のすべてのフィールドは任意で、指定したフィールドのみ更新されます。
+| フィールド | 必須 | 説明 |
+|-------|----------|-------------|
+| `transitionId` | ❌ | 読み取りレスポンスが返すアドレス。ちょうど 1 本を指します |
+| `from`, `to` | ❌ | ステート名によるアドレス指定。その組がちょうど 1 本のときだけ受け付けます |
+| `layerIndex` | ❌ | 探索するレイヤー(既定: 0) |
+
+`transitionId` か、`from` と `to` の両方か、いずれかが必要です。両方送られた場合は `transitionId` が優先されます。`POST` に挙げた設定はすべて受け付け、省略したフィールドは変更されません。
+
+`conditions` は配列全体を置き換えます。**空配列は条件をクリアします** — 「変更しない」を意味するのはフィールドの省略のほうです。
+
+すべての値は最初の 1 つが書き込まれる前に解析・検証されます。したがって `400` で拒否されたリクエストは、トランジションを中途半端に更新した状態にはせず、元のまま残します。
 
 ### レスポンス
 
 ```json
-{ "updated": true, "from": "Idle", "to": "Walk", "layerIndex": 0 }
+{
+  "updated": true,
+  "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
+  "from": "Idle",
+  "to": "Walk",
+  "layerIndex": 0,
+  "unsupported": []
+}
 ```
 
 ### エラー
 
 | ステータス | 原因 |
 |--------|-------|
-| 404 | トランジションが見つからない |
+| 400 | アドレスが送られていない、`transitionId` の形式が不正、または設定値が不正か未知 |
+| 404 | 一致するトランジションが無い、または `transitionId` がもう解決できない。別レイヤーの ID の場合はどのレイヤーにあるかを返します |
+| 409 | `from` と `to` が 2 本以上に一致した — 下記参照 |
+| 422 | `transitionId` が `AnimatorStateTransition` 以外に解決された |
+
+### ステート名の組が曖昧な場合の 409
+
+```json
+{
+  "error": "2 transitions match Idle -> Walk. Address one by transitionId; 'matches' lists every candidate with its conditions.",
+  "from": "Idle",
+  "to": "Walk",
+  "layerIndex": 0,
+  "matches": [
+    {
+      "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
+      "conditions": [ { "parameter": "Speed", "mode": "Greater", "threshold": 0.1 } ]
+    },
+    {
+      "transitionId": "GlobalObjectId_V1-3-a1b2c3...-10875748444440948623-0",
+      "conditions": [ { "parameter": "Jump", "mode": "If", "threshold": 0.0 } ]
+    }
+  ]
+}
+```
+
+`400` ではなく `409` である理由は、リクエスト自体は正しく、アドレスとして使えなくしているのがコントローラー側の形だからです。候補ごとに条件が付くのは、それが経路を見分ける手がかりであり、追加のリクエストなしに選べるようにするためです。何も書き込まれません。
 
 ---
 
 ## DELETE /api/assets/animator-controllers/{guid}/transitions
 
-AnimatorController からトランジションを削除します。トランジションは `from` と `to` のステート名で特定されます。
+トランジションを 1 本削除します。トランジションはコントローラーのサブアセットであり、削除と同時に破棄されます。
 
 > Asset Write カテゴリが有効な場合のみ呼び出せます。
 > Play モード中は `409 Conflict` を返します。
@@ -1089,17 +1194,30 @@ AnimatorController からトランジションを削除します。トランジ�
 ### リクエストボディ(JSON)
 
 ```json
-{ "from": "Idle", "to": "Walk", "layerIndex": 0 }
+{ "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0" }
 ```
+
+アドレス指定は `PATCH` とまったく同じです。`transitionId`、またはその組がちょうど 1 本のときの `from` と `to` を使います。`transitionId`、`from`、`to` はクエリパラメータでも送れます。
 
 ### レスポンス
 
 ```json
-{ "removed": true, "from": "Idle", "to": "Walk", "layerIndex": 0 }
+{
+  "removed": true,
+  "transitionId": "GlobalObjectId_V1-3-a1b2c3...-14749150960317597279-0",
+  "from": "Idle",
+  "to": "Walk",
+  "layerIndex": 0
+}
 ```
+
+`transitionId` は削除されたトランジションのものです。この ID はもう解決されません。
 
 ### エラー
 
 | ステータス | 原因 |
 |--------|-------|
-| 404 | トランジションが見つからない |
+| 400 | アドレスが送られていない、または `transitionId` の形式が不正 |
+| 404 | 一致するトランジションが無い、または `transitionId` がもう解決できない |
+| 409 | `from` と `to` が 2 本以上に一致した。ボディは `PATCH` と同じ形で、何も削除されません |
+| 422 | `transitionId` が `AnimatorStateTransition` 以外に解決された |

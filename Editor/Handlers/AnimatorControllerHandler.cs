@@ -742,12 +742,12 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var layerIndex = RequestBodyReader.GetInt(body, "layerIndex") ?? 0;
-            if (layerIndex < 0 || layerIndex >= controller.layers.Length)
-            {
-                RestResponse.SendError(response, $"layerIndex {layerIndex} is out of range", 400);
-                return;
-            }
+            if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
+
+            // Parsed before the transition exists, so a rejected setting leaves nothing
+            // behind. Creating first and validating after would add a transition -- a
+            // sub-asset of the controller -- that the caller was told did not happen.
+            if (!TryParseTransitionFields(body, response, out var fields)) return;
 
             var sm = controller.layers[layerIndex].stateMachine;
             AnimatorStateTransition transition;
@@ -792,14 +792,22 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
             }
 
-            ApplyTransitionSettings(transition, body);
+            ApplyTransitionFields(transition, fields);
+            var unsupported = AnimatorTransitionRules.CollectUnsupported(
+                fields.SetCanTransitionToSelf, fromName == "AnyState");
 
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
 
-            RestResponse.Send(response,
-                $"{{\"added\":true,\"from\":\"{RestResponse.EscapeJson(fromName)}\",\"to\":\"{RestResponse.EscapeJson(toName)}\",\"layerIndex\":{layerIndex}}}",
-                201);
+            var sb = new StringBuilder();
+            sb.Append("{\"added\":true,\"transitionId\":")
+              .Append(RestResponse.FormatNullableString(ObjectIdUtils.GetGlobalObjectId(transition)));
+            sb.Append(",\"from\":").Append(RestResponse.FormatNullableString(fromName));
+            sb.Append(",\"to\":").Append(RestResponse.FormatNullableString(toName));
+            sb.Append(",\"layerIndex\":").Append(layerIndex);
+            AppendUnsupported(sb, unsupported);
+            sb.Append("}");
+            RestResponse.Send(response, sb.ToString(), 201);
         }
 
         // ── PATCH /api/assets/animator-controllers/{guid}/transitions ────────
@@ -810,37 +818,29 @@ namespace LeonAkasaka.UnionAir.Editor
             if (controller == null) return;
 
             var body = RequestBodyReader.ReadString(request);
-            var fromName = RequestBodyReader.GetString(body, "from");
-            var toName = RequestBodyReader.GetString(body, "to");
+            if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
+            if (!TryResolveTransition(controller, layerIndex, body, request, response, out var found)) return;
 
-            if (string.IsNullOrEmpty(fromName) || string.IsNullOrEmpty(toName))
-            {
-                RestResponse.SendError(response, "Missing required fields: from, to", 400);
-                return;
-            }
+            // Every value is checked before the first one is written, so a request carrying
+            // one bad field does not leave the others applied.
+            if (!TryParseTransitionFields(body, response, out var fields)) return;
 
-            var layerIndex = RequestBodyReader.GetInt(body, "layerIndex") ?? 0;
-            if (layerIndex < 0 || layerIndex >= controller.layers.Length)
-            {
-                RestResponse.SendError(response, $"layerIndex {layerIndex} is out of range", 400);
-                return;
-            }
-
-            var sm = controller.layers[layerIndex].stateMachine;
-            var transition = FindTransition(sm, fromName, toName);
-            if (transition == null)
-            {
-                RestResponse.SendNotFound(response, $"Transition not found: {fromName} -> {toName}");
-                return;
-            }
-
-            ApplyTransitionSettings(transition, body);
+            ApplyTransitionFields(found.Transition, fields);
+            var unsupported = AnimatorTransitionRules.CollectUnsupported(
+                fields.SetCanTransitionToSelf, found.Owner == null);
 
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
 
-            RestResponse.Send(response,
-                $"{{\"updated\":true,\"from\":\"{RestResponse.EscapeJson(fromName)}\",\"to\":\"{RestResponse.EscapeJson(toName)}\",\"layerIndex\":{layerIndex}}}");
+            var sb = new StringBuilder();
+            sb.Append("{\"updated\":true,\"transitionId\":")
+              .Append(RestResponse.FormatNullableString(ObjectIdUtils.GetGlobalObjectId(found.Transition)));
+            sb.Append(",\"from\":").Append(RestResponse.FormatNullableString(found.FromName));
+            sb.Append(",\"to\":").Append(RestResponse.FormatNullableString(found.ToName));
+            sb.Append(",\"layerIndex\":").Append(layerIndex);
+            AppendUnsupported(sb, unsupported);
+            sb.Append("}");
+            RestResponse.Send(response, sb.ToString());
         }
 
         // ── DELETE /api/assets/animator-controllers/{guid}/transitions ───────
@@ -851,64 +851,35 @@ namespace LeonAkasaka.UnionAir.Editor
             if (controller == null) return;
 
             var body = RequestBodyReader.ReadString(request);
-            var fromName = RequestBodyReader.GetString(body, "from") ?? request.QueryString["from"];
-            var toName = RequestBodyReader.GetString(body, "to") ?? request.QueryString["to"];
+            if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
+            if (!TryResolveTransition(controller, layerIndex, body, request, response, out var found)) return;
 
-            if (string.IsNullOrEmpty(fromName) || string.IsNullOrEmpty(toName))
-            {
-                RestResponse.SendError(response, "Missing required fields: from, to", 400);
-                return;
-            }
+            // Read before the removal, because the object is destroyed by it.
+            var transitionId = ObjectIdUtils.GetGlobalObjectId(found.Transition);
+            var fromName = found.FromName;
+            var toName = found.ToName;
 
-            var layerIndex = RequestBodyReader.GetInt(body, "layerIndex") ?? 0;
-            if (layerIndex < 0 || layerIndex >= controller.layers.Length)
-            {
-                RestResponse.SendError(response, $"layerIndex {layerIndex} is out of range", 400);
-                return;
-            }
-
-            var sm = controller.layers[layerIndex].stateMachine;
-
-            if (fromName == "AnyState")
-            {
-                var anyTransitions = new List<AnimatorStateTransition>(sm.anyStateTransitions);
-                var removed = anyTransitions.RemoveAll(t => t.destinationState != null && t.destinationState.name == toName);
-                if (removed == 0)
-                {
-                    RestResponse.SendNotFound(response, $"AnyState -> {toName} transition not found");
-                    return;
-                }
-                sm.anyStateTransitions = anyTransitions.ToArray();
-            }
+            // Through RemoveTransition rather than by rewriting the transitions array. A
+            // transition is a sub-asset of the controller, and assigning an array that omits
+            // one detaches it without destroying it -- measured on 6000.0.80f1, that left an
+            // AnimatorStateTransition in the .controller file with nothing referring to it.
+            // These are the APIs that own the sub-asset's lifetime.
+            if (found.Owner == null)
+                controller.layers[layerIndex].stateMachine.RemoveAnyStateTransition(found.Transition);
             else
-            {
-                var fromState = FindState(sm, fromName);
-                if (fromState == null)
-                {
-                    RestResponse.SendNotFound(response, $"Source state not found: {fromName}");
-                    return;
-                }
-
-                var stateTransitions = new List<AnimatorStateTransition>(fromState.transitions);
-                int removed;
-                if (toName == "Exit")
-                    removed = stateTransitions.RemoveAll(t => t.isExit);
-                else
-                    removed = stateTransitions.RemoveAll(t => t.destinationState != null && t.destinationState.name == toName);
-
-                if (removed == 0)
-                {
-                    RestResponse.SendNotFound(response, $"Transition {fromName} -> {toName} not found");
-                    return;
-                }
-                fromState.transitions = stateTransitions.ToArray();
-            }
+                found.Owner.RemoveTransition(found.Transition);
 
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
 
-            RestResponse.Send(response,
-                $"{{\"removed\":true,\"from\":\"{RestResponse.EscapeJson(fromName)}\",\"to\":\"{RestResponse.EscapeJson(toName)}\",\"layerIndex\":{layerIndex}}}");
+            var sb = new StringBuilder();
+            sb.Append("{\"removed\":true,\"transitionId\":")
+              .Append(RestResponse.FormatNullableString(transitionId));
+            sb.Append(",\"from\":").Append(RestResponse.FormatNullableString(fromName));
+            sb.Append(",\"to\":").Append(RestResponse.FormatNullableString(toName));
+            sb.Append(",\"layerIndex\":").Append(layerIndex);
+            sb.Append("}");
+            RestResponse.Send(response, sb.ToString());
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
@@ -943,99 +914,454 @@ namespace LeonAkasaka.UnionAir.Editor
             return null;
         }
 
-        private static AnimatorStateTransition FindTransition(AnimatorStateMachine sm, string fromName, string toName)
+        /// <summary>
+        /// Reads the layer a transition write applies to, defaulting to 0.
+        ///
+        /// The query string is read as a fallback because the address fields are, so a
+        /// DELETE sent entirely as query parameters can still name a layer other than the
+        /// base one.
+        /// </summary>
+        private static bool TryReadLayerIndex(
+            AnimatorController controller, string body, UnionAirRequest request,
+            UnionAirResponse response, out int layerIndex)
         {
-            if (fromName == "AnyState")
+            layerIndex = 0;
+
+            var fromBody = RequestBodyReader.GetInt(body, "layerIndex");
+            if (fromBody.HasValue)
             {
-                foreach (var t in sm.anyStateTransitions)
-                    if (t.destinationState != null && t.destinationState.name == toName)
-                        return t;
-                return null;
+                layerIndex = fromBody.Value;
+            }
+            else
+            {
+                var raw = request.QueryString["layerIndex"];
+                if (!string.IsNullOrEmpty(raw) &&
+                    !int.TryParse(raw, System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out layerIndex))
+                {
+                    RestResponse.SendError(response, $"layerIndex must be an integer: {raw}", 400);
+                    return false;
+                }
             }
 
-            var fromState = FindState(sm, fromName);
-            if (fromState == null) return null;
+            if (AnimatorLayerRules.TryValidateLayerIndex(layerIndex, controller.layers.Length, out var error))
+                return true;
 
-            foreach (var t in fromState.transitions)
-            {
-                if (toName == "Exit" && t.isExit) return t;
-                if (t.destinationState != null && t.destinationState.name == toName) return t;
-            }
-            return null;
+            RestResponse.SendError(response, error, 400);
+            return false;
         }
 
-        private static void ApplyTransitionSettings(AnimatorStateTransition transition, string body)
+        // ── Transition addressing ────────────────────────────────────────────
+
+        /// <summary>
+        /// A transition together with where it sits.
+        ///
+        /// The read does not need this, because it walks down from the owner already. A
+        /// write addressed by <c>transitionId</c> arrives with the transition and nothing
+        /// else, and removing one takes the object that owns it.
+        /// </summary>
+        private struct TransitionRef
         {
-            var hasExitTime = RequestBodyReader.GetBool(body, "hasExitTime");
-            if (hasExitTime.HasValue) transition.hasExitTime = hasExitTime.Value;
+            public AnimatorStateTransition Transition;
+            /// <summary>The source state, or null when the transition leaves AnyState.</summary>
+            public AnimatorState Owner;
+            public string FromName;
+            public string ToName;
+        }
 
-            var exitTime = RequestBodyReader.GetFloat(body, "exitTime");
-            if (exitTime.HasValue) transition.exitTime = exitTime.Value;
+        private static string DestinationName(AnimatorStateTransition t)
+            => t.isExit ? "Exit" : (t.destinationState != null ? t.destinationState.name : null);
 
-            var duration = RequestBodyReader.GetFloat(body, "duration");
-            if (duration.HasValue) transition.duration = duration.Value;
-
-            var offset = RequestBodyReader.GetFloat(body, "offset");
-            if (offset.HasValue) transition.offset = offset.Value;
-
-            var conditions = RequestBodyReader.GetArray(body, "conditions");
-            if (conditions == null || conditions.Count == 0) return;
-
-            var condList = new List<AnimatorCondition>();
-            foreach (var condJson in conditions)
+        /// <summary>
+        /// Every AnimatorStateTransition a layer's top-level state machine carries, in the
+        /// order the read reports them. Sub-state machines are not traversed; they are not
+        /// described by any endpoint yet, and addressing what cannot be read would be a
+        /// contract this issue does not own.
+        /// </summary>
+        private static List<TransitionRef> EnumerateTransitions(AnimatorStateMachine sm)
+        {
+            var refs = new List<TransitionRef>();
+            foreach (var cs in sm.states)
             {
+                foreach (var t in cs.state.transitions)
+                {
+                    refs.Add(new TransitionRef
+                    {
+                        Transition = t,
+                        Owner = cs.state,
+                        FromName = cs.state.name,
+                        ToName = DestinationName(t)
+                    });
+                }
+            }
+            foreach (var t in sm.anyStateTransitions)
+            {
+                refs.Add(new TransitionRef
+                {
+                    Transition = t,
+                    Owner = null,
+                    FromName = "AnyState",
+                    ToName = DestinationName(t)
+                });
+            }
+            return refs;
+        }
+
+        /// <summary>
+        /// Resolves the one transition a write addresses, by <c>transitionId</c> when the
+        /// request carries one and by <c>from</c> plus <c>to</c> otherwise.
+        ///
+        /// A state pair may carry any number of transitions, so the name pair is an address
+        /// only while it resolves to one. When it resolves to several the request is
+        /// answered with a 409 naming every candidate, rather than by picking the first --
+        /// which is what PATCH used to do -- or by acting on all of them, which is what
+        /// DELETE used to do.
+        /// </summary>
+        private static bool TryResolveTransition(
+            AnimatorController controller, int layerIndex, string body,
+            UnionAirRequest request, UnionAirResponse response, out TransitionRef found)
+        {
+            found = default(TransitionRef);
+            var sm = controller.layers[layerIndex].stateMachine;
+
+            if (!RequestBodyReader.TryGetStringValue(body, "transitionId", out var transitionId, out var hasId))
+            {
+                RestResponse.SendError(response, "transitionId must be a string.", 400);
+                return false;
+            }
+            if (!hasId) transitionId = request.QueryString["transitionId"];
+
+            if (!string.IsNullOrEmpty(transitionId))
+                return TryResolveById(controller, layerIndex, transitionId, response, out found);
+
+            var fromName = RequestBodyReader.GetString(body, "from") ?? request.QueryString["from"];
+            var toName = RequestBodyReader.GetString(body, "to") ?? request.QueryString["to"];
+            if (string.IsNullOrEmpty(fromName) || string.IsNullOrEmpty(toName))
+            {
+                RestResponse.SendError(response,
+                    "Address the transition by transitionId, or by from and to.", 400);
+                return false;
+            }
+
+            var matches = new List<TransitionRef>();
+            foreach (var candidate in EnumerateTransitions(sm))
+            {
+                if (candidate.FromName == fromName && candidate.ToName == toName)
+                    matches.Add(candidate);
+            }
+
+            if (matches.Count == 0)
+            {
+                RestResponse.SendNotFound(response,
+                    $"Transition not found in layer {layerIndex}: {fromName} -> {toName}");
+                return false;
+            }
+
+            if (matches.Count > 1)
+            {
+                SendAmbiguous(response, layerIndex, fromName, toName, matches);
+                return false;
+            }
+
+            found = matches[0];
+            return true;
+        }
+
+        private static bool TryResolveById(
+            AnimatorController controller, int layerIndex, string transitionId,
+            UnionAirResponse response, out TransitionRef found)
+        {
+            found = default(TransitionRef);
+
+            if (!ObjectIdUtils.TryResolveObject(transitionId, out var obj, out var error, out var statusCode))
+            {
+                RestResponse.SendError(response, error, statusCode);
+                return false;
+            }
+
+            var transition = obj as AnimatorStateTransition;
+            if (transition == null)
+            {
+                RestResponse.SendError(response,
+                    $"transitionId does not resolve to an AnimatorStateTransition: {transitionId}", 422);
+                return false;
+            }
+
+            foreach (var candidate in EnumerateTransitions(controller.layers[layerIndex].stateMachine))
+            {
+                if (candidate.Transition != transition) continue;
+                found = candidate;
+                return true;
+            }
+
+            // Resolvable but not in the layer being written. layerIndex defaults to 0, so
+            // this is what a caller holding an id from another layer hits first, and the
+            // layer it is actually in is the one thing the message can usefully add.
+            for (int i = 0; i < controller.layers.Length; i++)
+            {
+                if (i == layerIndex) continue;
+                foreach (var candidate in EnumerateTransitions(controller.layers[i].stateMachine))
+                {
+                    if (candidate.Transition != transition) continue;
+                    RestResponse.SendNotFound(response,
+                        $"Transition {transitionId} is not in layer {layerIndex}; it is in layer {i}. " +
+                        $"Send layerIndex {i}.");
+                    return false;
+                }
+            }
+
+            RestResponse.SendNotFound(response,
+                $"Transition {transitionId} is not in layer {layerIndex} of this controller. " +
+                "Sub-state machine transitions are not addressable.");
+            return false;
+        }
+
+        private static void SendAmbiguous(
+            UnionAirResponse response, int layerIndex, string fromName, string toName, List<TransitionRef> matches)
+        {
+            var sb = new StringBuilder();
+            sb.Append("{\"error\":").Append(RestResponse.FormatNullableString(
+                AnimatorTransitionRules.AmbiguousAddressMessage(fromName, toName, matches.Count)));
+            sb.Append(",\"from\":").Append(RestResponse.FormatNullableString(fromName));
+            sb.Append(",\"to\":").Append(RestResponse.FormatNullableString(toName));
+            sb.Append(",\"layerIndex\":").Append(layerIndex);
+            sb.Append(",\"matches\":[");
+            for (int i = 0; i < matches.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append("{\"transitionId\":").Append(RestResponse.FormatNullableString(
+                    ObjectIdUtils.GetGlobalObjectId(matches[i].Transition)));
+                // The conditions are what distinguish one route from another, so they are
+                // what lets the caller pick without a second request.
+                sb.Append(",\"conditions\":");
+                AppendConditions(sb, matches[i].Transition.conditions);
+                sb.Append("}");
+            }
+            sb.Append("]}");
+            RestResponse.Send(response, sb.ToString(), 409);
+        }
+
+        // ── Transition settings ──────────────────────────────────────────────
+
+        /// <summary>
+        /// The transition settings a request carries, parsed and checked but not applied.
+        ///
+        /// Separating the two is what makes a request atomic: nothing is written until
+        /// every value has been accepted, so a rejected field leaves the transition as it
+        /// was rather than partly updated.
+        /// </summary>
+        private struct TransitionFields
+        {
+            public bool SetHasExitTime; public bool HasExitTime;
+            public bool SetExitTime; public float ExitTime;
+            public bool SetDuration; public float Duration;
+            public bool SetOffset; public float Offset;
+            public bool SetFixedDuration; public bool FixedDuration;
+            public bool SetInterruptionSource; public TransitionInterruptionSource InterruptionSource;
+            public bool SetOrderedInterruption; public bool OrderedInterruption;
+            public bool SetCanTransitionToSelf; public bool CanTransitionToSelf;
+            public bool SetMute; public bool Mute;
+            public bool SetSolo; public bool Solo;
+            public bool SetConditions; public AnimatorCondition[] Conditions;
+        }
+
+        private static bool TryParseTransitionFields(string body, UnionAirResponse response, out TransitionFields fields)
+        {
+            fields = default(TransitionFields);
+
+            if (!RequestBodyReader.TryGetBoolValue(body, "hasExitTime", out fields.HasExitTime, out fields.SetHasExitTime))
+            {
+                RestResponse.SendError(response, "hasExitTime must be a boolean.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetFloatValue(body, "exitTime", out fields.ExitTime, out fields.SetExitTime))
+            {
+                RestResponse.SendError(response, "exitTime must be a number.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetFloatValue(body, "duration", out fields.Duration, out fields.SetDuration))
+            {
+                RestResponse.SendError(response, "duration must be a number.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetFloatValue(body, "offset", out fields.Offset, out fields.SetOffset))
+            {
+                RestResponse.SendError(response, "offset must be a number.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetBoolValue(body, "fixedDuration", out fields.FixedDuration, out fields.SetFixedDuration))
+            {
+                RestResponse.SendError(response, "fixedDuration must be a boolean.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetBoolValue(body, "orderedInterruption", out fields.OrderedInterruption, out fields.SetOrderedInterruption))
+            {
+                RestResponse.SendError(response, "orderedInterruption must be a boolean.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetBoolValue(body, "canTransitionToSelf", out fields.CanTransitionToSelf, out fields.SetCanTransitionToSelf))
+            {
+                RestResponse.SendError(response, "canTransitionToSelf must be a boolean.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetBoolValue(body, "mute", out fields.Mute, out fields.SetMute))
+            {
+                RestResponse.SendError(response, "mute must be a boolean.", 400);
+                return false;
+            }
+            if (!RequestBodyReader.TryGetBoolValue(body, "solo", out fields.Solo, out fields.SetSolo))
+            {
+                RestResponse.SendError(response, "solo must be a boolean.", 400);
+                return false;
+            }
+
+            if (!RequestBodyReader.TryGetStringValue(body, "interruptionSource", out var sourceName, out fields.SetInterruptionSource))
+            {
+                RestResponse.SendError(response, "interruptionSource must be a string.", 400);
+                return false;
+            }
+            if (fields.SetInterruptionSource &&
+                !AnimatorTransitionRules.TryParseInterruptionSource(sourceName, out fields.InterruptionSource))
+            {
+                RestResponse.SendError(response,
+                    $"Unknown interruptionSource: {sourceName}. Use one of {AnimatorTransitionRules.InterruptionSourceNames}.", 400);
+                return false;
+            }
+
+            return TryParseConditions(body, response, ref fields);
+        }
+
+        /// <summary>
+        /// Reads the conditions array, which replaces the transition's conditions wholesale.
+        ///
+        /// An element that does not parse is rejected rather than skipped. Skipping is what
+        /// this used to do, and it produced a transition holding fewer conditions than the
+        /// request listed, reported as a plain success.
+        /// </summary>
+        private static bool TryParseConditions(string body, UnionAirResponse response, ref TransitionFields fields)
+        {
+            if (!RequestBodyReader.TryGetArrayElements(body, "conditions", out var elements, out var present, out var arrayError))
+            {
+                RestResponse.SendError(response, arrayError, 400);
+                return false;
+            }
+            if (!present) return true;
+
+            var parsed = new List<AnimatorCondition>();
+            for (int i = 0; i < elements.Count; i++)
+            {
+                var condJson = elements[i];
                 var paramName = RequestBodyReader.GetString(condJson, "parameter");
                 var modeStr = RequestBodyReader.GetString(condJson, "mode");
                 if (string.IsNullOrEmpty(paramName) || string.IsNullOrEmpty(modeStr))
-                    continue;
-
-                AnimatorConditionMode mode;
-                switch (modeStr.ToLowerInvariant())
                 {
-                    case "if":       mode = AnimatorConditionMode.If;       break;
-                    case "ifnot":    mode = AnimatorConditionMode.IfNot;    break;
-                    case "greater":  mode = AnimatorConditionMode.Greater;  break;
-                    case "less":     mode = AnimatorConditionMode.Less;     break;
-                    case "equals":   mode = AnimatorConditionMode.Equals;   break;
-                    case "notequal": mode = AnimatorConditionMode.NotEqual; break;
-                    default: continue;
+                    RestResponse.SendError(response, $"conditions[{i}] requires parameter and mode.", 400);
+                    return false;
                 }
 
-                var threshold = RequestBodyReader.GetFloat(condJson, "threshold") ?? 0f;
-                condList.Add(new AnimatorCondition
+                if (!AnimatorTransitionRules.TryParseConditionMode(modeStr, out var mode))
+                {
+                    RestResponse.SendError(response,
+                        $"Unknown condition mode in conditions[{i}]: {modeStr}. " +
+                        $"Use one of {AnimatorTransitionRules.ConditionModeNames}.", 400);
+                    return false;
+                }
+
+                // Absent means 0, which is what If and IfNot use and what Unity writes for
+                // them. Present and unusable -- quoted, null, NaN -- is a different thing
+                // and is refused: reading it as 0 would move a Greater threshold to zero
+                // and report success, which is the silent skip this endpoint stopped doing
+                // one field above.
+                if (!RequestBodyReader.TryGetFloatValue(condJson, "threshold", out var threshold, out _))
+                {
+                    RestResponse.SendError(response, $"conditions[{i}].threshold must be a number.", 400);
+                    return false;
+                }
+
+                parsed.Add(new AnimatorCondition
                 {
                     parameter = paramName,
                     mode = mode,
                     threshold = threshold
                 });
             }
-            transition.conditions = condList.ToArray();
+
+            // An empty array is a request to clear, not a request to leave alone: the array
+            // replaces what the transition holds, and it can replace it with nothing.
+            fields.SetConditions = true;
+            fields.Conditions = parsed.ToArray();
+            return true;
         }
 
-        private static void AppendTransition(StringBuilder sb, AnimatorStateTransition t)
+        /// <summary>
+        /// Writes parsed settings. Cannot fail, which is the point: every check happened in
+        /// <see cref="TryParseTransitionFields"/>, before anything was mutated.
+        /// </summary>
+        private static void ApplyTransitionFields(AnimatorStateTransition transition, TransitionFields fields)
         {
-            sb.Append("{");
-            if (t.isExit)
-                sb.Append("\"to\":\"Exit\",");
-            else if (t.destinationState != null)
-                sb.Append($"\"to\":\"{RestResponse.EscapeJson(t.destinationState.name)}\",");
-            else
-                sb.Append("\"to\":null,");
-            sb.Append($"\"hasExitTime\":{(t.hasExitTime ? "true" : "false")},");
-            sb.Append($"\"exitTime\":{RestResponse.FormatFloat(t.exitTime)},");
-            sb.Append($"\"duration\":{RestResponse.FormatFloat(t.duration)},");
-            sb.Append("\"conditions\":[");
-            for (int ci = 0; ci < t.conditions.Length; ci++)
+            if (fields.SetHasExitTime) transition.hasExitTime = fields.HasExitTime;
+            if (fields.SetExitTime) transition.exitTime = fields.ExitTime;
+            if (fields.SetDuration) transition.duration = fields.Duration;
+            if (fields.SetOffset) transition.offset = fields.Offset;
+            if (fields.SetFixedDuration) transition.hasFixedDuration = fields.FixedDuration;
+            if (fields.SetInterruptionSource) transition.interruptionSource = fields.InterruptionSource;
+            if (fields.SetOrderedInterruption) transition.orderedInterruption = fields.OrderedInterruption;
+            if (fields.SetCanTransitionToSelf) transition.canTransitionToSelf = fields.CanTransitionToSelf;
+            if (fields.SetMute) transition.mute = fields.Mute;
+            if (fields.SetSolo) transition.solo = fields.Solo;
+            if (fields.SetConditions) transition.conditions = fields.Conditions;
+        }
+
+        private static void AppendUnsupported(StringBuilder sb, List<string> unsupported)
+        {
+            sb.Append(",\"unsupported\":[");
+            for (int i = 0; i < unsupported.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(RestResponse.FormatNullableString(unsupported[i]));
+            }
+            sb.Append("]");
+        }
+
+        private static void AppendConditions(StringBuilder sb, AnimatorCondition[] conditions)
+        {
+            sb.Append("[");
+            for (int ci = 0; ci < conditions.Length; ci++)
             {
                 if (ci > 0) sb.Append(",");
-                var c = t.conditions[ci];
+                var c = conditions[ci];
                 sb.Append("{");
                 sb.Append($"\"parameter\":\"{RestResponse.EscapeJson(c.parameter)}\",");
                 sb.Append($"\"mode\":\"{c.mode}\",");
                 sb.Append($"\"threshold\":{RestResponse.FormatFloat(c.threshold)}");
                 sb.Append("}");
             }
-            sb.Append("]}");
+            sb.Append("]");
+        }
+
+        private static void AppendTransition(StringBuilder sb, AnimatorStateTransition t)
+        {
+            sb.Append("{");
+            sb.Append("\"transitionId\":").Append(
+                RestResponse.FormatNullableString(ObjectIdUtils.GetGlobalObjectId(t))).Append(",");
+            sb.Append("\"to\":").Append(RestResponse.FormatNullableString(DestinationName(t))).Append(",");
+            sb.Append($"\"hasExitTime\":{RestResponse.FormatBool(t.hasExitTime)},");
+            sb.Append($"\"exitTime\":{RestResponse.FormatFloat(t.exitTime)},");
+
+            // duration and fixedDuration travel together because neither means anything
+            // alone: with fixedDuration true the duration is seconds, and with it false the
+            // same number is a fraction of the source state.
+            sb.Append($"\"duration\":{RestResponse.FormatFloat(t.duration)},");
+            sb.Append($"\"fixedDuration\":{RestResponse.FormatBool(t.hasFixedDuration)},");
+            sb.Append($"\"offset\":{RestResponse.FormatFloat(t.offset)},");
+            sb.Append($"\"interruptionSource\":\"{t.interruptionSource}\",");
+            sb.Append($"\"orderedInterruption\":{RestResponse.FormatBool(t.orderedInterruption)},");
+            sb.Append($"\"canTransitionToSelf\":{RestResponse.FormatBool(t.canTransitionToSelf)},");
+            sb.Append($"\"mute\":{RestResponse.FormatBool(t.mute)},");
+            sb.Append($"\"solo\":{RestResponse.FormatBool(t.solo)},");
+            sb.Append("\"conditions\":");
+            AppendConditions(sb, t.conditions);
+            sb.Append("}");
         }
     }
 }

@@ -748,9 +748,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         [UnionAirEndpoint("GET", "{guid}",
             Category = UnionAirEndpointCategories.Read,
-            Summary = "Returns the full AnimatorController structure: layers, states, transitions, and parameters. Every 'motion' carries a 'type' of AnimationClip, BlendTree, or Unknown; a blend tree has a null 'guid' and its structure inline, nested trees included. A clip's 'guid' identifies the asset holding it, so 'clipsAtPath' above 1 means it does not identify one clip. Sub-state machines are not enumerated.",
+            Summary = "Returns the full AnimatorController structure: layers, states, transitions, and parameters. Every 'motion' carries a 'type' of AnimationClip, BlendTree, or Unknown; a blend tree has a null 'guid' and its structure inline, nested trees included. A clip's 'guid' identifies the asset holding it, so 'clipsAtPath' above 1 means it does not identify one clip. Every transition carries a 'transitionId' that PATCH and DELETE take as an address, and reports 'duration' beside the 'fixedDuration' that gives it its unit. Sub-state machines are not enumerated.",
             PathParams = new string[] { "guid" },
-            ResponseExample = "{\"assetPath\":\"Assets/Animations/Character.controller\",\"guid\":\"...\",\"parameters\":[{\"name\":\"Speed\",\"type\":\"Float\",\"defaultFloat\":0.0}],\"layers\":[{\"name\":\"Base Layer\",\"index\":0,\"defaultWeight\":0.0,\"isBaseLayer\":true,\"blendingMode\":\"Override\",\"avatarMask\":null,\"iKPass\":false,\"syncedLayerIndex\":-1,\"syncedLayerAffectsTiming\":false,\"states\":[{\"name\":\"Locomotion\",\"speed\":1.0,\"isDefault\":false,\"motion\":{\"type\":\"BlendTree\",\"guid\":null,\"name\":\"Locomotion\",\"blendType\":\"Simple1D\",\"blendParameter\":\"Speed\",\"blendParameterY\":\"\",\"useAutomaticThresholds\":true,\"minThreshold\":0.0,\"maxThreshold\":0.8,\"children\":[{\"threshold\":0.0,\"position\":{\"x\":0.0,\"y\":0.0},\"timeScale\":1.0,\"cycleOffset\":0.0,\"mirror\":false,\"directBlendParameter\":\"\",\"motion\":{\"type\":\"AnimationClip\",\"guid\":\"...\",\"name\":\"WAIT00\",\"assetPath\":\"Assets/Animations/wait.fbx\",\"clipsAtPath\":1}}]},\"transitions\":[]}],\"anyStateTransitions\":[]}]}")]
+            ResponseExample = "{\"assetPath\":\"Assets/Animations/Character.controller\",\"guid\":\"...\",\"parameters\":[{\"name\":\"Speed\",\"type\":\"Float\",\"defaultFloat\":0.0}],\"layers\":[{\"name\":\"Base Layer\",\"index\":0,\"defaultWeight\":0.0,\"isBaseLayer\":true,\"blendingMode\":\"Override\",\"avatarMask\":null,\"iKPass\":false,\"syncedLayerIndex\":-1,\"syncedLayerAffectsTiming\":false,\"states\":[{\"name\":\"Locomotion\",\"speed\":1.0,\"isDefault\":false,\"motion\":{\"type\":\"BlendTree\",\"guid\":null,\"name\":\"Locomotion\",\"blendType\":\"Simple1D\",\"blendParameter\":\"Speed\",\"blendParameterY\":\"\",\"useAutomaticThresholds\":true,\"minThreshold\":0.0,\"maxThreshold\":0.8,\"children\":[{\"threshold\":0.0,\"position\":{\"x\":0.0,\"y\":0.0},\"timeScale\":1.0,\"cycleOffset\":0.0,\"mirror\":false,\"directBlendParameter\":\"\",\"motion\":{\"type\":\"AnimationClip\",\"guid\":\"...\",\"name\":\"WAIT00\",\"assetPath\":\"Assets/Animations/wait.fbx\",\"clipsAtPath\":1}}]},\"transitions\":[{\"transitionId\":\"GlobalObjectId_V1-3-...\",\"to\":\"Idle\",\"hasExitTime\":true,\"exitTime\":0.9,\"duration\":0.25,\"fixedDuration\":true,\"offset\":0.0,\"interruptionSource\":\"None\",\"orderedInterruption\":true,\"canTransitionToSelf\":true,\"mute\":false,\"solo\":false,\"conditions\":[]}]}],\"anyStateTransitions\":[]}]}")]
         private void Detail(UnionAirRequestContext ctx)
             => new AnimatorControllerHandler().HandleRead(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 
@@ -888,36 +888,34 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "{guid}/transitions",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Adds a transition between states in an AnimatorController. Use 'AnyState' as 'from' for any-state transitions, and 'Exit' as 'to' for exit transitions. Condition modes: If, IfNot, Greater, Less, Equals, NotEqual.",
+            Summary = "Adds a transition between states in an AnimatorController. Use 'AnyState' as 'from' for any-state transitions, and 'Exit' as 'to' for exit transitions. Condition modes: If, IfNot, Greater, Less, Equals, NotEqual. 'duration' is seconds when 'fixedDuration' is true and a fraction of the source state when it is false. A state pair may carry any number of transitions, so the response returns the new transition's 'transitionId' to address it by later. Every setting is validated before the transition is created, so a rejected request adds nothing. 'canTransitionToSelf' applies to AnyState transitions and is reported in 'unsupported' elsewhere.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "from", "to" },
-            OptionalBody = new string[] { "layerIndex", "hasExitTime", "exitTime", "duration", "offset", "conditions" },
-            RequestExample = "{\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0,\"hasExitTime\":false,\"duration\":0.25,\"conditions\":[{\"parameter\":\"Speed\",\"mode\":\"Greater\",\"threshold\":0.1}]}",
-            ResponseExample = "{\"added\":true,\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0}")]
+            OptionalBody = new string[] { "layerIndex", "hasExitTime", "exitTime", "duration", "fixedDuration", "offset", "interruptionSource", "orderedInterruption", "canTransitionToSelf", "mute", "solo", "conditions" },
+            RequestExample = "{\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0,\"hasExitTime\":false,\"duration\":0.25,\"fixedDuration\":true,\"conditions\":[{\"parameter\":\"Speed\",\"mode\":\"Greater\",\"threshold\":0.1}]}",
+            ResponseExample = "{\"added\":true,\"transitionId\":\"GlobalObjectId_V1-3-...\",\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0,\"unsupported\":[]}")]
         private void AddTransition(UnionAirRequestContext ctx)
             => new AnimatorControllerHandler().HandleAddTransition(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 
         [UnionAirEndpoint("PATCH", "{guid}/transitions",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Updates an existing transition. Identifies the transition by 'from' and 'to' state names.",
+            Summary = "Updates one transition, addressed by 'transitionId' from the read response, or by 'from' plus 'to' while that pair carries exactly one transition. A pair carrying several answers 409 listing every candidate's transitionId and conditions; it no longer updates the first silently. Every value is validated before the first is written, so a rejected field leaves the transition as it was. 'conditions' replaces the whole array, and an empty array clears it.",
             PathParams = new string[] { "guid" },
-            RequiredBody = new string[] { "from", "to" },
-            OptionalBody = new string[] { "layerIndex", "hasExitTime", "exitTime", "duration", "offset", "conditions" },
-            RequestExample = "{\"from\":\"Idle\",\"to\":\"Walk\",\"duration\":0.1,\"conditions\":[{\"parameter\":\"Speed\",\"mode\":\"Greater\",\"threshold\":0.5}]}",
-            ResponseExample = "{\"updated\":true,\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0}")]
+            OptionalBody = new string[] { "transitionId", "from", "to", "layerIndex", "hasExitTime", "exitTime", "duration", "fixedDuration", "offset", "interruptionSource", "orderedInterruption", "canTransitionToSelf", "mute", "solo", "conditions" },
+            RequestExample = "{\"transitionId\":\"GlobalObjectId_V1-3-...\",\"duration\":0.1,\"fixedDuration\":false,\"interruptionSource\":\"Destination\"}",
+            ResponseExample = "{\"updated\":true,\"transitionId\":\"GlobalObjectId_V1-3-...\",\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0,\"unsupported\":[]}")]
         private void UpdateTransition(UnionAirRequestContext ctx)
             => new AnimatorControllerHandler().HandleUpdateTransition(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 
         [UnionAirEndpoint("DELETE", "{guid}/transitions",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Removes a transition from an AnimatorController. Identifies the transition by 'from' and 'to' state names.",
+            Summary = "Removes one transition, addressed by 'transitionId' from the read response, or by 'from' plus 'to' while that pair carries exactly one transition. A pair carrying several answers 409 listing every candidate; it no longer removes them all. The transition is a sub-asset of the controller and is destroyed with the removal.",
             PathParams = new string[] { "guid" },
-            RequiredBody = new string[] { "from", "to" },
-            OptionalBody = new string[] { "layerIndex" },
-            RequestExample = "{\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0}",
-            ResponseExample = "{\"removed\":true,\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0}")]
+            OptionalBody = new string[] { "transitionId", "from", "to", "layerIndex" },
+            RequestExample = "{\"transitionId\":\"GlobalObjectId_V1-3-...\"}",
+            ResponseExample = "{\"removed\":true,\"transitionId\":\"GlobalObjectId_V1-3-...\",\"from\":\"Idle\",\"to\":\"Walk\",\"layerIndex\":0}")]
         private void DeleteTransition(UnionAirRequestContext ctx)
             => new AnimatorControllerHandler().HandleDeleteTransition(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
     }
