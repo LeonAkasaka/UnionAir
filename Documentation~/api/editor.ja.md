@@ -448,6 +448,200 @@ curl --get -o hd.jpg "${BASE_URL}cameras/capture/image" \
 
 ---
 
+## POST /api/previews/render
+
+ユーザーのシーン内 Camera に依存せず、シーン GameObject、prefab、import 済み model を描画します。target を隔離 preview scene にコピーし、任意で animation を評価し、Renderer bounds を frame に収め、専用 camera と light で各時刻を描画してから preview scene を閉じます。
+
+常時有効な Read カテゴリの endpoint ですが、Play mode、test run、compile、asset update、build、build target switch の実行中は拒否されます。sampling と rendering は同じ request 内で原子的に行われます。animation pose は後続の capture request まで保持されません。
+
+### リクエスト
+
+```json
+{
+  "target": { "assetPath": "Assets/Characters/Hero.prefab" },
+  "focusPath": "Rig/Head",
+  "width": 640,
+  "height": 640,
+  "format": "png",
+  "times": [0.0, 0.5, 1.0],
+  "view": {
+    "preset": "front",
+    "fieldOfView": 30.0,
+    "padding": 0.1
+  },
+  "background": { "r": 0.18, "g": 0.18, "b": 0.18, "a": 1.0 },
+  "lighting": {
+    "keyIntensity": 1.0,
+    "fillIntensity": 0.5,
+    "keyColor": { "r": 1.0, "g": 1.0, "b": 1.0 },
+    "fillColor": { "r": 0.65, "g": 0.72, "b": 1.0 }
+  },
+  "animation": {
+    "mode": "state",
+    "state": "Base Layer.Idle",
+    "layer": 0
+  }
+}
+```
+
+request 内のすべての object は未知または重複した field を拒否します。数値は有限値でなければなりません。
+
+### Target と focus
+
+`target` は必須で、次のいずれかの参照を受け付けます。
+
+- `{ "type": "hierarchyPath", "value": "Character" }` のような scene object 参照、または GameObject の `globalObjectId`。path 参照では `scenePath` で loaded scene を選択できます。
+- `{ "assetGuid": "..." }` または `{ "assetPath": "Assets/Character.prefab" }` のような、prefab または import 済み model の root GameObject に解決される asset 参照。
+
+prefab/model は `PrefabUtility.InstantiatePrefab` で instantiate します。prefab connection を持たないものを含む scene object は `Object.Instantiate` で copy し、preview root として detach して preview scene に移動します。source scene object 自体を移動または sample することはありません。
+
+`focusPath` は copy 後の target を起点とする任意の `/` 区切り Transform path です。その subtree 内で active かつ enabled な Renderer のみが bounds に含まれます。target 全体を frame に収める場合は省略します。path がない場合は `404`、有限で non-zero の renderer bounds がない subtree は `422` です。
+
+### View と framing
+
+`view` は任意です。
+
+| フィールド | 既定値 | 説明 |
+|---|---:|---|
+| `preset` | `front` | `front`、`back`、`left`、`right`、`top`、`bottom`、`isometric` |
+| `yaw` / `pitch` | — | `preset` の代わりとなる degree 単位の明示的 orbit。yaw 0 は正面(camera は +Z 側)、正の yaw は +X 側、正の pitch は target 上方へ移動 |
+| `distance` | auto | 1,000,000 以下の正の world-space 距離。省略時は bounds の全 corner を水平/垂直 field of view の両方に fit |
+| `fieldOfView` | `30` | 1–120 degree の垂直 perspective field of view |
+| `padding` | `0.1` | 各 image edge に確保する割合。0 以上 0.5 未満。`0.1` は中央 80% に fit |
+
+preset と yaw/pitch は同時指定できません。automatic framing は axis-aligned Renderer bounds の 8 corner 全てを解決済み camera axis に投影し、bounding sphere では近似しません。各 frame の animation 評価後に framing を再計算するため、pose により bounds が変わる場合は frame ごとに距離も変わります。
+
+### Animation mode
+
+copy された target を authored state のまま描画するには `animation` を省略するか `{ "mode": "none" }` を指定します。それ以外の mode は Animator をちょうど 1 つ必要とします。target に複数ある場合は `animation.animatorPath` で選択し、曖昧な場合は `409` です。
+
+| Mode | フィールド | 各 `times` 値の意味 |
+|---|---|---|
+| `clip` | `clip`: AnimationClip asset 参照、任意の `clipName` | Animator 経由で評価する `AnimationClipPlayable` 上の秒数 |
+| `state` | `state`: 完全な state 名、任意の `layer`(既定 0) | `Animator.Play` に渡す normalized state time |
+| `parameters` | `parameters`: `{name,value}` の配列 | rebind と parameter set 全体の適用後に進める秒数 |
+
+parameter の value type は Animator から決まります。Float は有限 JSON number、Int は整数、Bool は boolean、Trigger は boolean(`true` は set、`false` は reset)です。未知または重複した name、不正な value type は描画前に拒否します。state / parameters mode は RuntimeAnimatorController を必要とします。
+
+clip 評価には `AnimationMode.SampleAnimationClip` ではなく `AnimationClipPlayable` を使います。playable は copy 側 Animator を target とするため、humanoid retargeting は Animator が担当し、source Animator や Avatar の assignment を変更しません。寄与する clip ごとに、copy 上に path と component がある binding を `appliedBindings`、ないものを `skippedBindings` に返します。
+
+`.anim` file と AnimationClip を 1 つ含む import file では `clipName` は不要です。import file に複数 clip がある場合、省略すると 1 つを黙って選ばず、利用可能な name とともに `409` を返します。sub-asset を選択するには正確な name を指定してください。
+
+### サイズ、background、lighting
+
+| フィールド | 既定値 | 制限 / 動作 |
+|---|---:|---|
+| `width`, `height` | `640`, `640` | 1–1920 × 1–1080 |
+| `format` | `png` | `png` または `jpeg` |
+| `quality` | `85` | JPEG quality、1–100 |
+| `times` | `[0]` | 0 以上 1,000,000 以下の値を 1–16 個。width × height × frame 数は 16,777,216 pixel 以下 |
+
+colour は 0–1 の必須 `r`、`g`、`b` と、任意の `a`(既定 1)を使います。camera は solid background です。lighting はユーザーの scene から独立し、shadow なしの directional light 2 灯です。既定値は白色 key intensity 1.0 と青みのある fill intensity 0.5 です。`keyIntensity` / `fillIntensity` は 0–8。response は実際に使った background と light model を返します。
+
+preview scene の culling-mask bit は有限なため、同時に所有できる request は最大 8 件です。9 件目は `429` です。成功/失敗を問わず `finally` で scene を閉じ、clone、camera、light を破棄して bit を解放します。active scene、dirty state、selection、user camera、Animator assignment、asset、Undo history、AnimationMode は変更しません。
+
+### レスポンス
+
+```json
+{
+  "target": {
+    "kind": "asset",
+    "name": "Hero",
+    "assetGuid": "...",
+    "assetPath": "Assets/Characters/Hero.prefab"
+  },
+  "focusPath": "Rig/Head",
+  "width": 640,
+  "height": 640,
+  "format": "png",
+  "mimeType": "image/png",
+  "rigType": "humanoid",
+  "animatorPath": "",
+  "animation": { "mode": "state", "state": "Base Layer.Idle", "layer": 0 },
+  "view": {
+    "preset": "front",
+    "yaw": 0.0,
+    "pitch": 0.0,
+    "requestedDistance": null,
+    "fieldOfView": 30.0,
+    "padding": 0.1
+  },
+  "background": { "r": 0.18, "g": 0.18, "b": 0.18, "a": 1.0 },
+  "lighting": {
+    "model": "twoDirectionalNoShadows",
+    "keyIntensity": 1.0,
+    "keyColor": { "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 },
+    "fillIntensity": 0.5,
+    "fillColor": { "r": 0.65, "g": 0.72, "b": 1.0, "a": 1.0 }
+  },
+  "frames": [{
+    "time": 0.0,
+    "framing": {
+      "bounds": {
+        "center": { "x": 0.0, "y": 1.0, "z": 0.0 },
+        "size": { "x": 0.7, "y": 0.8, "z": 0.6 }
+      },
+      "cameraPosition": { "x": 0.0, "y": 1.0, "z": 2.5 },
+      "cameraRotation": { "x": 0.0, "y": 1.0, "z": 0.0, "w": 0.0 },
+      "distance": 2.5
+    },
+    "states": [{
+      "layer": 0,
+      "fullPathHash": 1168970017,
+      "shortNameHash": 987654321,
+      "normalizedTime": 0.0,
+      "length": 1.0,
+      "loop": true,
+      "clips": [{ "name": "Idle", "weight": 1.0 }]
+    }],
+    "appliedBindings": [{ "path": "Rig/Hips", "type": "UnityEngine.Transform", "property": "m_LocalPosition.x" }],
+    "skippedBindings": [],
+    "mimeType": "image/png",
+    "image": "<base64>"
+  }]
+}
+```
+
+`rigType` は `humanoid`、`generic`、`none` のいずれかです。`states` は state/parameter 評価時の全 Animator layer を含み、AnimatorController state を持たない direct clip 評価では空です。hash は request の echo ではなく、解決済み `AnimatorStateInfo` の値です。frame 順は `times` 順です。
+
+### エラー
+
+| ステータス | 原因 |
+|---|---|
+| 400 | JSON shape、field、type、range、mode、preset、format、time 数、総 pixel 数が不正 |
+| 404 | target、focus path、Animator path、clip asset、指定した `clipName` が見つからない |
+| 409 | Editor activity conflict、または `animatorPath` なしで Animator が複数ある |
+| 422 | target が GameObject asset/object でない、bounds がない、Animator/controller/state がない、animation input が非互換 |
+| 429 | 8 件の preview request が既に preview scene を所有中 |
+| 500 | clone、評価、描画、encode 中に Unity が失敗 |
+
+### 例
+
+```bash
+curl -X POST "${BASE_URL}previews/render" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target":{"assetPath":"Assets/Characters/Hero.prefab"},
+    "times":[0,0.5,1],
+    "animation":{"mode":"clip","clip":{"assetPath":"Assets/Animations/Idle.anim"}}
+  }'
+```
+
+---
+
+## POST /api/previews/render/image
+
+`POST /api/previews/render` と同じ body と isolation rule を使いますが、`times` はちょうど 1 値でなければならず、encode 済み画像を `Content-Type: image/png` または `image/jpeg` で直接返します。framing、resolved state、binding diagnostics が必要な場合は JSON endpoint を使用してください。
+
+```bash
+curl -X POST "${BASE_URL}previews/render/image" \
+  -H "Content-Type: application/json" \
+  -d '{"target":{"type":"hierarchyPath","value":"Character"},"times":[0],"format":"png"}' \
+  -o preview.png
+```
+
+---
+
 ## POST /api/editor/refresh
 
 `AssetDatabase.Refresh()` を呼び出し、スクリプトやアセットの変更を Unity に認識させます。

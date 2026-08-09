@@ -46,9 +46,9 @@ JSON レスポンス内の文字列フィールドは制御文字を含め一貫
 
 ### [Editor](api/editor.ja.md)
 
-Editor の状態、ログ、選択、カメラ、キャプチャ、リフレッシュ、メニュー項目:
+Editor の状態、ログ、選択、カメラ、隔離 object/animation preview、キャプチャ、リフレッシュ、メニュー項目:
 
-`GET /api/editor/status` · `GET /api/editor/logs` · `GET /api/editor/logs.ndjson` · `GET|POST /api/editor/selection` · `POST /api/editor/ping` · `GET /api/cameras` · `GET /api/cameras/capture` · `GET /api/cameras/capture/image` · `POST /api/editor/refresh` · `GET /api/editor/menu-items` · `POST /api/editor/menu-item` · `GET /api/editor/capture` · `GET /api/editor/capture/image`
+`GET /api/editor/status` · `GET /api/editor/logs` · `GET /api/editor/logs.ndjson` · `GET|POST /api/editor/selection` · `POST /api/editor/ping` · `GET /api/cameras` · `GET /api/cameras/capture` · `GET /api/cameras/capture/image` · `POST /api/previews/render` · `POST /api/previews/render/image` · `POST /api/editor/refresh` · `GET /api/editor/menu-items` · `POST /api/editor/menu-item` · `GET /api/editor/capture` · `GET /api/editor/capture/image`
 
 ### [Scenes](api/scenes.ja.md)
 
