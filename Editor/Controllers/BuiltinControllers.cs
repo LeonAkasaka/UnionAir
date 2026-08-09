@@ -761,7 +761,7 @@ namespace LeonAkasaka.UnionAir.Editor
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "events" },
             RequestExample = "{\"events\":[{\"time\":0.5,\"functionName\":\"Footstep\",\"stringParameter\":\"left\",\"messageOptions\":\"DontRequireReceiver\"}]}",
-            ResponseExample = "{\"assetPath\":\"Assets/Animations/Walk.anim\",\"eventCount\":1,\"events\":[{\"time\":0.5,\"functionName\":\"Footstep\",\"stringParameter\":\"left\",\"floatParameter\":0.0,\"intParameter\":0,\"objectReferenceParameter\":null,\"messageOptions\":\"RequireReceiver\"}]}")]
+            ResponseExample = "{\"assetPath\":\"Assets/Animations/Walk.anim\",\"eventCount\":1,\"events\":[{\"time\":0.5,\"functionName\":\"Footstep\",\"stringParameter\":\"left\",\"floatParameter\":0.0,\"intParameter\":0,\"objectReferenceParameter\":null,\"messageOptions\":\"DontRequireReceiver\"}]}")]
         private void SetClipEvents(UnionAirRequestContext ctx)
             => new AnimationClipHandler().HandleSetEvents(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
 

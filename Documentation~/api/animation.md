@@ -219,9 +219,29 @@ An omitted field is left unchanged, and an unknown one — including a settings 
   "assetPath": "Assets/Animations/Walk.anim",
   "name": "Walk",
   "applied": ["frameRate", "settings.loopTime"],
-  "settings": { "loopTime": true }
+  "settings": {
+    "loopTime": true,
+    "loopBlend": false,
+    "cycleOffset": 0.0,
+    "loopBlendOrientation": false,
+    "loopBlendPositionY": false,
+    "loopBlendPositionXZ": false,
+    "keepOriginalOrientation": false,
+    "keepOriginalPositionY": true,
+    "keepOriginalPositionXZ": false,
+    "heightFromFeet": false,
+    "mirror": false,
+    "level": 0.0,
+    "orientationOffsetY": 0.0,
+    "startTime": 0.0,
+    "stopTime": 1.0,
+    "additiveReferencePoseTime": 0.0,
+    "hasAdditiveReferencePose": false
+  }
 }
 ```
+
+`applied` names what the request set; `settings` is the clip's whole settings object as it stands afterwards, not the subset that was patched.
 
 ### Errors
 
@@ -267,8 +287,33 @@ Every element is parsed and resolved before any is written, so a list whose four
 ### Response
 
 ```json
-{ "assetPath": "Assets/Animations/Walk.anim", "eventCount": 2, "events": [] }
+{
+  "assetPath": "Assets/Animations/Walk.anim",
+  "eventCount": 2,
+  "events": [
+    {
+      "time": 0.25,
+      "functionName": "Footstep",
+      "stringParameter": "left",
+      "floatParameter": 0.0,
+      "intParameter": 0,
+      "objectReferenceParameter": null,
+      "messageOptions": "RequireReceiver"
+    },
+    {
+      "time": 0.75,
+      "functionName": "Hit",
+      "stringParameter": "",
+      "floatParameter": 0.0,
+      "intParameter": 0,
+      "objectReferenceParameter": { "guid": "a1b2c3...", "name": "HitVfx" },
+      "messageOptions": "DontRequireReceiver"
+    }
+  ]
+}
 ```
+
+The events are echoed back as stored, in the shape `GET` reports them — so an omitted `stringParameter` comes back as `""` and an omitted `messageOptions` as `RequireReceiver`, which is what the first entry above shows.
 
 ### Errors
 

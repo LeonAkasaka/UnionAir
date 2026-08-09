@@ -222,9 +222,29 @@ Animation Inspector がカーブ一覧の上に表示するものすべてです
   "assetPath": "Assets/Animations/Walk.anim",
   "name": "Walk",
   "applied": ["frameRate", "settings.loopTime"],
-  "settings": { "loopTime": true }
+  "settings": {
+    "loopTime": true,
+    "loopBlend": false,
+    "cycleOffset": 0.0,
+    "loopBlendOrientation": false,
+    "loopBlendPositionY": false,
+    "loopBlendPositionXZ": false,
+    "keepOriginalOrientation": false,
+    "keepOriginalPositionY": true,
+    "keepOriginalPositionXZ": false,
+    "heightFromFeet": false,
+    "mirror": false,
+    "level": 0.0,
+    "orientationOffsetY": 0.0,
+    "startTime": 0.0,
+    "stopTime": 1.0,
+    "additiveReferencePoseTime": 0.0,
+    "hasAdditiveReferencePose": false
+  }
 }
 ```
+
+`applied` はリクエストが設定した項目を列挙します。`settings` は適用後のクリップの設定オブジェクト全体であり、パッチした部分集合ではありません。
 
 ### エラー
 
@@ -270,8 +290,33 @@ Animation Inspector がカーブ一覧の上に表示するものすべてです
 ### レスポンス
 
 ```json
-{ "assetPath": "Assets/Animations/Walk.anim", "eventCount": 2, "events": [] }
+{
+  "assetPath": "Assets/Animations/Walk.anim",
+  "eventCount": 2,
+  "events": [
+    {
+      "time": 0.25,
+      "functionName": "Footstep",
+      "stringParameter": "left",
+      "floatParameter": 0.0,
+      "intParameter": 0,
+      "objectReferenceParameter": null,
+      "messageOptions": "RequireReceiver"
+    },
+    {
+      "time": 0.75,
+      "functionName": "Hit",
+      "stringParameter": "",
+      "floatParameter": 0.0,
+      "intParameter": 0,
+      "objectReferenceParameter": { "guid": "a1b2c3...", "name": "HitVfx" },
+      "messageOptions": "DontRequireReceiver"
+    }
+  ]
+}
 ```
+
+イベントは保存された状態のまま、`GET` が返すのと同じ形でエコーされます。したがって `stringParameter` を省略すれば `""`、`messageOptions` を省略すれば `RequireReceiver` が返ります(上の 1 件目がそれです)。
 
 ### エラー
 
