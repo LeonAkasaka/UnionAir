@@ -183,43 +183,249 @@ namespace LeonAkasaka.UnionAir.Editor
                     return;
             }
 
-            // Remove existing param with same name to allow update
+            // Parsed before anything is created or replaced, so a malformed value leaves the
+            // controller untouched. Checking it where it is written meant a 400 that had
+            // already added a parameter, or already destroyed and recreated one.
+            if (!TryParseDefaultValue(body, paramType, response, out var defaultValue)) return;
+
             var existing = FindParameter(controller, name);
-            if (existing != null)
-                controller.RemoveParameter(existing);
+            var replacedType = existing != null && existing.type != paramType;
 
-            controller.AddParameter(name, paramType);
-
-            // Apply optional default value by updating the parameter array
-            var allParams = controller.parameters;
-            for (int i = 0; i < allParams.Length; i++)
+            // Only a type change destroys and recreates the parameter now. A same-type
+            // update is written in place: the old code removed and re-added every time, so
+            // changing a default value moved the parameter to the end of the array and
+            // reordered the Animator window's list for a change meant to be invisible.
+            List<AnimatorParameterReferences.Reference> orphaned = null;
+            if (replacedType)
             {
-                if (allParams[i].name != name) continue;
-                switch (paramType)
-                {
-                    case AnimatorControllerParameterType.Float:
-                        var df = RequestBodyReader.GetFloat(body, "defaultValue");
-                        if (df.HasValue) allParams[i].defaultFloat = df.Value;
-                        break;
-                    case AnimatorControllerParameterType.Int:
-                        var di = RequestBodyReader.GetInt(body, "defaultValue");
-                        if (di.HasValue) allParams[i].defaultInt = di.Value;
-                        break;
-                    case AnimatorControllerParameterType.Bool:
-                        var db = RequestBodyReader.GetBool(body, "defaultValue");
-                        if (db.HasValue) allParams[i].defaultBool = db.Value;
-                        break;
-                }
-                break;
+                // Recreating the parameter leaves every site that names it pointing at
+                // something that no longer has this type, which is the corruption a rename
+                // exists to prevent. It still happens -- a type change cannot be resolved
+                // automatically, since Greater on a Float means nothing once the parameter
+                // is a Trigger -- but it is reported rather than silent.
+                orphaned = AnimatorParameterReferences.Find(controller, name);
+                controller.RemoveParameter(existing);
+                existing = null;
             }
-            controller.parameters = allParams;
+
+            if (existing == null) controller.AddParameter(name, paramType);
+
+            var unsupported = AnimatorParameterRules.CollectUnsupported(
+                paramType, RequestBodyReader.HasTopLevelField(body, "defaultValue"));
+
+            ApplyDefaultValue(controller, name, paramType, defaultValue);
 
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
 
-            RestResponse.Send(response,
-                $"{{\"added\":\"{RestResponse.EscapeJson(name)}\",\"type\":\"{RestResponse.EscapeJson(typeStr)}\"}}",
-                201);
+            var sb = new StringBuilder();
+            sb.Append("{\"added\":").Append(RestResponse.FormatNullableString(name));
+            sb.Append(",\"type\":").Append(RestResponse.FormatNullableString(paramType.ToString()));
+            if (replacedType)
+            {
+                sb.Append(",\"replacedType\":true,\"orphanedReferences\":");
+                AnimatorParameterReferences.AppendJson(sb, orphaned);
+            }
+            AppendUnsupported(sb, unsupported);
+            sb.Append("}");
+            RestResponse.Send(response, sb.ToString(), 201);
+        }
+
+        /// <summary>
+        /// The <c>defaultValue</c> a request carries, parsed and checked but not applied.
+        ///
+        /// Split from the write for the reason every other endpoint here is: a value that
+        /// fails to parse must not be discovered after the controller has already been
+        /// changed. Both parameter endpoints mutate before they would reach it -- a create,
+        /// a recreate on a type change, a rename and its reference rewrites -- so a check
+        /// made at the point of use is a check made too late.
+        /// </summary>
+        private struct ParameterDefault
+        {
+            public bool Present;
+            public float Float;
+            public int Int;
+            public bool Bool;
+        }
+
+        private static bool TryParseDefaultValue(
+            string body, AnimatorControllerParameterType type,
+            UnionAirResponse response, out ParameterDefault value)
+        {
+            value = default(ParameterDefault);
+            if (!RequestBodyReader.HasTopLevelField(body, "defaultValue")) return true;
+
+            value.Present = true;
+            switch (type)
+            {
+                case AnimatorControllerParameterType.Float:
+                    if (!RequestBodyReader.TryGetFloatValue(body, "defaultValue", out value.Float, out _))
+                    {
+                        RestResponse.SendError(response, "defaultValue must be a number for a Float parameter.", 400);
+                        return false;
+                    }
+                    return true;
+
+                case AnimatorControllerParameterType.Int:
+                    if (!RequestBodyReader.TryGetIntValue(body, "defaultValue", out value.Int, out _))
+                    {
+                        RestResponse.SendError(response, "defaultValue must be an integer for an Int parameter.", 400);
+                        return false;
+                    }
+                    return true;
+
+                case AnimatorControllerParameterType.Bool:
+                    if (!RequestBodyReader.TryGetBoolValue(body, "defaultValue", out value.Bool, out _))
+                    {
+                        RestResponse.SendError(response, "defaultValue must be a boolean for a Bool parameter.", 400);
+                        return false;
+                    }
+                    return true;
+            }
+
+            // A Trigger keeps no default, so there is nothing to parse and nothing to
+            // refuse. The field is reported in "unsupported" instead.
+            value.Present = false;
+            return true;
+        }
+
+        /// <summary>
+        /// Writes a parsed default onto the named parameter, in place.
+        ///
+        /// Cannot fail: every check happened in <see cref="TryParseDefaultValue"/>. The
+        /// parameter array is a copy, so the value is set on the element and the array
+        /// assigned back, which is also what keeps the parameter where it sits.
+        /// </summary>
+        private static void ApplyDefaultValue(
+            AnimatorController controller, string name,
+            AnimatorControllerParameterType type, ParameterDefault value)
+        {
+            if (!value.Present) return;
+
+            var all = controller.parameters;
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i].name != name) continue;
+
+                switch (type)
+                {
+                    case AnimatorControllerParameterType.Float: all[i].defaultFloat = value.Float; break;
+                    case AnimatorControllerParameterType.Int: all[i].defaultInt = value.Int; break;
+                    case AnimatorControllerParameterType.Bool: all[i].defaultBool = value.Bool; break;
+                }
+                break;
+            }
+
+            controller.parameters = all;
+        }
+
+        // ── PATCH /api/assets/animator-controllers/{guid}/parameters ─────────
+
+        public void HandleUpdateParameter(UnionAirRequest request, UnionAirResponse response, string guid)
+        {
+            var controller = LoadController(guid, response, out _);
+            if (controller == null) return;
+
+            var body = RequestBodyReader.ReadString(request);
+            if (!RequestBodyReader.TryValidateObjectFields(
+                    body, new[] { "name", "newName", "defaultValue" }, out var fieldError))
+            {
+                // "type" lands here. The message says why rather than leaving the caller to
+                // read a bare list of accepted fields.
+                if (RequestBodyReader.HasTopLevelField(body, "type"))
+                {
+                    RestResponse.SendError(response, AnimatorParameterRules.TypeChangeRefusal, 400);
+                    return;
+                }
+                RestResponse.SendError(response, fieldError, 400);
+                return;
+            }
+
+            var name = RequestBodyReader.GetString(body, "name");
+            if (string.IsNullOrEmpty(name))
+            {
+                RestResponse.SendError(response, "Missing required field: name", 400);
+                return;
+            }
+
+            var parameter = FindParameter(controller, name);
+            if (parameter == null)
+            {
+                RestResponse.SendNotFound(response, $"Parameter not found: {name}");
+                return;
+            }
+
+            if (!RequestBodyReader.TryGetStringValue(body, "newName", out var newName, out var hasNewName))
+            {
+                RestResponse.SendError(response, "newName must be a string.", 400);
+                return;
+            }
+            if (hasNewName && string.IsNullOrEmpty(newName))
+            {
+                RestResponse.SendError(response, "newName must not be empty.", 400);
+                return;
+            }
+
+            var renaming = hasNewName && newName != name;
+            if (renaming && FindParameter(controller, newName) != null)
+            {
+                // Unity permits two parameters of the same name in the array and the result
+                // is unusable, so this is refused rather than passed through.
+                RestResponse.SendError(response,
+                    $"'{newName}' already names a parameter on this controller. " +
+                    "Rename or remove that one first.", 409);
+                return;
+            }
+
+            // Everything is collected and checked before the first write. The rename is the
+            // one operation here that touches many objects, and a half-applied one is the
+            // corruption the endpoint exists to prevent -- including the half where the
+            // rename lands and a malformed defaultValue then answers 400.
+            if (!TryParseDefaultValue(body, parameter.type, response, out var defaultValue)) return;
+
+            var references = renaming
+                ? AnimatorParameterReferences.Find(controller, name)
+                : new List<AnimatorParameterReferences.Reference>();
+
+            var unsupported = AnimatorParameterRules.CollectUnsupported(
+                parameter.type, RequestBodyReader.HasTopLevelField(body, "defaultValue"));
+
+            if (renaming)
+            {
+                var all = controller.parameters;
+                for (int i = 0; i < all.Length; i++)
+                {
+                    if (all[i].name != name) continue;
+                    all[i].name = newName;
+                    break;
+                }
+                // Assigned back rather than mutated in place: the array is a copy, and the
+                // position is preserved because the element is replaced where it sits.
+                controller.parameters = all;
+
+                AnimatorParameterReferences.Apply(references, newName);
+            }
+
+            var effectiveName = renaming ? newName : name;
+            ApplyDefaultValue(controller, effectiveName, parameter.type, defaultValue);
+
+            EditorUtility.SetDirty(controller);
+            AssetDatabase.SaveAssets();
+
+            var sb = new StringBuilder();
+            sb.Append("{\"name\":").Append(RestResponse.FormatNullableString(effectiveName));
+            sb.Append(",\"type\":").Append(RestResponse.FormatNullableString(parameter.type.ToString()));
+            if (renaming)
+            {
+                sb.Append(",\"renamed\":{\"from\":").Append(RestResponse.FormatNullableString(name));
+                sb.Append(",\"to\":").Append(RestResponse.FormatNullableString(newName)).Append("}");
+            }
+            sb.Append(",\"referencesUpdated\":").Append(references.Count);
+            sb.Append(",\"references\":");
+            AnimatorParameterReferences.AppendJson(sb, references);
+            AppendUnsupported(sb, unsupported);
+            sb.Append("}");
+            RestResponse.Send(response, sb.ToString());
         }
 
         // ── DELETE /api/assets/animator-controllers/{guid}/parameters ────────
@@ -244,11 +450,24 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            // Collected before the removal, while the parameter still exists to be matched.
+            // RemoveParameter does not touch a single one of these: a condition naming a
+            // deleted parameter still serializes and simply never evaluates again. The
+            // delete still happens -- deciding what a condition should become without its
+            // parameter is not a decision this API can make -- but it is no longer silent.
+            var orphaned = AnimatorParameterReferences.Find(controller, name);
+
             controller.RemoveParameter(param);
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
 
-            RestResponse.Send(response, $"{{\"removed\":\"{RestResponse.EscapeJson(name)}\"}}");
+            var sb = new StringBuilder();
+            sb.Append("{\"removed\":").Append(RestResponse.FormatNullableString(name));
+            sb.Append(",\"orphanedReferences\":").Append(orphaned.Count);
+            sb.Append(",\"references\":");
+            AnimatorParameterReferences.AppendJson(sb, orphaned);
+            sb.Append("}");
+            RestResponse.Send(response, sb.ToString());
         }
 
         // ── POST /api/assets/animator-controllers/{guid}/layers ──────────────

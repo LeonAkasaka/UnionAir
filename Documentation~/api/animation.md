@@ -634,7 +634,7 @@ Sub-state machines are not enumerated. Only the states directly on each layer's 
 
 ## POST /api/assets/animator-controllers/{guid}/parameters
 
-Adds a parameter to an AnimatorController. If a parameter with the same name already exists, it is replaced.
+Adds a parameter, or updates one that already exists.
 
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
@@ -655,19 +655,107 @@ Adds a parameter to an AnimatorController. If a parameter with the same name alr
 |-------|----------|-------------|
 | `name` | ✅ | Parameter name |
 | `type` | ✅ | `Float`, `Int`, `Bool`, or `Trigger` |
-| `defaultValue` | ❌ | Default value (Float/Int/Bool only) |
+| `defaultValue` | ❌ | Default value. Not stored for a `Trigger` — see below |
+
+A parameter that already exists **with the same type** is updated in place and keeps its position in the parameter array. Only a `type` change destroys and recreates it, and that orphans every reference; see [Parameter references](#parameter-references).
+
+Every value is checked before anything is created or replaced, so a request rejected with `400` adds no parameter and changes no type.
+
+Use [`PATCH`](#patch-apiassetsanimator-controllersguidparameters) to rename.
 
 ### Response (HTTP 201)
 
 ```json
-{ "added": "Speed", "type": "Float" }
+{ "added": "Speed", "type": "Float", "unsupported": [] }
 ```
+
+When the type changed, the response also carries `"replacedType": true` and an `orphanedReferences` array in the shape shown under [Parameter references](#parameter-references).
+
+### `defaultValue` on a Trigger
+
+A Trigger is set and consumed within a frame, so Unity keeps no default for one. The request is not refused — the field is named in `unsupported` instead of being dropped, which is what this endpoint used to do while answering `201` as though it had applied.
+
+---
+
+## PATCH /api/assets/animator-controllers/{guid}/parameters
+
+Renames a parameter, or sets its default value, in place.
+
+> Can be called only when the Asset Write category is enabled.
+> Returns `409 Conflict` in Play mode.
+
+### Request Body (JSON)
+
+```json
+{ "name": "Speed", "newName": "MoveSpeed", "defaultValue": 0.5 }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | ✅ | The parameter to change |
+| `newName` | ❌ | New name. Every reference is rewritten with it |
+| `defaultValue` | ❌ | New default value |
+
+Either or both of `newName` and `defaultValue`. The parameter keeps its position in the array in both cases.
+
+**A rename is atomic**, and so is a request that renames and sets a default value together. Every value is parsed and every check made before the first write, so a request that is refused — for a collision, or for a malformed `defaultValue` — leaves the parameter and all of its references exactly as they were. A half-applied rename is the corruption this endpoint exists to prevent.
+
+### Response
+
+```json
+{
+  "name": "MoveSpeed",
+  "type": "Float",
+  "renamed": { "from": "Speed", "to": "MoveSpeed" },
+  "referencesUpdated": 3,
+  "references": [
+    { "kind": "condition", "layerIndex": 0, "stateMachinePath": ["Combat"], "transitionId": "GlobalObjectId_V1-3-...", "conditionIndex": 0 },
+    { "kind": "blendParameter", "layerIndex": 0, "stateMachinePath": [], "state": "Locomotion", "childPath": [0] },
+    { "kind": "speedParameter", "layerIndex": 0, "stateMachinePath": [], "state": "Run" }
+  ],
+  "unsupported": []
+}
+```
+
+A count alone would not be enough: a caller that renamed a parameter needs to be able to check the sites, and one that sees zero references where it expected some has found a bug in the controller or here.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `name` is missing, `newName` is empty, a value is malformed, `type` was sent, or the body carries an unknown field |
+| 404 | Parameter not found |
+| 409 | `newName` already names a parameter. Nothing is changed |
+
+### `type` cannot be changed here
+
+A type change invalidates every condition that names the parameter, in a way nothing can resolve on the client's behalf: `Greater` with a threshold of `0.1` is a sentence about a Float, and it has no reading at all once the parameter is a Trigger. A `type` field is rejected with that reason rather than ignored. `DELETE` then `POST` is the honest route, and both report the references the change orphans.
+
+---
+
+## Parameter references
+
+A parameter is named from four kinds of site, and **none of them is a reference Unity maintains** — every one is a plain string:
+
+| `kind` | Where | Extra fields |
+|--------|-------|--------------|
+| `condition` | `AnimatorCondition.parameter`, on state, AnyState, entry, and state machine transitions | `transitionId`, `conditionIndex` |
+| `blendParameter`, `blendParameterY` | A blend tree, including nested ones | `state`, `childPath` |
+| `speedParameter`, `cycleOffsetParameter`, `mirrorParameter`, `timeParameter` | A state's override | `state` |
+
+Every reference carries `layerIndex` and `stateMachinePath`, so a site inside a sub-state machine is addressable from the report.
+
+Measured on Unity 6000.0.80f1: renaming a parameter by assigning a modified `parameters` array renames it and leaves **every** one of those strings naming what no longer exists. The controller still loads, the conditions still serialize, and they never evaluate again. That is why `PATCH` rewrites them and why a rename built out of `DELETE` plus `POST` is not equivalent.
+
+`DELETE` and a `type` change through `POST` report the references they orphan in the same shape. They still go through — deciding what a condition should become without its parameter is not a decision this API can make — but they are no longer silent.
+
+Conditions already orphaned by earlier deletes are not repaired. Find them by comparing the conditions in `GET /api/assets/animator-controllers/{guid}` against its `parameters` list.
 
 ---
 
 ## DELETE /api/assets/animator-controllers/{guid}/parameters
 
-Removes a parameter from an AnimatorController by name.
+Removes a parameter by name, and reports the references it orphans.
 
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
@@ -687,8 +775,17 @@ Removes a parameter from an AnimatorController by name.
 ### Response
 
 ```json
-{ "removed": "Speed" }
+{
+  "removed": "Speed",
+  "orphanedReferences": 2,
+  "references": [
+    { "kind": "blendParameter", "layerIndex": 0, "stateMachinePath": [], "state": "Locomotion", "childPath": [] },
+    { "kind": "condition", "layerIndex": 0, "stateMachinePath": [], "transitionId": "GlobalObjectId_V1-3-...", "conditionIndex": 0 }
+  ]
+}
 ```
+
+The parameter is deleted either way. See [Parameter references](#parameter-references) for why the conditions are left alone.
 
 ### Errors
 

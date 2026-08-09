@@ -637,7 +637,7 @@ Unity のフィールドは `Vector3` ですが、グラフは平面です。`z`
 
 ## POST /api/assets/animator-controllers/{guid}/parameters
 
-AnimatorController にパラメータを追加します。同名のパラメータが既に存在する場合は置換されます。
+パラメータを追加します。既に存在する場合は更新します。
 
 > Asset Write カテゴリが有効な場合のみ呼び出せます。
 > Play モード中は `409 Conflict` を返します。
@@ -658,19 +658,107 @@ AnimatorController にパラメータを追加します。同名のパラメー�
 |-------|----------|-------------|
 | `name` | ✅ | パラメータ名 |
 | `type` | ✅ | `Float`、`Int`、`Bool`、または `Trigger` |
-| `defaultValue` | ❌ | 既定値(Float/Int/Bool のみ) |
+| `defaultValue` | ❌ | 既定値。`Trigger` では保存されません(下記参照) |
+
+**同じ型で**既に存在するパラメータはその場で更新され、パラメータ配列内の位置も保たれます。破棄して作り直すのは `type` が変わる場合だけで、そのときはすべての参照が孤立します。[パラメータの参照](#パラメータの参照)を参照してください。
+
+すべての値は作成や置換の前に検証されます。したがって `400` で拒否されたリクエストはパラメータを追加せず、型も変えません。
+
+リネームには [`PATCH`](#patch-apiassetsanimator-controllersguidparameters) を使います。
 
 ### レスポンス(HTTP 201)
 
 ```json
-{ "added": "Speed", "type": "Float" }
+{ "added": "Speed", "type": "Float", "unsupported": [] }
 ```
+
+型が変わった場合は `"replacedType": true` と、[パラメータの参照](#パラメータの参照)と同じ形の `orphanedReferences` 配列も返します。
+
+### Trigger の `defaultValue`
+
+Trigger は 1 フレーム内でセットされ消費されるため、Unity は既定値を保持しません。リクエストは拒否せず、フィールドを `unsupported` に列挙します。以前は黙って捨てたうえで、適用したかのように `201` を返していました。
+
+---
+
+## PATCH /api/assets/animator-controllers/{guid}/parameters
+
+パラメータをその場でリネーム、または既定値を設定します。
+
+> Asset Write カテゴリが有効な場合のみ呼び出せます。
+> Play モード中は `409 Conflict` を返します。
+
+### リクエストボディ(JSON)
+
+```json
+{ "name": "Speed", "newName": "MoveSpeed", "defaultValue": 0.5 }
+```
+
+| フィールド | 必須 | 説明 |
+|-------|----------|-------------|
+| `name` | ✅ | 変更対象のパラメータ |
+| `newName` | ❌ | 新しい名前。すべての参照がこの名前に書き換わります |
+| `defaultValue` | ❌ | 新しい既定値 |
+
+`newName` と `defaultValue` はどちらか一方でも両方でも指定できます。いずれの場合もパラメータの配列内の位置は保たれます。
+
+**リネームはアトミックであり、リネームと既定値の設定を同時に行うリクエストもアトミックです。** 最初の書き込みの前にすべての値を解析し、すべての検査を終えるため、名前衝突でも不正な `defaultValue` でも、拒否されたリクエストはパラメータも参照もそのまま残します。中途半端に適用されたリネームこそ、このエンドポイントが防ごうとしている破損そのものです。
+
+### レスポンス
+
+```json
+{
+  "name": "MoveSpeed",
+  "type": "Float",
+  "renamed": { "from": "Speed", "to": "MoveSpeed" },
+  "referencesUpdated": 3,
+  "references": [
+    { "kind": "condition", "layerIndex": 0, "stateMachinePath": ["Combat"], "transitionId": "GlobalObjectId_V1-3-...", "conditionIndex": 0 },
+    { "kind": "blendParameter", "layerIndex": 0, "stateMachinePath": [], "state": "Locomotion", "childPath": [0] },
+    { "kind": "speedParameter", "layerIndex": 0, "stateMachinePath": [], "state": "Run" }
+  ],
+  "unsupported": []
+}
+```
+
+件数だけでは足りません。リネームしたクライアントは各サイトを確認できる必要があり、参照があるはずなのに 0 が返ってきたなら、コントローラーかこの実装のどちらかにバグがあるということです。
+
+### エラー
+
+| ステータス | 原因 |
+|--------|-------|
+| 400 | `name` の欠落、`newName` が空、値が不正、`type` が送られた、またはボディに未知のフィールドがある |
+| 404 | パラメータが見つからない |
+| 409 | `newName` が既存のパラメータ名と衝突。何も変更されません |
+
+### `type` はここでは変更できません
+
+型を変えると、そのパラメータを名指しするすべての条件が無効になります。しかもクライアントの代わりに解決できる規則がありません。閾値 0.1 の `Greater` は Float についての文であり、パラメータが Trigger になった時点で読み方そのものが存在しなくなります。`type` フィールドは無視せず、その理由とともに拒否します。`DELETE` してから `POST` するのが正直な経路で、どちらも変更が孤立させる参照を報告します。
+
+---
+
+## パラメータの参照
+
+パラメータは 4 種類のサイトから名前で参照されており、**そのどれも Unity が保守する参照ではありません**。すべてただの文字列です:
+
+| `kind` | 場所 | 追加フィールド |
+|---|---|---|
+| `condition` | ステート / AnyState / Entry / ステートマシンの各トランジションの `AnimatorCondition.parameter` | `transitionId`, `conditionIndex` |
+| `blendParameter`, `blendParameterY` | ブレンドツリー(入れ子を含む) | `state`, `childPath` |
+| `speedParameter`, `cycleOffsetParameter`, `mirrorParameter`, `timeParameter` | ステートのオーバーライド | `state` |
+
+すべての参照が `layerIndex` と `stateMachinePath` を持つので、サブステートマシン内のサイトも報告からアドレス指定できます。
+
+Unity 6000.0.80f1 で計測: `parameters` 配列を書き換えて代入するリネームは、パラメータ名だけを変え、上記の文字列は**すべて**存在しない名前を指したまま残ります。コントローラーは読み込め、条件はシリアライズもされ、そして二度と評価されません。`PATCH` がそれらを書き換える理由であり、`DELETE` + `POST` によるリネームが等価でない理由でもあります。
+
+`DELETE` と `POST` による型変更は、孤立させる参照を同じ形で報告します。処理自体は実行されます(パラメータを失った条件が何になるべきかは、この API が決められる事柄ではありません)が、もう黙って行われることはありません。
+
+過去の削除で既に孤立している条件は修復しません。`GET /api/assets/animator-controllers/{guid}` の条件と `parameters` を突き合わせれば見つけられます。
 
 ---
 
 ## DELETE /api/assets/animator-controllers/{guid}/parameters
 
-AnimatorController から名前を指定してパラメータを削除します。
+名前を指定してパラメータを削除し、孤立させる参照を報告します。
 
 > Asset Write カテゴリが有効な場合のみ呼び出せます。
 > Play モード中は `409 Conflict` を返します。
@@ -690,8 +778,17 @@ AnimatorController から名前を指定してパラメータを削除します�
 ### レスポンス
 
 ```json
-{ "removed": "Speed" }
+{
+  "removed": "Speed",
+  "orphanedReferences": 2,
+  "references": [
+    { "kind": "blendParameter", "layerIndex": 0, "stateMachinePath": [], "state": "Locomotion", "childPath": [] },
+    { "kind": "condition", "layerIndex": 0, "stateMachinePath": [], "transitionId": "GlobalObjectId_V1-3-...", "conditionIndex": 0 }
+  ]
+}
 ```
+
+パラメータはいずれにせよ削除されます。条件を放置する理由は[パラメータの参照](#パラメータの参照)を参照してください。
 
 ### エラー
 
