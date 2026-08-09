@@ -1221,7 +1221,7 @@ Use `"AnyState"` as `from` for any-state transitions. Use `"Exit"` as `to` for e
 | Field | Required | Description |
 |-------|----------|-------------|
 | `from` | ✅ | Source state name, or `"AnyState"` |
-| `to` | ✅ | Destination state name, or `"Exit"`. Exactly one of `to` and `toStateMachine` |
+| `to` | ❌ | Destination state name, or `"Exit"` |
 | `toStateMachine` | ❌ | Destination is a state machine, addressed as a path from the machine this transition belongs to. This is how a state enters a sub-state machine |
 | `layerIndex` | ❌ | Layer index (default: 0) |
 | `stateMachinePath` | ❌ | Which state machine owns the transition. See [`stateMachinePath`](#statemachinepath) |
@@ -1236,6 +1236,8 @@ Use `"AnyState"` as `from` for any-state transitions. Use `"Exit"` as `to` for e
 | `mute` | ❌ | Mute the transition |
 | `solo` | ❌ | Solo the transition |
 | `conditions` | ❌ | Array of condition objects. Replaces the whole array |
+
+**`to` and `toStateMachine` are each optional and exactly one is required.** Neither alone is mandatory — a transition to a state sends `to`, a transition into a sub-state machine sends `toStateMachine` — and sending both, or neither, is a `400`.
 
 **Condition modes:** `If`, `IfNot` (Bool/Trigger), `Greater`, `Less`, `Equals`, `NotEqual` (Float/Int)
 

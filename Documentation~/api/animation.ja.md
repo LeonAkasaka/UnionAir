@@ -1224,7 +1224,7 @@ Any State トランジションには `from` に `"AnyState"` を使用します
 | フィールド | 必須 | 説明 |
 |-------|----------|-------------|
 | `from` | ✅ | 遷移元ステート名、または `"AnyState"` |
-| `to` | ✅ | 遷移先ステート名、または `"Exit"`。`to` と `toStateMachine` はどちらか一方 |
+| `to` | ❌ | 遷移先ステート名、または `"Exit"` |
 | `toStateMachine` | ❌ | 遷移先をステートマシンにする。このトランジションが属するマシンからのパス。ステートがサブステートマシンに入る方法です |
 | `layerIndex` | ❌ | レイヤーインデックス(既定: 0) |
 | `stateMachinePath` | ❌ | どのステートマシンがこのトランジションを持つか。[`stateMachinePath`](#statemachinepath) を参照 |
@@ -1239,6 +1239,8 @@ Any State トランジションには `from` に `"AnyState"` を使用します
 | `mute` | ❌ | トランジションをミュートする |
 | `solo` | ❌ | トランジションをソロにする |
 | `conditions` | ❌ | 条件オブジェクトの配列。配列全体を置き換えます |
+
+**`to` と `toStateMachine` はそれぞれ任意で、どちらか一方が必須です。** 単体で必須のものはありません(ステートへの遷移は `to`、サブステートマシンへの遷移は `toStateMachine`)。両方送った場合も、どちらも送らなかった場合も `400` です。
 
 **条件の mode:** `If`、`IfNot`(Bool/Trigger)、`Greater`、`Less`、`Equals`、`NotEqual`(Float/Int)
 
