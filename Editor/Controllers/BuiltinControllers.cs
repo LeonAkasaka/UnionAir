@@ -183,6 +183,39 @@ namespace LeonAkasaka.UnionAir.Editor
             => new CameraHandler().Handle(ctx.Request, ctx.Response);
     }
 
+    [UnionAirController("previews")]
+    internal sealed class PreviewController
+    {
+        private const UnionAirActivity PreviewBlockers =
+            UnionAirActivity.Compile |
+            UnionAirActivity.AssetUpdate |
+            UnionAirActivity.Build |
+            UnionAirActivity.BuildTargetSwitch;
+
+        [UnionAirEndpoint("POST", "render",
+            Category = UnionAirEndpointCategories.Read,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            BlockedDuring = PreviewBlockers,
+            Summary = "Renders a scene GameObject, prefab, or model in an isolated preview scene. Optional clip, Animator state, or parameter evaluation and all requested times are sampled and rendered atomically. The response reports projected-bounds framing, lighting, resolved Animator states, applied/skipped bindings, and base64 images without changing the user's scene, selection, or assets.",
+            RequiredBody = new string[] { "target" },
+            OptionalBody = new string[] { "scenePath", "focusPath", "width", "height", "format", "quality", "times", "view", "background", "lighting", "animation" },
+            RequestExample = "{\"target\":{\"assetGuid\":\"abc123...\"},\"focusPath\":\"Head\",\"times\":[0,0.5,1],\"view\":{\"preset\":\"front\"},\"animation\":{\"mode\":\"state\",\"state\":\"Base Layer.Idle\",\"layer\":0}}",
+            ResponseExample = "{\"target\":{\"kind\":\"asset\",\"name\":\"Character\"},\"rigType\":\"humanoid\",\"lighting\":{\"model\":\"twoDirectionalNoShadows\"},\"frames\":[{\"time\":0,\"framing\":{\"distance\":3.1},\"states\":[{\"layer\":0,\"fullPathHash\":123}],\"appliedBindings\":[],\"skippedBindings\":[],\"mimeType\":\"image/png\",\"image\":\"<base64>\"}]}")]
+        private void Render(UnionAirRequestContext ctx)
+            => new PreviewRenderHandler().Handle(ctx.Request, ctx.Response, false);
+
+        [UnionAirEndpoint("POST", "render/image",
+            Category = UnionAirEndpointCategories.Read,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            BlockedDuring = PreviewBlockers,
+            Summary = "Renders exactly one isolated preview frame and returns binary PNG or JPEG data. Uses the same request as POST /api/previews/render but requires exactly one time.",
+            RequiredBody = new string[] { "target" },
+            OptionalBody = new string[] { "scenePath", "focusPath", "width", "height", "format", "quality", "times", "view", "background", "lighting", "animation" },
+            RequestExample = "{\"target\":{\"type\":\"hierarchyPath\",\"value\":\"Character\"},\"times\":[0],\"format\":\"png\"}")]
+        private void RenderImage(UnionAirRequestContext ctx)
+            => new PreviewRenderHandler().Handle(ctx.Request, ctx.Response, true);
+    }
+
     [UnionAirController("playmode/ui")]
     internal sealed class PlayModeUiController
     {

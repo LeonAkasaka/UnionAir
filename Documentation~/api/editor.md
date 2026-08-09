@@ -445,6 +445,200 @@ curl --get -o hd.jpg "${BASE_URL}cameras/capture/image" \
 
 ---
 
+## POST /api/previews/render
+
+Renders a scene GameObject, prefab, or imported model without relying on a Camera in the user's scene. The endpoint copies the target into an isolated preview scene, optionally evaluates animation, frames renderer bounds, creates its own camera and lights, renders every requested time, and closes the preview scene before returning.
+
+The endpoint is in the always-enabled Read category, but it is blocked during Play mode, test runs, compilation, asset updates, builds, and build-target switches. Sampling and rendering happen atomically in this request; an animation pose does not survive for a later capture request.
+
+### Request
+
+```json
+{
+  "target": { "assetPath": "Assets/Characters/Hero.prefab" },
+  "focusPath": "Rig/Head",
+  "width": 640,
+  "height": 640,
+  "format": "png",
+  "times": [0.0, 0.5, 1.0],
+  "view": {
+    "preset": "front",
+    "fieldOfView": 30.0,
+    "padding": 0.1
+  },
+  "background": { "r": 0.18, "g": 0.18, "b": 0.18, "a": 1.0 },
+  "lighting": {
+    "keyIntensity": 1.0,
+    "fillIntensity": 0.5,
+    "keyColor": { "r": 1.0, "g": 1.0, "b": 1.0 },
+    "fillColor": { "r": 0.65, "g": 0.72, "b": 1.0 }
+  },
+  "animation": {
+    "mode": "state",
+    "state": "Base Layer.Idle",
+    "layer": 0
+  }
+}
+```
+
+All request objects reject unknown and duplicate fields. Numbers must be finite.
+
+### Target and focus
+
+`target` is required and accepts either kind of reference:
+
+- a scene object reference such as `{ "type": "hierarchyPath", "value": "Character" }` or a GameObject `globalObjectId`; `scenePath` selects a loaded scene for a path reference;
+- an asset reference such as `{ "assetGuid": "..." }` or `{ "assetPath": "Assets/Character.prefab" }`, resolving to a prefab or the root GameObject of an imported model.
+
+A prefab/model is instantiated with `PrefabUtility.InstantiatePrefab`. A scene object, including one with no prefab connection, is copied with `Object.Instantiate`, detached as a preview root, and moved into the preview scene. The source scene object is never moved or sampled.
+
+`focusPath` is an optional `/`-separated Transform path below the copied target. Only active, enabled Renderers in that subtree contribute bounds. Omit it to frame the whole target. A missing path is `404`; a subtree with no finite, non-zero renderer bounds is `422`.
+
+### View and framing
+
+`view` is optional:
+
+| Field | Default | Description |
+|---|---:|---|
+| `preset` | `front` | `front`, `back`, `left`, `right`, `top`, `bottom`, or `isometric` |
+| `yaw` / `pitch` | — | Explicit orbit in degrees instead of `preset`; yaw 0 is the front (+Z camera position), positive yaw moves toward +X, and positive pitch moves above the target |
+| `distance` | auto | Positive world-space distance through 1,000,000. When omitted, every bounds corner is fitted against both horizontal and vertical field of view |
+| `fieldOfView` | `30` | Vertical perspective field of view, 1–120 degrees |
+| `padding` | `0.1` | Reserved fraction on each image edge, from 0 inclusive to 0.5 exclusive; `0.1` fits into the central 80% |
+
+Do not combine a preset with yaw/pitch. Automatic framing projects all eight corners of the axis-aligned Renderer bounds into the resolved camera axes; it does not approximate the target as a bounding sphere. Framing is recalculated after animation for every frame, so a pose whose bounds change receives its own distance.
+
+### Animation modes
+
+Omit `animation`, or send `{ "mode": "none" }`, to render the copied target as authored. The other modes require exactly one Animator. When the target contains several, select one with `animation.animatorPath`; ambiguity returns `409`.
+
+| Mode | Fields | Meaning of each `times` value |
+|---|---|---|
+| `clip` | `clip`: AnimationClip asset reference; optional `clipName` | Seconds on an `AnimationClipPlayable` evaluated through the Animator |
+| `state` | `state`: full state name; optional `layer` (default 0) | Normalized state time passed to `Animator.Play` |
+| `parameters` | `parameters`: array of `{name,value}` | Seconds advanced after rebinding and applying the complete parameter set |
+
+Parameter value types come from the Animator: Float requires a finite JSON number, Int an integer, Bool a boolean, and Trigger a boolean (`true` sets it, `false` resets it). Unknown or repeated names and wrong value types are rejected before rendering. State and parameter modes require a RuntimeAnimatorController.
+
+Clip evaluation uses `AnimationClipPlayable`, not `AnimationMode.SampleAnimationClip`. The playable targets the copied Animator so humanoid retargeting remains the Animator's responsibility; the source Animator and Avatar are never reassigned. For each contributing clip, `appliedBindings` lists bindings whose path and component exist on the copy, while `skippedBindings` lists paths/components that do not.
+
+An `.anim` file and an imported file containing one AnimationClip need no `clipName`. When an imported file contains several clips, omitting it returns `409` with the available names instead of silently selecting one; supply the exact name to choose the sub-asset.
+
+### Sizing, background, and lighting
+
+| Field | Default | Limit / behavior |
+|---|---:|---|
+| `width`, `height` | `640`, `640` | 1–1920 by 1–1080 |
+| `format` | `png` | `png` or `jpeg` |
+| `quality` | `85` | JPEG quality, 1–100 |
+| `times` | `[0]` | 1–16 values from 0 through 1,000,000; width × height × frame count may not exceed 16,777,216 pixels |
+
+Colours use required `r`, `g`, and `b` values from 0–1 and optional `a` (default 1). The camera uses a solid background. Lighting is independent of the user's scene: two directional lights, no shadows, with default white key intensity 1.0 and blue-tinted fill intensity 0.5. `keyIntensity` and `fillIntensity` accept 0–8. The response repeats the exact background and light model used.
+
+At most eight requests may own a preview scene at once because preview scenes consume finite culling-mask bits. A ninth request returns `429`. Every success and failure closes the scene in a `finally`; closing destroys the clone, camera, and lights and releases the bit. The endpoint does not change the active scene, dirty state, selection, user cameras, Animator assignments, assets, Undo history, or AnimationMode.
+
+### Response
+
+```json
+{
+  "target": {
+    "kind": "asset",
+    "name": "Hero",
+    "assetGuid": "...",
+    "assetPath": "Assets/Characters/Hero.prefab"
+  },
+  "focusPath": "Rig/Head",
+  "width": 640,
+  "height": 640,
+  "format": "png",
+  "mimeType": "image/png",
+  "rigType": "humanoid",
+  "animatorPath": "",
+  "animation": { "mode": "state", "state": "Base Layer.Idle", "layer": 0 },
+  "view": {
+    "preset": "front",
+    "yaw": 0.0,
+    "pitch": 0.0,
+    "requestedDistance": null,
+    "fieldOfView": 30.0,
+    "padding": 0.1
+  },
+  "background": { "r": 0.18, "g": 0.18, "b": 0.18, "a": 1.0 },
+  "lighting": {
+    "model": "twoDirectionalNoShadows",
+    "keyIntensity": 1.0,
+    "keyColor": { "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 },
+    "fillIntensity": 0.5,
+    "fillColor": { "r": 0.65, "g": 0.72, "b": 1.0, "a": 1.0 }
+  },
+  "frames": [{
+    "time": 0.0,
+    "framing": {
+      "bounds": {
+        "center": { "x": 0.0, "y": 1.0, "z": 0.0 },
+        "size": { "x": 0.7, "y": 0.8, "z": 0.6 }
+      },
+      "cameraPosition": { "x": 0.0, "y": 1.0, "z": 2.5 },
+      "cameraRotation": { "x": 0.0, "y": 1.0, "z": 0.0, "w": 0.0 },
+      "distance": 2.5
+    },
+    "states": [{
+      "layer": 0,
+      "fullPathHash": 1168970017,
+      "shortNameHash": 987654321,
+      "normalizedTime": 0.0,
+      "length": 1.0,
+      "loop": true,
+      "clips": [{ "name": "Idle", "weight": 1.0 }]
+    }],
+    "appliedBindings": [{ "path": "Rig/Hips", "type": "UnityEngine.Transform", "property": "m_LocalPosition.x" }],
+    "skippedBindings": [],
+    "mimeType": "image/png",
+    "image": "<base64>"
+  }]
+}
+```
+
+`rigType` is `humanoid`, `generic`, or `none`. `states` contains every Animator layer for state/parameter evaluation and is empty for direct clip evaluation, which has no AnimatorController state. Hashes are the resolved `AnimatorStateInfo` values, not echoes of the request. Frame order matches `times` order.
+
+### Errors
+
+| Status | Cause |
+|---|---|
+| 400 | Invalid JSON shape, field, type, range, mode, preset, format, time count, or aggregate pixel count |
+| 404 | Target, focus path, Animator path, clip asset, or requested `clipName` was not found |
+| 409 | Editor activity conflict or several Animators without `animatorPath` |
+| 422 | Target is not a GameObject asset/object, has no usable bounds, lacks an Animator/controller/state, or animation input is incompatible |
+| 429 | Eight preview requests already own preview scenes |
+| 500 | Unity failed while cloning, evaluating, rendering, or encoding |
+
+### Example
+
+```bash
+curl -X POST "${BASE_URL}previews/render" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target":{"assetPath":"Assets/Characters/Hero.prefab"},
+    "times":[0,0.5,1],
+    "animation":{"mode":"clip","clip":{"assetPath":"Assets/Animations/Idle.anim"}}
+  }'
+```
+
+---
+
+## POST /api/previews/render/image
+
+Uses the same body and isolation rules as `POST /api/previews/render`, but requires exactly one `times` value and returns the encoded image directly with `Content-Type: image/png` or `image/jpeg`. Use the JSON endpoint when framing, resolved state, or binding diagnostics are needed.
+
+```bash
+curl -X POST "${BASE_URL}previews/render/image" \
+  -H "Content-Type: application/json" \
+  -d '{"target":{"type":"hierarchyPath","value":"Character"},"times":[0],"format":"png"}' \
+  -o preview.png
+```
+
+---
+
 ## POST /api/editor/refresh
 
 Calls `AssetDatabase.Refresh()` so Unity recognizes changes to scripts and assets.
