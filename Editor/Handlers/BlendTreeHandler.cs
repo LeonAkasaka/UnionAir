@@ -26,6 +26,9 @@ namespace LeonAkasaka.UnionAir.Editor
             var controller = LoadController(guid, response);
             if (controller == null) return;
 
+            // Opened before the first mutation so that this request is one undo entry.
+            var undoGroup = UndoGroups.Begin("UnionAir: Create Blend Tree");
+
             var body = RequestBodyReader.ReadString(request);
             if (!TryResolveState(controller, body, response, out var layerIndex, out var state)) return;
 
@@ -57,7 +60,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 controller.SetStateEffectiveMotion(state, tree, layerIndex);
                 TryApplyTreeFields(controller, tree, body, response, out ignored, validateOnly: false);
 
-                Save(controller);
+                Save(controller, undoGroup);
                 SendCreated(response, layerIndex, state.name, new int[0], tree, ignored);
                 return;
             }
@@ -102,7 +105,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var childIndex = parent.children.Length - 1;
             ApplyChildFields(parent, childIndex, childFields);
 
-            Save(controller);
+            Save(controller, undoGroup);
 
             var newPath = new List<int>(path) { childIndex };
             SendCreated(response, layerIndex, state.name, newPath.ToArray(), childTree, childIgnored);
@@ -114,6 +117,9 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var controller = LoadController(guid, response);
             if (controller == null) return;
+
+            // Opened before the first mutation so that this request is one undo entry.
+            var undoGroup = UndoGroups.Begin("UnionAir: Update Blend Tree");
 
             var body = RequestBodyReader.ReadString(request);
             if (!TryResolveState(controller, body, response, out var layerIndex, out var state)) return;
@@ -210,7 +216,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
             }
 
-            Save(controller);
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"layerIndex\":").Append(layerIndex);
@@ -238,6 +244,9 @@ namespace LeonAkasaka.UnionAir.Editor
             var controller = LoadController(guid, response);
             if (controller == null) return;
 
+            // Opened before the first mutation so that this request is one undo entry.
+            var undoGroup = UndoGroups.Begin("UnionAir: Delete Blend Tree");
+
             var body = RequestBodyReader.ReadString(request);
             if (!TryResolveState(controller, body, response, out var layerIndex, out var state)) return;
             if (!TryReadChildPath(body, response, out var path)) return;
@@ -254,7 +263,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 // Measured on 6000.0.80f1: clearing the motion destroys the tree and every
                 // descendant, root included. Nothing to clean up by hand here.
                 controller.SetStateEffectiveMotion(state, null, layerIndex);
-                Save(controller);
+                Save(controller, undoGroup);
                 RestResponse.Send(response,
                     $"{{\"removed\":\"root\",\"layerIndex\":{layerIndex}," +
                     $"\"state\":{RestResponse.FormatNullableString(state.name)},\"childPath\":[]}}");
@@ -283,7 +292,7 @@ namespace LeonAkasaka.UnionAir.Editor
             foreach (var t in doomed)
                 if (t != null) Object.DestroyImmediate(t, true);
 
-            Save(controller);
+            Save(controller, undoGroup);
             RestResponse.Send(response,
                 $"{{\"removed\":\"child\",\"layerIndex\":{layerIndex}," +
                 $"\"state\":{RestResponse.FormatNullableString(state.name)},\"childPath\":{PathJson(path)}," +
@@ -657,8 +666,15 @@ namespace LeonAkasaka.UnionAir.Editor
             return string.IsNullOrEmpty(name) ? fallback : name;
         }
 
-        private static void Save(AnimatorController controller)
+        /// <summary>
+        /// Closes the undo group this request opened, then saves. The collapse is what
+        /// makes one request one undo entry; see
+        /// <see cref="AnimatorControllerHandler"/> for why opening one is necessary even
+        /// though Unity registers the undo itself.
+        /// </summary>
+        private static void Save(AnimatorController controller, int undoGroup)
         {
+            Undo.CollapseUndoOperations(undoGroup);
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
         }

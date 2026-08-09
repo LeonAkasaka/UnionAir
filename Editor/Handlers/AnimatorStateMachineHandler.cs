@@ -27,6 +27,9 @@ namespace LeonAkasaka.UnionAir.Editor
             var controller = AnimatorStateMachineAddress.LoadController(guid, response);
             if (controller == null) return;
 
+            // Opened before the first mutation so that this request is one undo entry.
+            var undoGroup = UndoGroups.Begin("UnionAir: Add Animator State Machine");
+
             var body = RequestBodyReader.ReadString(request);
             if (!RequestBodyReader.TryValidateObjectFields(
                     body, new[] { "layerIndex", "stateMachinePath", "name", "position" }, out var fieldError))
@@ -68,7 +71,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 ? parent.AddStateMachine(name, new Vector3(position.x, position.y, 0f))
                 : parent.AddStateMachine(name);
 
-            Save(controller);
+            Save(controller, undoGroup);
 
             RequestBodyReader.TryGetStringArray(body, "stateMachinePath", out var parentPath);
             var path = new List<string>(parentPath) { created.name };
@@ -87,6 +90,9 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var controller = AnimatorStateMachineAddress.LoadController(guid, response);
             if (controller == null) return;
+
+            // Opened before the first mutation so that this request is one undo entry.
+            var undoGroup = UndoGroups.Begin("UnionAir: Delete Animator State Machine");
 
             var body = RequestBodyReader.ReadString(request);
             if (!RequestBodyReader.TryValidateObjectFields(
@@ -162,7 +168,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 destroyed++;
             }
 
-            Save(controller);
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"removed\":").Append(RestResponse.FormatNullableString(name));
@@ -245,6 +251,9 @@ namespace LeonAkasaka.UnionAir.Editor
             var controller = AnimatorStateMachineAddress.LoadController(guid, response);
             if (controller == null) return;
 
+            // Opened before the first mutation so that this request is one undo entry.
+            var undoGroup = UndoGroups.Begin("UnionAir: Add State Machine Transition");
+
             var body = RequestBodyReader.ReadString(request);
             if (!RequestBodyReader.TryValidateObjectFields(
                     body,
@@ -326,7 +335,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (RequestBodyReader.TryGetBoolValue(body, "mute", out var mute, out var hasMute) && hasMute)
                 transition.mute = mute;
 
-            Save(controller);
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"added\":true,\"transitionId\":").Append(
@@ -343,6 +352,9 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var controller = AnimatorStateMachineAddress.LoadController(guid, response);
             if (controller == null) return;
+
+            // Opened before the first mutation so that this request is one undo entry.
+            var undoGroup = UndoGroups.Begin("UnionAir: Delete State Machine Transition");
 
             var body = RequestBodyReader.ReadString(request);
             if (!RequestBodyReader.TryValidateObjectFields(
@@ -384,7 +396,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            Save(controller);
+            Save(controller, undoGroup);
             RestResponse.Send(response,
                 $"{{\"removed\":true,\"transitionId\":{RestResponse.FormatNullableString(transitionId)}," +
                 $"\"kind\":{RestResponse.FormatNullableString(kind)},\"layerIndex\":{layerIndex}}}");
@@ -566,8 +578,15 @@ namespace LeonAkasaka.UnionAir.Editor
             return sb.Append("]").ToString();
         }
 
-        private static void Save(AnimatorController controller)
+        /// <summary>
+        /// Closes the undo group this request opened, then saves. The collapse is what
+        /// makes one request one undo entry; see
+        /// <see cref="AnimatorControllerHandler"/> for why opening one is necessary even
+        /// though Unity registers the undo itself.
+        /// </summary>
+        private static void Save(AnimatorController controller, int undoGroup)
         {
+            Undo.CollapseUndoOperations(undoGroup);
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
         }
