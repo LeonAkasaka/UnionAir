@@ -20,7 +20,20 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
     /// </summary>
     internal sealed class EndpointExampleTests
     {
-        /// <summary>Every top-level key of every field name in a JSON document.</summary>
+        /// <summary>
+        /// The set of field names appearing anywhere in a JSON document, at every depth and
+        /// without regard to where.
+        ///
+        /// Depth is the point rather than a limitation: the drift this catches was
+        /// <c>to</c> at <c>layers[].states[].transitions[]</c>, four levels down, and a
+        /// top-level comparison would have seen nothing. Flattening also means a field is
+        /// checked wherever it occurs without the comparison having to model the nesting.
+        ///
+        /// The cost of flattening is that position is not checked: a field moved from a
+        /// state to its layer would still match. Structural comparison would need a JSON
+        /// object model, which this assembly does not reference, and would buy little --
+        /// fields are added and renamed here, not relocated.
+        /// </summary>
         private static HashSet<string> KeyNames(string json) => new HashSet<string>(
             Regex.Matches(json, @"""(?<k>[A-Za-z_][A-Za-z0-9_]*)""\s*:")
                  .Cast<Match>().Select(m => m.Groups["k"].Value));
