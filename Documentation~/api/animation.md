@@ -403,7 +403,7 @@ Adds or replaces float curves and/or object reference curves on an AnimationClip
 |-------|----------|-------------|
 | `relativePath` | ✅ | Child path relative to the Animator's GameObject. Use `""` for the Animator's own GameObject |
 | `type` | ✅ | C# type name, short or fully qualified: `Transform` and `UnityEngine.Transform` both resolve, as do `Image` and `UnityEngine.UI.Image`. The type must derive from `UnityEngine.Object`; anything else answers `Unknown type` |
-| `property` | ✅ | Serialized property path (e.g. `localPosition.y`, `m_Sprite`) |
+| `property` | ✅ | Serialized property path (e.g. `localPosition.y`, `m_Sprite`). Not always the name that ends up on the clip — see below |
 | `keys[].time` | ✅ | Time in seconds |
 | `keys[].value` | ✅ (float curves) | Float value |
 | `keys[].inTangent` / `outTangent` | ❌ | Tangents (default: 0) |
@@ -411,16 +411,81 @@ Adds or replaces float curves and/or object reference curves on an AnimationClip
 
 > Both `curves` and `objectReferenceCurves` can be provided in the same request.
 
+### One entry does not always mean one curve
+
+`AnimationClip.SetCurve` recognizes four property names on `Transform` and rewrites each of them into a whole group of bindings, filling the components you did not ask for with that property's default value, held constant for the length of the curve. Writing `localPosition.y` stores `m_LocalPosition.x`, `.y`, and `.z`, so **animating one axis pins the other two** — to `0` for position, `1` for scale.
+
+| `property` | Stored as |
+|------------|-----------|
+| `localPosition` or `m_LocalPosition` | `m_LocalPosition.x`, `.y`, `.z` |
+| `localScale` or `m_LocalScale` | `m_LocalScale.x`, `.y`, `.z` |
+| `localRotation` or `m_LocalRotation` | `m_LocalRotation.x`, `.y`, `.z`, `.w` — four, because the stored rotation is a quaternion |
+| `localEulerAngles` or `localEulerAnglesRaw` | `localEulerAnglesRaw.x`, `.y`, `.z` |
+
+The pinning is not caused by the group write. Unity combines a Transform's component curves into one Vector3 or Quaternion curve, and a component with no curve contributes its default rather than the object's authored value — so a clip holding `m_LocalPosition.y` alone drives `x` and `z` to `0` just the same, whether or not the other two bindings exist. What the group write changes is that the asset states it, and the Animation window shows it, instead of it happening invisibly at playback. A later write to another component of the same group replaces that component and leaves the ones already carrying curves alone, so the axes can be filled in over several requests.
+
+Both spellings of a group reach the same bindings, and the component suffix selects which one carries your keys — it does not select the group. That is the whole of the rewriting. It is **not** a general translation from scripting names to serialized names: it is keyed on the type being `Transform` and on the name matching one of the eight spellings above, case-sensitively. Everything else is stored exactly as sent — including `position`, `rotation`, and `eulerAngles`, which are `Transform` scripting properties that animate nothing when written as curves, and including `Light.intensity`, which stays `intensity` rather than becoming the `m_Intensity` that works.
+
+A scalar such as `Light.m_Intensity`, a single colour channel such as `Light.m_Color.r`, a blend shape, and a material property are each stored as one binding, so the behavior cannot be predicted from the shape of the name. The response states it instead: `bindings` lists what the entry produced, `requested` repeats what it was asked for.
+
+Object reference curves are addressed exactly and are never expanded.
+
+> The property name is **not** checked against what the type can animate. `SetCurve` accepts any name, so a misspelling becomes a binding that animates nothing and is reported as written. There is no reliable check to apply: `localEulerAnglesRaw`, blend shape, and material bindings all sit outside the animatable set `AnimationUtility.GetAnimatableBindings` reports for their type, so a check against it would reject working curves.
+
+### Two entries that answer 200 and do not do what they say
+
+Both are consequences of the group write, both are silent, and neither is currently detected. Measured on 6000.0.80f1.
+
+**A component suffix that is missing or not part of the group loses your keys.** The suffix selects which component carries the curve; the group is selected by the prefix alone. When the suffix names no component of that group, the keys have nowhere to land and the group is created empty:
+
+```
+property = m_LocalPosition.y  ->  x [(0,0),(1,0)]   y [(0,7),(1,9)]   z [(0,0),(1,0)]
+property = m_LocalPosition    ->  x []              y []              z []
+property = m_LocalPosition.w  ->  x []              y []              z []
+```
+
+The response lists three bindings and no error, and the clip animates nothing. Send the exact component.
+
+**Rotation written as a quaternion needs all four components in the request.** A single entry on `localRotation.y` creates all four bindings, but fills `w` with `0`, and a quaternion `(0, y, 0, 0)` normalizes to a half turn whatever `y` holds:
+
+| Request | Result at t=1 |
+|---------|---------------|
+| one entry, `localRotation.y` → `0.7071` (90°) | **180°** |
+| four entries, `m_LocalRotation.x/.y/.z/.w` → `(0, 0.7071, 0, 0.7071)` | 90° |
+| one entry, `localEulerAngles.y` → `90` | 90° |
+
+Euler is the one that works from a single entry, because there the unwritten components default to `0`, which is the identity. Use `localEulerAngles.*` unless you are writing all four quaternion components deliberately.
+
 ### Response
 
 ```json
 {
-  "added": ["localPosition.y", "m_Sprite"],
-  "addedFloat": ["localPosition.y"],
+  "added": ["m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z", "m_Sprite"],
+  "addedFloat": ["m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z"],
   "addedObjectReference": ["m_Sprite"],
+  "curves": [
+    {
+      "relativePath": "Hips",
+      "type": "Transform",
+      "requested": "localPosition.y",
+      "bindings": ["m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z"]
+    }
+  ],
+  "objectReferenceCurves": [
+    { "relativePath": "", "type": "Image", "requested": "m_Sprite", "bindings": ["m_Sprite"] }
+  ],
   "errors": []
 }
 ```
+
+| Field | Description |
+|-------|-------------|
+| `added` | Every binding the clip holds because of this request, under the serialized names `GET` reports and `DELETE .../curves` accepts |
+| `addedFloat` / `addedObjectReference` | The same list split by curve kind |
+| `curves[]` / `objectReferenceCurves[]` | One entry per entry in the request: `requested` is the name that was sent, `bindings` the names it produced |
+| `errors` | Entries that were rejected, and bindings the write was expected to produce that the clip does not hold |
+
+`added` reports what exists after the call rather than what was asked for, so a name taken from a write can be handed straight to `DELETE .../curves`. A binding is listed once per curve: the same property name on two paths is two bindings and appears twice.
 
 ### Errors
 
@@ -451,7 +516,7 @@ Removes curves from an AnimationClip by binding. Works for both float curves and
 
 `POST .../curves` writes through `AnimationClip.SetCurve`, which expands a Transform vector property into all of its components. A curve written on `localPosition.y` is stored as three bindings — `m_LocalPosition.x`, `.y`, and `.z` — and the components you did not ask for are filled with that property's default value, held constant for the length of the curve: `0` for position, `1` for scale. Animating one axis therefore pins the other two.
 
-The expansion belongs to `SetCurve`, not to the shorthand: passing the serialized name `m_LocalPosition.y` expands identically. It applies to Transform's position, scale, and euler angles; a scalar such as `Light.m_Intensity`, and a single colour channel such as `Light.m_Color.r`, are each stored as one binding.
+The expansion belongs to `SetCurve`, not to the shorthand: passing the serialized name `m_LocalPosition.y` expands identically. It applies to Transform's local position, scale, rotation, and euler angles, and to nothing else — the four groups are listed under `POST .../curves`. A scalar such as `Light.m_Intensity`, and a single colour channel such as `Light.m_Color.r`, are each stored as one binding.
 
 `DELETE .../curves` removes through `AnimationUtility.SetEditorCurve`, which is exact: one entry addresses one binding. So removing `m_LocalPosition.y` leaves `.x` and `.z` in place, and removing a whole expanded property means listing each component.
 

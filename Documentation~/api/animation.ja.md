@@ -406,7 +406,7 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 |-------|----------|-------------|
 | `relativePath` | ✅ | Animator の GameObject からの相対子パス。Animator 自身の GameObject には `""` を使用 |
 | `type` | ✅ | C# 型名。短縮名と完全修飾名のどちらでも解決します(`Transform` と `UnityEngine.Transform`、`Image` と `UnityEngine.UI.Image`)。型は `UnityEngine.Object` から派生している必要があり、そうでなければ `Unknown type` を返します |
-| `property` | ✅ | シリアライズ済みプロパティパス(例: `localPosition.y`、`m_Sprite`) |
+| `property` | ✅ | シリアライズ済みプロパティパス(例: `localPosition.y`、`m_Sprite`)。クリップに保存される名前とは限りません(後述) |
 | `keys[].time` | ✅ | 秒単位の時間 |
 | `keys[].value` | ✅(float カーブ) | float 値 |
 | `keys[].inTangent` / `outTangent` | ❌ | タンジェント(既定: 0) |
@@ -414,16 +414,81 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 
 > `curves` と `objectReferenceCurves` は同一リクエストで同時に指定できます。
 
+### 1 エントリが 1 カーブとは限りません
+
+`AnimationClip.SetCurve` は `Transform` の 4 つのプロパティ名を認識し、それぞれをバインディングの「組」に書き換えます。指定しなかった成分には、そのプロパティの既定値がカーブ全長にわたる定数として入ります。`localPosition.y` を書くと `m_LocalPosition.x`、`.y`、`.z` が保存されるため、**1 軸だけアニメーションさせたつもりでも残り 2 軸が固定されます**(position なら `0`、scale なら `1`)。
+
+| `property` | 保存される名前 |
+|------------|-----------|
+| `localPosition` / `m_LocalPosition` | `m_LocalPosition.x`、`.y`、`.z` |
+| `localScale` / `m_LocalScale` | `m_LocalScale.x`、`.y`、`.z` |
+| `localRotation` / `m_LocalRotation` | `m_LocalRotation.x`、`.y`、`.z`、`.w` — 保存される回転はクォータニオンなので 4 成分 |
+| `localEulerAngles` / `localEulerAnglesRaw` | `localEulerAnglesRaw.x`、`.y`、`.z` |
+
+この固定は組の書き込みが原因ではありません。Unity は Transform の成分カーブを 1 本の Vector3 / Quaternion カーブにまとめ、カーブのない成分にはオブジェクトのオーサリング値ではなく既定値を与えます。したがって `m_LocalPosition.y` だけを持つクリップも、他の 2 バインディングの有無にかかわらず `x` と `z` を `0` に動かします。組の書き込みが変えるのは、それがアセット上に明示され Animation ウィンドウにも見えるという点で、再生時に見えないまま起きるかどうかの違いです。同じ組の別成分にあとから書き込むと、その成分だけが置き換わり、すでにカーブを持つ成分はそのまま残ります。複数のリクエストに分けて軸を埋めていけます。
+
+同じ組の 2 つの綴りは同じバインディングに到達します。末尾の成分名はどの成分に指定したキーを載せるかを選ぶだけで、組の選択には関与しません。書き換えはこれがすべてです。スクリプト側の名前をシリアライズ名へ変換する一般的な仕組みでは **ありません**。型が `Transform` であることと、名前が上記 8 通りのいずれかに大文字小文字まで一致することが条件です。それ以外はすべて指定されたまま保存されます。`Transform` のスクリプトプロパティである `position`、`rotation`、`eulerAngles` も同様で、カーブとして書いても何もアニメーションしません。`Light.intensity` も `intensity` のまま保存され、実際に効く `m_Intensity` にはなりません。
+
+`Light.m_Intensity` のようなスカラー、`Light.m_Color.r` のような色の 1 チャンネル、ブレンドシェイプ、マテリアルプロパティはそれぞれ 1 バインディングとして保存されるので、名前の形からは挙動を予測できません。だからレスポンスが結果を明示します。`bindings` がそのエントリの生成したバインディング、`requested` が指定された名前です。
+
+オブジェクト参照カーブは厳密に 1 バインディングを指し、展開されません。
+
+> プロパティ名が、その型でアニメーション可能かどうかの検査は **行いません**。`SetCurve` は任意の名前を受け付けて保存するため、綴り間違いは「何もアニメーションしないバインディング」になり、書き込み成功として報告されます。信頼できる検査手段がないためです。`localEulerAnglesRaw`、ブレンドシェイプ、マテリアルのバインディングはいずれも `AnimationUtility.GetAnimatableBindings` がその型に対して返す集合の外にあり、その集合を根拠に弾くと正常なカーブまで拒否することになります。
+
+### 200 を返すのに書いたとおりにならない 2 つのケース
+
+どちらも組の書き込みの帰結で、どちらも無言で起こり、現状では検出されません。6000.0.80f1 での実測です。
+
+**成分名が欠けている／その組の成分でない場合、指定したキーが失われます。** 組を選ぶのは接頭辞だけで、末尾の成分名はどの成分にカーブを載せるかを選びます。したがって成分名がその組のどれでもないとき、キーの置き場所がなく、組は空のまま作られます。
+
+```
+property = m_LocalPosition.y  ->  x [(0,0),(1,0)]   y [(0,7),(1,9)]   z [(0,0),(1,0)]
+property = m_LocalPosition    ->  x []              y []              z []
+property = m_LocalPosition.w  ->  x []              y []              z []
+```
+
+レスポンスは 3 バインディングを挙げ `errors` は空ですが、クリップは何もアニメーションしません。成分名は正確に指定してください。
+
+**クォータニオンで回転を書くときは、4 成分すべてをリクエストに含める必要があります。** `localRotation.y` の 1 エントリでも 4 バインディングは作られますが、`w` が `0` で埋まります。クォータニオン `(0, y, 0, 0)` は `y` の値によらず半回転に正規化されます。
+
+| リクエスト | t=1 での結果 |
+|---------|---------------|
+| 1 エントリ `localRotation.y` → `0.7071`(90° 相当) | **180°** |
+| 4 エントリ `m_LocalRotation.x/.y/.z/.w` → `(0, 0.7071, 0, 0.7071)` | 90° |
+| 1 エントリ `localEulerAngles.y` → `90` | 90° |
+
+1 エントリで正しく動くのは euler です。書かなかった成分の既定値 `0` がそのまま単位元になるためです。4 成分を意図して書く場合を除き、`localEulerAngles.*` を使ってください。
+
 ### レスポンス
 
 ```json
 {
-  "added": ["localPosition.y", "m_Sprite"],
-  "addedFloat": ["localPosition.y"],
+  "added": ["m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z", "m_Sprite"],
+  "addedFloat": ["m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z"],
   "addedObjectReference": ["m_Sprite"],
+  "curves": [
+    {
+      "relativePath": "Hips",
+      "type": "Transform",
+      "requested": "localPosition.y",
+      "bindings": ["m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z"]
+    }
+  ],
+  "objectReferenceCurves": [
+    { "relativePath": "", "type": "Image", "requested": "m_Sprite", "bindings": ["m_Sprite"] }
+  ],
   "errors": []
 }
 ```
+
+| フィールド | 説明 |
+|-------|-------------|
+| `added` | このリクエストによってクリップが保持することになったバインディングすべて。`GET` が返し `DELETE .../curves` が受け付けるシリアライズ済みの名前 |
+| `addedFloat` / `addedObjectReference` | 同じ内容をカーブの種類で分けたもの |
+| `curves[]` / `objectReferenceCurves[]` | リクエストのエントリごとに 1 件。`requested` が指定された名前、`bindings` がそれが生成した名前 |
+| `errors` | 拒否されたエントリ、および生成されるはずでクリップに存在しなかったバインディング |
+
+`added` はリクエスト内容ではなく呼び出し後の状態を報告します。書き込みが返した名前をそのまま `DELETE .../curves` に渡せます。1 バインディングにつき 1 回列挙されるので、同じプロパティ名でも相対パスが異なれば別のバインディングとして 2 回現れます。
 
 ### エラー
 
@@ -454,7 +519,7 @@ AnimationClip に float カーブおよび/またはオブジェクト参照カ�
 
 `POST .../curves` は `AnimationClip.SetCurve` 経由で書き込みます。これは Transform のベクタープロパティを全成分に展開します。`localPosition.y` に書いたカーブは `m_LocalPosition.x`、`.y`、`.z` の 3 バインディングとして保存され、指定しなかった成分にはそのプロパティの既定値が、カーブ全長にわたる定数として入ります(position なら `0`、scale なら `1`)。1 軸だけアニメーションさせたつもりでも、残り 2 軸が固定されます。
 
-展開するのは `SetCurve` であって略記ではありません。シリアライズ済みの名前 `m_LocalPosition.y` を渡しても同じように展開されます。対象は Transform の position、scale、euler angles で、`Light.m_Intensity` のようなスカラーや `Light.m_Color.r` のような色の 1 チャンネルはそれぞれ 1 バインディングとして保存されます。
+展開するのは `SetCurve` であって略記ではありません。シリアライズ済みの名前 `m_LocalPosition.y` を渡しても同じように展開されます。対象は Transform の local position、scale、rotation、euler angles だけで、4 つの組は `POST .../curves` の節に一覧があります。`Light.m_Intensity` のようなスカラーや `Light.m_Color.r` のような色の 1 チャンネルはそれぞれ 1 バインディングとして保存されます。
 
 `DELETE .../curves` は `AnimationUtility.SetEditorCurve` 経由で削除します。こちらは厳密で、1 エントリが 1 バインディングを指します。したがって `m_LocalPosition.y` を削除しても `.x` と `.z` は残り、展開されたプロパティをまとめて消すには各成分を列挙する必要があります。
 
