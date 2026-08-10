@@ -365,8 +365,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (AnimationClipOwnership.RefuseIfImported(assetPath, response)) return;
 
             var body = RequestBodyReader.ReadString(request);
-            var addedFloat = new List<string>();
-            var addedRef = new List<string>();
+            var writes = new List<CurveWrite>();
             var errors = new List<string>();
 
             // Float curves
@@ -395,8 +394,14 @@ namespace LeonAkasaka.UnionAir.Editor
                     keyList.Add(new Keyframe(time, value, inTangent, outTangent));
                 }
 
-                clip.SetCurve(relativePath, bindingType, property, new AnimationCurve(keyList.ToArray()));
-                addedFloat.Add(property);
+                var curve = new AnimationCurve(keyList.ToArray());
+
+                // Measured before the write rather than derived from the name afterwards:
+                // only SetCurve knows what a property name resolves to.
+                var produced = ProducedBindings(relativePath, bindingType, property, curve);
+
+                clip.SetCurve(relativePath, bindingType, property, curve);
+                writes.Add(new CurveWrite(relativePath, bindingType, typeName, property, produced, false));
             }
 
             // Object reference curves
@@ -439,46 +444,184 @@ namespace LeonAkasaka.UnionAir.Editor
                     keyList.Add(new ObjectReferenceKeyframe { time = time, value = refValue });
                 }
 
+                // SetObjectReferenceCurve addresses one binding exactly, so a PPtr entry
+                // resolves to the name it was given and nothing else.
                 var binding = EditorCurveBinding.PPtrCurve(relativePath, bindingType, property);
                 AnimationUtility.SetObjectReferenceCurve(clip, binding, keyList.ToArray());
-                addedRef.Add(property);
+                writes.Add(new CurveWrite(
+                    relativePath, bindingType, typeName, property, new[] { property }, true));
             }
 
-            if (addedFloat.Count > 0 || addedRef.Count > 0)
+            if (writes.Count > 0)
             {
                 EditorUtility.SetDirty(clip);
                 AssetDatabase.SaveAssets();
             }
 
+            // Report the outcome, not the intent. A binding the write was expected to
+            // produce and that the clip does not hold is a failure however confidently
+            // SetCurve returned -- the same rule DELETE applies to its removals.
+            var floatAfter = AnimationUtility.GetCurveBindings(clip);
+            var pptrAfter = AnimationUtility.GetObjectReferenceCurveBindings(clip);
+            foreach (var write in writes) write.Confirm(floatAfter, pptrAfter, errors);
+
+            // Flat lists across every entry, deduplicated by binding rather than by name:
+            // "m_LocalPosition.y" written on two paths is two bindings and appears twice.
+            var addedFloat = new List<string>();
+            var addedRef = new List<string>();
+            var seen = new List<string>();
+            foreach (var write in writes)
+            {
+                foreach (var name in write.Confirmed)
+                {
+                    var key = BindingKey(write.RelativePath, write.Type, name);
+                    if (seen.Contains(key)) continue;
+                    seen.Add(key);
+                    (write.IsObjectReference ? addedRef : addedFloat).Add(name);
+                }
+            }
+
             var sb = new StringBuilder();
             sb.Append("{\"added\":[");
-            var allAdded = new List<string>(addedFloat);
-            allAdded.AddRange(addedRef);
-            for (int i = 0; i < allAdded.Count; i++)
-            {
-                if (i > 0) sb.Append(",");
-                sb.Append($"\"{RestResponse.EscapeJson(allAdded[i])}\"");
-            }
+            AppendStrings(sb, addedFloat, addedRef);
             sb.Append("],\"addedFloat\":[");
-            for (int i = 0; i < addedFloat.Count; i++)
-            {
-                if (i > 0) sb.Append(",");
-                sb.Append($"\"{RestResponse.EscapeJson(addedFloat[i])}\"");
-            }
+            AppendStrings(sb, addedFloat);
             sb.Append("],\"addedObjectReference\":[");
-            for (int i = 0; i < addedRef.Count; i++)
-            {
-                if (i > 0) sb.Append(",");
-                sb.Append($"\"{RestResponse.EscapeJson(addedRef[i])}\"");
-            }
+            AppendStrings(sb, addedRef);
+            sb.Append("],\"curves\":[");
+            AppendWrites(sb, writes, false);
+            sb.Append("],\"objectReferenceCurves\":[");
+            AppendWrites(sb, writes, true);
             sb.Append("],\"errors\":[");
-            for (int i = 0; i < errors.Count; i++)
-            {
-                if (i > 0) sb.Append(",");
-                sb.Append($"\"{RestResponse.EscapeJson(errors[i])}\"");
-            }
+            AppendStrings(sb, errors);
             sb.Append("]}");
-            RestResponse.Send(response, sb.ToString(), errors.Count > 0 && allAdded.Count == 0 ? 400 : 200);
+            RestResponse.Send(response, sb.ToString(),
+                errors.Count > 0 && addedFloat.Count == 0 && addedRef.Count == 0 ? 400 : 200);
+        }
+
+        /// <summary>
+        /// One entry of a curve write, and the serialized bindings it turned out to be.
+        /// </summary>
+        private sealed class CurveWrite
+        {
+            internal CurveWrite(
+                string relativePath, Type type, string typeName,
+                string requested, string[] produced, bool isObjectReference)
+            {
+                RelativePath = relativePath;
+                Type = type;
+                TypeName = typeName;
+                Requested = requested;
+                Produced = produced;
+                IsObjectReference = isObjectReference;
+                Confirmed = new List<string>();
+            }
+
+            internal string RelativePath { get; private set; }
+            internal Type Type { get; private set; }
+
+            /// <summary>The type as the request spelled it, for an error the caller recognises.</summary>
+            internal string TypeName { get; private set; }
+
+            internal string Requested { get; private set; }
+            internal string[] Produced { get; private set; }
+            internal bool IsObjectReference { get; private set; }
+            internal List<string> Confirmed { get; private set; }
+
+            /// <summary>
+            /// Keeps the bindings the clip actually holds, and reports the rest as errors.
+            /// </summary>
+            internal void Confirm(
+                EditorCurveBinding[] floatAfter, EditorCurveBinding[] pptrAfter, List<string> errors)
+            {
+                if (Produced.Length == 0)
+                {
+                    errors.Add(
+                        $"Curve '{Requested}' on '{RelativePath}' ({TypeName}) produced no binding.");
+                    return;
+                }
+
+                foreach (var name in Produced)
+                {
+                    var present = IsObjectReference
+                        ? TryFindBinding(pptrAfter, RelativePath, Type, name, out _)
+                        : TryFindBinding(floatAfter, RelativePath, Type, name, out _);
+
+                    if (present) Confirmed.Add(name);
+                    else errors.Add($"Failed to write '{name}' on '{RelativePath}' ({TypeName}).");
+                }
+            }
+        }
+
+        /// <summary>
+        /// The serialized bindings one curve entry resolves to, measured by performing the
+        /// write on a throwaway clip.
+        ///
+        /// <see cref="AnimationClip.SetCurve"/> normalizes the property name and expands a
+        /// Transform vector property into every one of its components, filling the ones the
+        /// request did not name with that property's default value. Nothing exposes the
+        /// mapping: <c>localPosition.y</c> becomes <c>m_LocalPosition.x/.y/.z</c>, and
+        /// <c>localEulerAngles.y</c> becomes <c>localEulerAnglesRaw.x/.y/.z</c> -- a name
+        /// <see cref="AnimationUtility.GetAnimatableBindings"/> does not report for Transform
+        /// at all, so the animatable set cannot stand in for it either.
+        ///
+        /// A throwaway clip rather than a before-and-after diff of the real one, because a
+        /// request that replaces an existing curve creates no binding and a diff would then
+        /// report that nothing was written.
+        /// </summary>
+        private static string[] ProducedBindings(
+            string relativePath, Type type, string property, AnimationCurve curve)
+        {
+            var probe = new AnimationClip();
+            try
+            {
+                probe.SetCurve(relativePath, type, property, curve);
+
+                // Every binding on the probe belongs to this entry: it is the only write.
+                var bindings = AnimationUtility.GetCurveBindings(probe);
+                var names = new string[bindings.Length];
+                for (int i = 0; i < bindings.Length; i++) names[i] = bindings[i].propertyName;
+                return names;
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(probe);
+            }
+        }
+
+        /// <summary>
+        /// Appends the elements of every list as one JSON string array, without the brackets.
+        /// </summary>
+        private static void AppendStrings(StringBuilder sb, params List<string>[] lists)
+        {
+            var wrote = false;
+            foreach (var values in lists)
+            {
+                foreach (var value in values)
+                {
+                    if (wrote) sb.Append(",");
+                    sb.Append($"\"{RestResponse.EscapeJson(value)}\"");
+                    wrote = true;
+                }
+            }
+        }
+
+        private static void AppendWrites(StringBuilder sb, List<CurveWrite> writes, bool objectReference)
+        {
+            var wrote = false;
+            foreach (var write in writes)
+            {
+                if (write.IsObjectReference != objectReference) continue;
+                if (wrote) sb.Append(",");
+                wrote = true;
+
+                sb.Append("{\"relativePath\":").Append(RestResponse.FormatNullableString(write.RelativePath));
+                sb.Append(",\"type\":").Append(RestResponse.FormatNullableString(write.Type.Name));
+                sb.Append(",\"requested\":").Append(RestResponse.FormatNullableString(write.Requested));
+                sb.Append(",\"bindings\":[");
+                AppendStrings(sb, write.Confirmed);
+                sb.Append("]}");
+            }
         }
 
         public void HandleDeleteCurves(UnionAirRequest request, UnionAirResponse response, string guid)
