@@ -11,13 +11,15 @@ Some animation writes can be taken back with Ctrl+Z in the Editor and some canno
 
 | Write | Undoable |
 |---|---|
-| AnimatorController structure — parameters, layers, states, transitions | ✅ |
-| AnimationClip curves — `POST` and `DELETE .../curves` | ❌ |
+| AnimatorController structure — parameters, layers, states, transitions, blend trees, state machines, state machine transitions | ✅ |
+| AnimationClip contents — `.../curves`, `settings` on `PATCH .../animation-clips/{guid}`, and `.../events` | ❌ |
 | Asset creation — `POST /api/assets/animation-clips`, `POST /api/assets/animator-controllers` | ❌ |
 
-**Controller writes are undoable and UnionAir does nothing to make them so.** The `UnityEditor.Animations` editing APIs register their own undo, so a request that adds a state is taken back by one Ctrl+Z. UnionAir adds no registration of its own on these paths, because a second one is redundant.
+**Controller writes are undoable, and UnionAir registers none of it.** The `UnityEditor.Animations` editing APIs register their own undo, so a second registration would be redundant and UnionAir adds none.
 
-**Clip curve writes are not undoable, by choice.** These APIs register nothing, and UnionAir does not register on their behalf. An asset write here is saved to disk before the response is sent, so a `200` means the file on disk already changed — recovery belongs to version control rather than to the undo stack. Registering undo would let Ctrl+Z revert the asset in memory while the file kept the written content until some later, unrelated save, leaving a state that is neither before nor after.
+**One request is one undo entry.** That part is not free. Unity's registration lands in whichever undo group is current, and nothing advances the group between two HTTP-triggered callbacks — Unity advances it after a *human* interaction with the Editor, which is exactly what does not happen here. So each write path opens its own group before it mutates anything and collapses to it afterwards, and the group carries the operation's name into **Edit > Undo History**. Without that, every controller write since the user last touched the Editor accumulated into one entry: measured on 6000.0.80f1, four consecutive `POST .../states` calls were all taken back by a single Ctrl+Z.
+
+**Clip content writes are not undoable, by choice.** These APIs register nothing, and UnionAir does not register on their behalf. An asset write here is saved to disk before the response is sent, so a `200` means the file on disk already changed — recovery belongs to version control rather than to the undo stack. Registering undo would let Ctrl+Z revert the asset in memory while the file kept the written content until some later, unrelated save, leaving a state that is neither before nor after. This covers curves, the `settings` block, and animation events alike.
 
 **Asset creation is not undoable in Unity itself**, and UnionAir does not change that. Delete the asset to reverse a create.
 
@@ -563,6 +565,7 @@ Returns the full AnimatorController structure: parameters, layers, states, trans
       "iKPass": false,
       "syncedLayerIndex": -1,
       "syncedLayerAffectsTiming": false,
+      "defaultState": "Idle",
       "states": [
         {
           "name": "Idle",
@@ -690,7 +693,7 @@ Each child carries `threshold`, `position` (`{x, y}`, used by the 2D types), `ti
   "name": "Locomotion",
   "blendType": "Simple1D",
   "blendParameter": "Speed",
-  "blendParameterY": "",
+  "blendParameterY": "Blend",
   "useAutomaticThresholds": true,
   "minThreshold": 0.0,
   "maxThreshold": 0.8,
@@ -701,7 +704,7 @@ Each child carries `threshold`, `position` (`{x, y}`, used by the 2D types), `ti
       "timeScale": 1.0,
       "cycleOffset": 0.0,
       "mirror": false,
-      "directBlendParameter": "",
+      "directBlendParameter": "Blend",
       "motion": { "type": "AnimationClip", "guid": "...", "name": "Walk", "assetPath": "...", "clipsAtPath": 1 }
     }
   ]
@@ -843,7 +846,14 @@ Treat it as opaque and re-read it after deleting transitions.
 
 ### Not described by this response
 
-Sub-state machines are not enumerated. Only the states directly on each layer's root state machine appear, so a layer whose states live inside a sub-state machine reports an empty `states` array.
+The response describes the **asset**, not a playing Animator. There is no runtime surface: no endpoint reads the state a live Animator is in, its normalized time, or the effective layer weights in Play mode, and none drives parameters or `CrossFade`. `defaultWeight` is the stored field, which on the base layer is not the weight in effect — see [`defaultWeight` on the base layer](#defaultweight-on-the-base-layer).
+
+Two further limits are reported rather than hidden, and each is described where it applies:
+
+- `behaviours` gives type names only, on states and on state machines alike. See [`behaviours` is read-only](#behaviours-is-read-only).
+- Blend tree and state machine nesting is serialized to a depth of 10. A node at that depth carries `"truncated": true` instead of its contents, so a boundary is never mistaken for an empty one.
+
+`mute` and `solo` are the serialized values. What the Animator window computes from them across a whole layer is not reported.
 
 ### Errors
 

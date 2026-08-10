@@ -157,6 +157,9 @@ namespace LeonAkasaka.UnionAir.Editor
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
 
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Add Animator Parameter");
+
             var body = RequestBodyReader.ReadString(request);
             var name = RequestBodyReader.GetString(body, "name");
             var typeStr = RequestBodyReader.GetString(body, "type");
@@ -215,8 +218,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             ApplyDefaultValue(controller, name, paramType, defaultValue);
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"added\":").Append(RestResponse.FormatNullableString(name));
@@ -326,6 +328,9 @@ namespace LeonAkasaka.UnionAir.Editor
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
 
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Update Animator Parameter");
+
             var body = RequestBodyReader.ReadString(request);
             if (!RequestBodyReader.TryValidateObjectFields(
                     body, new[] { "name", "newName", "defaultValue" }, out var fieldError))
@@ -409,8 +414,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var effectiveName = renaming ? newName : name;
             ApplyDefaultValue(controller, effectiveName, parameter.type, defaultValue);
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"name\":").Append(RestResponse.FormatNullableString(effectiveName));
@@ -435,6 +439,9 @@ namespace LeonAkasaka.UnionAir.Editor
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
 
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Delete Animator Parameter");
+
             var body = RequestBodyReader.ReadString(request);
             var name = RequestBodyReader.GetString(body, "name") ?? request.QueryString["name"];
             if (string.IsNullOrEmpty(name))
@@ -458,8 +465,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var orphaned = AnimatorParameterReferences.Find(controller, name);
 
             controller.RemoveParameter(param);
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"removed\":").Append(RestResponse.FormatNullableString(name));
@@ -476,6 +482,9 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
+
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Add Animator Layer");
 
             var body = RequestBodyReader.ReadString(request);
             var name = RequestBodyReader.GetString(body, "name");
@@ -497,13 +506,11 @@ namespace LeonAkasaka.UnionAir.Editor
                 // The layer exists but the settings did not apply. Take it back rather
                 // than answer 400 over a half-created layer.
                 controller.RemoveLayer(newIndex);
-                EditorUtility.SetDirty(controller);
-                AssetDatabase.SaveAssets();
+                Save(controller, undoGroup);
                 return;
             }
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             RestResponse.Send(response,
                 $"{{\"added\":\"{RestResponse.EscapeJson(name)}\",\"layerIndex\":{newIndex}," +
@@ -517,6 +524,9 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
+
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Update Animator Layer");
 
             var body = RequestBodyReader.ReadString(request);
             if (!RequestBodyReader.TryGetIntValue(body, "layerIndex", out var layerIndex, out var hasIndex) || !hasIndex)
@@ -534,8 +544,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (!TryApplyLayerSettings(controller, layerIndex, body, response, out var applied))
                 return;
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             RestResponse.Send(response,
                 $"{{\"layerIndex\":{layerIndex},\"applied\":[{applied}]}}");
@@ -547,6 +556,9 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
+
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Delete Animator Layer");
 
             var body = RequestBodyReader.ReadString(request);
             if (!RequestBodyReader.TryGetIntValue(body, "layerIndex", out var layerIndex, out var hasIndex) || !hasIndex)
@@ -591,8 +603,7 @@ namespace LeonAkasaka.UnionAir.Editor
             // is what destroys it.
             controller.RemoveLayer(layerIndex);
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             RestResponse.Send(response,
                 $"{{\"removed\":\"{RestResponse.EscapeJson(removedName)}\",\"layerIndex\":{layerIndex}," +
@@ -742,6 +753,9 @@ namespace LeonAkasaka.UnionAir.Editor
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
 
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Add Animator State");
+
             var body = RequestBodyReader.ReadString(request);
             if (!RequestBodyReader.TryValidateObjectFields(body, AnimatorStateRules.AddFields, out var fieldError))
             {
@@ -771,8 +785,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var setAsDefault = RequestBodyReader.GetBool(body, "setAsDefault") ?? false;
             if (setAsDefault) sm.defaultState = state;
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"added\":").Append(RestResponse.FormatNullableString(name));
@@ -789,6 +802,9 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
+
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Update Animator State");
 
             var body = RequestBodyReader.ReadString(request);
             if (!RequestBodyReader.TryValidateObjectFields(body, AnimatorStateRules.UpdateFields, out var fieldError))
@@ -827,8 +843,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var setAsDefault = RequestBodyReader.GetBool(body, "setAsDefault");
             if (setAsDefault == true) sm.defaultState = state;
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"updated\":").Append(RestResponse.FormatNullableString(state.name));
@@ -844,6 +859,9 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
+
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Delete Animator State");
 
             var body = RequestBodyReader.ReadString(request);
             var name = RequestBodyReader.GetString(body, "name") ?? request.QueryString["name"];
@@ -889,8 +907,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 destroyed++;
             }
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             RestResponse.Send(response,
                 $"{{\"removed\":\"{RestResponse.EscapeJson(name)}\",\"layerIndex\":{layerIndex}," +
@@ -903,6 +920,9 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
+
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Add Animator Transition");
 
             var body = RequestBodyReader.ReadString(request);
             var fromName = RequestBodyReader.GetString(body, "from");
@@ -1023,8 +1043,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var unsupported = AnimatorTransitionRules.CollectUnsupported(
                 fields.SetCanTransitionToSelf, fromName == "AnyState");
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"added\":true,\"transitionId\":")
@@ -1044,6 +1063,9 @@ namespace LeonAkasaka.UnionAir.Editor
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
 
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Update Animator Transition");
+
             var body = RequestBodyReader.ReadString(request);
             if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
             if (!TryResolveTransition(controller, layerIndex, body, request, response, out var found)) return;
@@ -1056,8 +1078,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var unsupported = AnimatorTransitionRules.CollectUnsupported(
                 fields.SetCanTransitionToSelf, found.Owner == null);
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"updated\":true,\"transitionId\":")
@@ -1076,6 +1097,9 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var controller = LoadController(guid, response, out _);
             if (controller == null) return;
+
+            // Opened before the first mutation so that this request is one undo entry. See Save.
+            var undoGroup = UndoGroups.Begin("UnionAir: Delete Animator Transition");
 
             var body = RequestBodyReader.ReadString(request);
             if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
@@ -1096,8 +1120,7 @@ namespace LeonAkasaka.UnionAir.Editor
             else
                 found.Owner.RemoveTransition(found.Transition);
 
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
+            Save(controller, undoGroup);
 
             var sb = new StringBuilder();
             sb.Append("{\"removed\":true,\"transitionId\":")
@@ -1110,6 +1133,24 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Closes the undo group this request opened, then saves.
+        ///
+        /// The collapse is what makes one request one undo entry. The
+        /// <c>UnityEditor.Animations</c> editing APIs register their own undo and UnionAir
+        /// adds none, but that registration lands in whichever group is current, and
+        /// nothing advances the group between two HTTP-triggered main-thread callbacks.
+        /// Measured on 6000.0.80f1 before this existed: four consecutive
+        /// <c>POST .../states</c> calls were taken back by a single Ctrl+Z. Same cause as
+        /// the scene-write defect in #76, and the same fix.
+        /// </summary>
+        private static void Save(AnimatorController controller, int undoGroup)
+        {
+            Undo.CollapseUndoOperations(undoGroup);
+            EditorUtility.SetDirty(controller);
+            AssetDatabase.SaveAssets();
+        }
 
         private static AnimatorController LoadController(string guid, UnionAirResponse response, out string assetPath)
         {

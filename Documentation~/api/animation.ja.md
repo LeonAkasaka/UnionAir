@@ -14,13 +14,15 @@
 
 | 書き込み | Undo 可否 |
 |---|---|
-| AnimatorController の構造(パラメータ、レイヤー、ステート、トランジション) | ✅ |
-| AnimationClip のカーブ(`POST` / `DELETE .../curves`) | ❌ |
+| AnimatorController の構造(パラメータ、レイヤー、ステート、トランジション、ブレンドツリー、ステートマシン、ステートマシン間のトランジション) | ✅ |
+| AnimationClip の内容(`.../curves`、`PATCH .../animation-clips/{guid}` の `settings`、`.../events`) | ❌ |
 | アセットの作成(`POST /api/assets/animation-clips`、`POST /api/assets/animator-controllers`) | ❌ |
 
-**コントローラーへの書き込みは Undo できますが、UnionAir は何もしていません。** `UnityEditor.Animations` の編集 API が自前で Undo を登録するため、ステートを追加するリクエストは Ctrl+Z 1 回で戻ります。UnionAir はこれらの経路に独自の登録を追加しません。二重に登録しても冗長なだけだからです。
+**コントローラーへの書き込みは Undo できますが、UnionAir は Undo を登録していません。** `UnityEditor.Animations` の編集 API が自前で Undo を登録するため、二重に登録しても冗長なだけです。UnionAir は独自の登録を追加しません。
 
-**クリップのカーブへの書き込みは、意図的に Undo 対象外です。** これらの API は Undo を登録せず、UnionAir も代わりに登録しません。ここでのアセット書き込みはレスポンスを返す前にディスクへ保存されるため、`200` はファイルが既に変更済みであることを意味します。復元は Undo スタックではなくバージョン管理の担当です。Undo を登録すると、Ctrl+Z がメモリ上のアセットだけを戻し、ファイルは次の無関係な保存まで書き込んだ内容を保持するため、「前でも後でもない」状態が生じます。
+**1 リクエストが 1 Undo エントリです。** ただしこれは自動的には成り立ちません。Unity の登録はその時点で現在の Undo グループに入りますが、HTTP 起点のコールバック 2 回の間ではグループが進みません。Unity がグループを進めるのは Editor に対する**人間の**操作の後で、ここではそれが起きないからです。そのため各書き込み経路は変更前に自分のグループを開き、完了後にそこへ collapse します。グループ名には操作名が入るので **Edit > Undo History** で判別できます。これがないと、ユーザーが最後に Editor を触ってから行われたコントローラー書き込みがすべて 1 エントリにまとまります。6000.0.80f1 で計測: `POST .../states` を 4 回連続で呼ぶと、Ctrl+Z 1 回で 4 つとも戻りました。
+
+**クリップの内容への書き込みは、意図的に Undo 対象外です。** これらの API は Undo を登録せず、UnionAir も代わりに登録しません。ここでのアセット書き込みはレスポンスを返す前にディスクへ保存されるため、`200` はファイルが既に変更済みであることを意味します。復元は Undo スタックではなくバージョン管理の担当です。Undo を登録すると、Ctrl+Z がメモリ上のアセットだけを戻し、ファイルは次の無関係な保存まで書き込んだ内容を保持するため、「前でも後でもない」状態が生じます。これはカーブ、`settings` ブロック、アニメーションイベントのいずれにも当てはまります。
 
 **アセットの作成は Unity 自体が Undo に対応していません。** UnionAir もそれを変えません。作成を取り消すにはアセットを削除してください。
 
@@ -566,6 +568,7 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
       "iKPass": false,
       "syncedLayerIndex": -1,
       "syncedLayerAffectsTiming": false,
+      "defaultState": "Idle",
       "states": [
         {
           "name": "Idle",
@@ -693,7 +696,7 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
   "name": "Locomotion",
   "blendType": "Simple1D",
   "blendParameter": "Speed",
-  "blendParameterY": "",
+  "blendParameterY": "Blend",
   "useAutomaticThresholds": true,
   "minThreshold": 0.0,
   "maxThreshold": 0.8,
@@ -704,7 +707,7 @@ AnimatorController の完全な構造(パラメータ、レイヤー、ステー
       "timeScale": 1.0,
       "cycleOffset": 0.0,
       "mirror": false,
-      "directBlendParameter": "",
+      "directBlendParameter": "Blend",
       "motion": { "type": "AnimationClip", "guid": "...", "name": "Walk", "assetPath": "...", "clipsAtPath": 1 }
     }
   ]
@@ -846,7 +849,14 @@ Unity のフィールドは `Vector3` ですが、グラフは平面です。`z`
 
 ### このレスポンスが記述しないもの
 
-サブステートマシンは列挙されません。各レイヤーのルートステートマシン直下のステートだけが現れるため、ステートがサブステートマシンの中にあるレイヤーは `states` が空配列になります。
+このレスポンスが記述するのは**アセット**であり、動作中の Animator ではありません。ランタイムの面はありません。Play mode で Animator が実際にいるステート、その正規化時間、実効のレイヤーウェイトを読むエンドポイントはなく、パラメータを駆動したり `CrossFade` を呼ぶものもありません。`defaultWeight` は格納された値で、ベースレイヤーでは実効ウェイトと一致しません。[ベースレイヤーの `defaultWeight`](#ベースレイヤーの-defaultweight) を参照してください。
+
+このほかに 2 つの制限がありますが、いずれも隠されずに報告され、該当箇所で説明しています。
+
+- `behaviours` は型名だけを返します。ステートでもステートマシンでも同じです。[`behaviours` は読み取り専用](#behaviours-は読み取り専用)を参照してください。
+- ブレンドツリーとステートマシンのネストは深さ 10 までシリアライズされます。その深さのノードは中身の代わりに `"truncated": true` を持つため、境界を「中身が空」と取り違えることはありません。
+
+`mute` と `solo` はシリアライズされた値そのものです。Animator ウィンドウがレイヤー全体から計算する結果は報告しません。
 
 ### エラー
 
