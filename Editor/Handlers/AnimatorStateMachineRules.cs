@@ -96,13 +96,30 @@ namespace LeonAkasaka.UnionAir.Editor
             return PathResult.Resolved;
         }
 
-        internal static string NotFoundMessage(IReadOnlyList<string> path, int failedDepth)
-            => $"stateMachinePath does not resolve: no state machine named '{path[failedDepth]}' " +
+        /// <summary>
+        /// Says which segment of a path found nothing.
+        /// </summary>
+        /// <param name="field">
+        /// The request field the path came from. Required rather than defaulted: two fields
+        /// carry one of these, resolved from different roots -- <c>stateMachinePath</c> from
+        /// the layer root, and <c>toStateMachine</c> from the machine that path addressed --
+        /// and the message used to name <c>stateMachinePath</c> for both, so a request with a
+        /// correct source and a wrong destination was sent to check the one field that was
+        /// right. A default would let the next call site inherit that bug silently.
+        /// </param>
+        internal static string NotFoundMessage(
+            IReadOnlyList<string> path, int failedDepth, string field)
+            => $"{field} does not resolve: no state machine named '{path[failedDepth]}' " +
                $"at depth {failedDepth} of {Describe(path)}.";
 
-        internal static string AmbiguousMessage(IReadOnlyList<string> path, int failedDepth, int matchCount)
+        /// <summary>
+        /// Says which segment of a path names more than one sibling. <paramref name="field"/>
+        /// is required for the reason given on <see cref="NotFoundMessage"/>.
+        /// </summary>
+        internal static string AmbiguousMessage(
+            IReadOnlyList<string> path, int failedDepth, int matchCount, string field)
             => $"{matchCount} sibling state machines are named '{path[failedDepth]}' at depth {failedDepth} " +
-               $"of {Describe(path)}, so the path addresses none of them. " +
+               $"of {field} {Describe(path)}, so the path addresses none of them. " +
                "Rename one in the Animator window; nothing here can tell them apart.";
 
         /// <summary>Renders a path for an error message, without inventing a separator the address does not use.</summary>
