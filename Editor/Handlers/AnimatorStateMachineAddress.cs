@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Text;
 using UnityEditor;
 using UnityEditor.Animations;
 
@@ -47,13 +49,13 @@ namespace LeonAkasaka.UnionAir.Editor
                     // request is well formed, and what makes the address unusable is the
                     // controller's own shape.
                     RestResponse.SendError(response,
-                        AnimatorStateMachineRules.AmbiguousMessage(path, depth, matches), 409);
+                        AnimatorStateMachineRules.AmbiguousMessage(path, depth, matches, "stateMachinePath"), 409);
                     machine = null;
                     return false;
 
                 default:
                     RestResponse.SendNotFound(response,
-                        AnimatorStateMachineRules.NotFoundMessage(path, depth));
+                        AnimatorStateMachineRules.NotFoundMessage(path, depth, "stateMachinePath"));
                     machine = null;
                     return false;
             }
@@ -91,16 +93,83 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 case AnimatorStateMachineRules.PathResult.Ambiguous:
                     RestResponse.SendError(response,
-                        AnimatorStateMachineRules.AmbiguousMessage(parentPath, depth, matches), 409);
+                        AnimatorStateMachineRules.AmbiguousMessage(parentPath, depth, matches, "stateMachinePath"), 409);
                     parent = null;
                     return false;
 
                 default:
                     RestResponse.SendNotFound(response,
-                        AnimatorStateMachineRules.NotFoundMessage(parentPath, depth));
+                        AnimatorStateMachineRules.NotFoundMessage(parentPath, depth, "stateMachinePath"));
                     parent = null;
                     return false;
             }
+        }
+
+        /// <summary>
+        /// Reads the <c>layerIndex</c> a request addresses, from the body or the query
+        /// string, and validates it against the controller.
+        ///
+        /// The query fallback is not a convenience added here: it is what the transition and
+        /// delete endpoints already offer for <c>transitionId</c>, <c>from</c>, <c>to</c>,
+        /// and <c>name</c>, and <c>layerIndex</c> is part of the same address. It was
+        /// previously read in four places -- one helper with the fallback, one without, and
+        /// two validated inline with their own wording -- so <c>?layerIndex=1</c> addressed
+        /// layer 1 on the state endpoints and layer 0 on the state machine and blend tree
+        /// endpoints, with a 201 either way.
+        /// </summary>
+        internal static bool TryReadLayerIndex(
+            AnimatorController controller, string body, UnionAirRequest request,
+            UnionAirResponse response, out int layerIndex)
+        {
+            layerIndex = 0;
+
+            var fromBody = RequestBodyReader.GetInt(body, "layerIndex");
+            if (fromBody.HasValue)
+            {
+                layerIndex = fromBody.Value;
+            }
+            else
+            {
+                // A value that is present and not an integer is refused rather than
+                // defaulting to 0, which would act on the base layer and report success.
+                var raw = request.QueryString["layerIndex"];
+                if (!string.IsNullOrEmpty(raw) &&
+                    !int.TryParse(raw, System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out layerIndex))
+                {
+                    RestResponse.SendError(response, $"layerIndex must be an integer: {raw}", 400);
+                    return false;
+                }
+            }
+
+            if (AnimatorLayerRules.TryValidateLayerIndex(layerIndex, controller.layers.Length, out var error))
+                return true;
+
+            RestResponse.SendError(response, error, 400);
+            return false;
+        }
+
+        /// <summary>
+        /// Emits a state machine path as the JSON array both sides of the contract use: the
+        /// read reports it as <c>path</c>, the writes echo it as <c>stateMachinePath</c>, and
+        /// a client feeds one straight back into the other.
+        ///
+        /// Here rather than in either handler because that round trip only holds while the
+        /// two agree exactly. It was written out twice before, identically, which is the
+        /// state a format diverges from without failing to compile.
+        ///
+        /// Not to be confused with a blend tree's <c>childPath</c>, which addresses by
+        /// position rather than by name and is emitted by <see cref="BlendTreeHandler"/>.
+        /// </summary>
+        internal static string PathJson(IReadOnlyList<string> path)
+        {
+            var sb = new StringBuilder("[");
+            for (int i = 0; i < path.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(RestResponse.FormatNullableString(path[i]));
+            }
+            return sb.Append("]").ToString();
         }
 
         internal static AnimatorController LoadController(string guid, UnionAirResponse response)

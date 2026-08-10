@@ -30,7 +30,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var undoGroup = UndoGroups.Begin("UnionAir: Create Blend Tree");
 
             var body = RequestBodyReader.ReadString(request);
-            if (!TryResolveState(controller, body, response, out var layerIndex, out var state)) return;
+            if (!TryResolveState(controller, body, request, response, out var layerIndex, out var state)) return;
 
             var addChild = RequestBodyReader.GetBool(body, "addChild") ?? false;
             var rootMotion = controller.GetStateEffectiveMotion(state, layerIndex);
@@ -122,7 +122,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var undoGroup = UndoGroups.Begin("UnionAir: Update Blend Tree");
 
             var body = RequestBodyReader.ReadString(request);
-            if (!TryResolveState(controller, body, response, out var layerIndex, out var state)) return;
+            if (!TryResolveState(controller, body, request, response, out var layerIndex, out var state)) return;
             if (!TryReadChildPath(body, response, out var path)) return;
 
             // The parent is resolved rather than the addressed motion, because a child
@@ -248,7 +248,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var undoGroup = UndoGroups.Begin("UnionAir: Delete Blend Tree");
 
             var body = RequestBodyReader.ReadString(request);
-            if (!TryResolveState(controller, body, response, out var layerIndex, out var state)) return;
+            if (!TryResolveState(controller, body, request, response, out var layerIndex, out var state)) return;
             if (!TryReadChildPath(body, response, out var path)) return;
 
             if (path.Length == 0)
@@ -314,18 +314,17 @@ namespace LeonAkasaka.UnionAir.Editor
         // ── Address resolution ───────────────────────────────────────────────
 
         private static bool TryResolveState(
-            AnimatorController controller, string body, UnionAirResponse response,
-            out int layerIndex, out AnimatorState state)
+            AnimatorController controller, string body, UnionAirRequest request,
+            UnionAirResponse response, out int layerIndex, out AnimatorState state)
         {
             state = null;
-            layerIndex = RequestBodyReader.GetInt(body, "layerIndex") ?? 0;
 
-            if (layerIndex < 0 || layerIndex >= controller.layers.Length)
-            {
-                RestResponse.SendError(response,
-                    $"layerIndex {layerIndex} is out of range; the controller has {controller.layers.Length} layer(s).", 400);
+            // Shared with the state and state machine endpoints so that one address is read
+            // one way. This used to validate the index inline, repeating the range message
+            // and missing the query fallback the other endpoints honour.
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out layerIndex))
                 return false;
-            }
 
             var name = RequestBodyReader.GetString(body, "state");
             if (string.IsNullOrEmpty(name))

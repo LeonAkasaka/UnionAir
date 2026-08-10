@@ -770,7 +770,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out var layerIndex)) return;
 
             if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var sm)) return;
 
@@ -820,7 +821,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out var layerIndex)) return;
 
             if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var sm)) return;
 
@@ -871,12 +873,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            var layerIndex = RequestBodyReader.GetInt(body, "layerIndex") ?? 0;
-            if (layerIndex < 0 || layerIndex >= controller.layers.Length)
-            {
-                RestResponse.SendError(response, $"layerIndex {layerIndex} is out of range", 400);
-                return;
-            }
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out var layerIndex)) return;
 
             if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var sm)) return;
 
@@ -951,7 +949,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out var layerIndex)) return;
 
             // Parsed before the transition exists, so a rejected setting leaves nothing
             // behind. Creating first and validating after would add a transition -- a
@@ -974,13 +973,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (result == AnimatorStateMachineRules.PathResult.Ambiguous)
                 {
                     RestResponse.SendError(response,
-                        AnimatorStateMachineRules.AmbiguousMessage(toMachinePath, depth, matches), 409);
+                        AnimatorStateMachineRules.AmbiguousMessage(toMachinePath, depth, matches, "toStateMachine"), 409);
                     return;
                 }
                 if (result != AnimatorStateMachineRules.PathResult.Resolved)
                 {
                     RestResponse.SendNotFound(response,
-                        AnimatorStateMachineRules.NotFoundMessage(toMachinePath, depth));
+                        AnimatorStateMachineRules.NotFoundMessage(toMachinePath, depth, "toStateMachine"));
                     return;
                 }
                 toName = toMachine.name;
@@ -1067,7 +1066,8 @@ namespace LeonAkasaka.UnionAir.Editor
             var undoGroup = UndoGroups.Begin("UnionAir: Update Animator Transition");
 
             var body = RequestBodyReader.ReadString(request);
-            if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out var layerIndex)) return;
             if (!TryResolveTransition(controller, layerIndex, body, request, response, out var found)) return;
 
             // Every value is checked before the first one is written, so a request carrying
@@ -1102,7 +1102,8 @@ namespace LeonAkasaka.UnionAir.Editor
             var undoGroup = UndoGroups.Begin("UnionAir: Delete Animator Transition");
 
             var body = RequestBodyReader.ReadString(request);
-            if (!TryReadLayerIndex(controller, body, request, response, out var layerIndex)) return;
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out var layerIndex)) return;
             if (!TryResolveTransition(controller, layerIndex, body, request, response, out var found)) return;
 
             // Read before the removal, because the object is destroyed by it.
@@ -1251,7 +1252,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 var childPath = new List<string>(path);
                 if (child != null) childPath.Add(child.name);
-                sb.Append("\"path\":").Append(PathJson(childPath)).Append(",");
+                sb.Append("\"path\":").Append(AnimatorStateMachineAddress.PathJson(childPath)).Append(",");
 
                 sb.Append("\"position\":{");
                 sb.Append($"\"x\":{RestResponse.FormatFloat(children[ci].position.x)},");
@@ -1328,17 +1329,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append(RestResponse.FormatNullableString(
                     behaviours[i] == null ? null : behaviours[i].GetType().Name));
             }
-        }
-
-        private static string PathJson(List<string> path)
-        {
-            var sb = new StringBuilder("[");
-            for (int i = 0; i < path.Count; i++)
-            {
-                if (i > 0) sb.Append(",");
-                sb.Append(RestResponse.FormatNullableString(path[i]));
-            }
-            return sb.Append("]").ToString();
         }
 
         // ── State settings ───────────────────────────────────────────────────
@@ -1682,36 +1672,6 @@ namespace LeonAkasaka.UnionAir.Editor
         /// DELETE sent entirely as query parameters can still name a layer other than the
         /// base one.
         /// </summary>
-        private static bool TryReadLayerIndex(
-            AnimatorController controller, string body, UnionAirRequest request,
-            UnionAirResponse response, out int layerIndex)
-        {
-            layerIndex = 0;
-
-            var fromBody = RequestBodyReader.GetInt(body, "layerIndex");
-            if (fromBody.HasValue)
-            {
-                layerIndex = fromBody.Value;
-            }
-            else
-            {
-                var raw = request.QueryString["layerIndex"];
-                if (!string.IsNullOrEmpty(raw) &&
-                    !int.TryParse(raw, System.Globalization.NumberStyles.Integer,
-                        System.Globalization.CultureInfo.InvariantCulture, out layerIndex))
-                {
-                    RestResponse.SendError(response, $"layerIndex must be an integer: {raw}", 400);
-                    return false;
-                }
-            }
-
-            if (AnimatorLayerRules.TryValidateLayerIndex(layerIndex, controller.layers.Length, out var error))
-                return true;
-
-            RestResponse.SendError(response, error, 400);
-            return false;
-        }
-
         // ── Transition addressing ────────────────────────────────────────────
 
         /// <summary>

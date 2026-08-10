@@ -38,7 +38,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            if (!TryReadLayerIndex(controller, body, response, out var layerIndex)) return;
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out var layerIndex)) return;
             if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var parent)) return;
 
             var name = RequestBodyReader.GetString(body, "name");
@@ -79,7 +80,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var sb = new StringBuilder();
             sb.Append("{\"added\":").Append(RestResponse.FormatNullableString(created.name));
             sb.Append(",\"layerIndex\":").Append(layerIndex);
-            sb.Append(",\"stateMachinePath\":").Append(PathJson(path));
+            sb.Append(",\"stateMachinePath\":").Append(AnimatorStateMachineAddress.PathJson(path));
             sb.Append("}");
             RestResponse.Send(response, sb.ToString(), 201);
         }
@@ -102,7 +103,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            if (!TryReadLayerIndex(controller, body, response, out var layerIndex)) return;
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out var layerIndex)) return;
             if (!AnimatorStateMachineAddress.TryResolveParent(
                     controller, layerIndex, body, response, out var parent, out var path)) return;
 
@@ -127,13 +129,13 @@ namespace LeonAkasaka.UnionAir.Editor
             if (matches == 0)
             {
                 RestResponse.SendNotFound(response,
-                    AnimatorStateMachineRules.NotFoundMessage(path, path.Length - 1));
+                    AnimatorStateMachineRules.NotFoundMessage(path, path.Length - 1, "stateMachinePath"));
                 return;
             }
             if (matches > 1)
             {
                 RestResponse.SendError(response,
-                    AnimatorStateMachineRules.AmbiguousMessage(path, path.Length - 1, matches), 409);
+                    AnimatorStateMachineRules.AmbiguousMessage(path, path.Length - 1, matches, "stateMachinePath"), 409);
                 return;
             }
 
@@ -173,7 +175,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var sb = new StringBuilder();
             sb.Append("{\"removed\":").Append(RestResponse.FormatNullableString(name));
             sb.Append(",\"layerIndex\":").Append(layerIndex);
-            sb.Append(",\"stateMachinePath\":").Append(PathJson(new List<string>(path)));
+            sb.Append(",\"stateMachinePath\":").Append(AnimatorStateMachineAddress.PathJson(path));
             sb.Append(",\"removedStates\":").Append(stateCount);
             sb.Append(",\"removedStateMachines\":").Append(machineCount);
             sb.Append(",\"destroyedBlendTrees\":").Append(destroyed);
@@ -199,7 +201,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 "state machine(s) in total, which removing it would take with it. " +
                 "Send recursive true to confirm."));
             sb.Append(",\"layerIndex\":").Append(layerIndex);
-            sb.Append(",\"stateMachinePath\":").Append(PathJson(new List<string>(path)));
+            sb.Append(",\"stateMachinePath\":").Append(AnimatorStateMachineAddress.PathJson(path));
             sb.Append(",\"totalStates\":").Append(stateCount);
             sb.Append(",\"totalStateMachines\":").Append(machineCount);
 
@@ -264,7 +266,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            if (!TryReadLayerIndex(controller, body, response, out var layerIndex)) return;
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out var layerIndex)) return;
             if (!AnimatorStateMachineAddress.TryResolve(controller, layerIndex, body, response, out var owner)) return;
 
             var fromName = RequestBodyReader.GetString(body, "from");
@@ -364,7 +367,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
-            if (!TryReadLayerIndex(controller, body, response, out var layerIndex)) return;
+            if (!AnimatorStateMachineAddress.TryReadLayerIndex(
+                    controller, body, request, response, out var layerIndex)) return;
 
             var transitionId = RequestBodyReader.GetString(body, "transitionId") ?? request.QueryString["transitionId"];
             if (string.IsNullOrEmpty(transitionId))
@@ -500,13 +504,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (result == AnimatorStateMachineRules.PathResult.Ambiguous)
                 {
                     RestResponse.SendError(response,
-                        AnimatorStateMachineRules.AmbiguousMessage(toMachinePath, depth, matches), 409);
+                        AnimatorStateMachineRules.AmbiguousMessage(toMachinePath, depth, matches, "toStateMachine"), 409);
                     return false;
                 }
                 if (result != AnimatorStateMachineRules.PathResult.Resolved)
                 {
                     RestResponse.SendNotFound(response,
-                        AnimatorStateMachineRules.NotFoundMessage(toMachinePath, depth));
+                        AnimatorStateMachineRules.NotFoundMessage(toMachinePath, depth, "toStateMachine"));
                     return false;
                 }
                 if (toMachinePath.Length == 0)
@@ -526,17 +530,6 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             RestResponse.SendNotFound(response, $"Destination state not found: {toName}");
-            return false;
-        }
-
-        private static bool TryReadLayerIndex(
-            AnimatorController controller, string body, UnionAirResponse response, out int layerIndex)
-        {
-            layerIndex = RequestBodyReader.GetInt(body, "layerIndex") ?? 0;
-            if (AnimatorLayerRules.TryValidateLayerIndex(layerIndex, controller.layers.Length, out var error))
-                return true;
-
-            RestResponse.SendError(response, error, 400);
             return false;
         }
 
@@ -565,17 +558,6 @@ namespace LeonAkasaka.UnionAir.Editor
             position = new Vector2(x.Value, y.Value);
             present = true;
             return true;
-        }
-
-        private static string PathJson(List<string> path)
-        {
-            var sb = new StringBuilder("[");
-            for (int i = 0; i < path.Count; i++)
-            {
-                if (i > 0) sb.Append(",");
-                sb.Append(RestResponse.FormatNullableString(path[i]));
-            }
-            return sb.Append("]").ToString();
         }
 
         /// <summary>

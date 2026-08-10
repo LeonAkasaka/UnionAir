@@ -70,7 +70,8 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual(AnimatorStateMachineRules.PathResult.NotFound, result);
             Assert.AreEqual(1, depth, "the first segment resolved; the second did not");
             Assert.IsNull(machine);
-            StringAssert.Contains("depth 1", AnimatorStateMachineRules.NotFoundMessage(new[] { "Combat", "Nope" }, depth));
+            StringAssert.Contains("depth 1",
+                AnimatorStateMachineRules.NotFoundMessage(new[] { "Combat", "Nope" }, depth, "stateMachinePath"));
         }
 
         [Test]
@@ -98,7 +99,8 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual(AnimatorStateMachineRules.PathResult.Ambiguous, result);
             Assert.AreEqual(2, matches);
             Assert.IsNull(machine);
-            StringAssert.Contains("2 sibling", AnimatorStateMachineRules.AmbiguousMessage(new[] { "Combat" }, depth, matches));
+            StringAssert.Contains("2 sibling",
+                AnimatorStateMachineRules.AmbiguousMessage(new[] { "Combat" }, depth, matches, "stateMachinePath"));
         }
 
         [Test]
@@ -137,6 +139,35 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         {
             StringAssert.Contains("root", AnimatorStateMachineRules.Describe(new string[0]));
             StringAssert.Contains("\"Combat\"", AnimatorStateMachineRules.Describe(new[] { "Combat" }));
+        }
+
+        [Test]
+        public void AMessageNamesTheFieldTheBadPathCameFrom()
+        {
+            // Two request fields carry a path and they resolve from different roots, so the
+            // message has to say which one failed. It said "stateMachinePath" for both, and
+            // a client sending a correct stateMachinePath with a wrong toStateMachine was
+            // told to look at the field that was right.
+            var path = new[] { "Combat", "Nope" };
+
+            var source = AnimatorStateMachineRules.NotFoundMessage(path, 1, "stateMachinePath");
+            var destination = AnimatorStateMachineRules.NotFoundMessage(path, 1, "toStateMachine");
+
+            StringAssert.StartsWith("stateMachinePath does not resolve", source);
+            StringAssert.StartsWith("toStateMachine does not resolve", destination);
+            Assert.AreNotEqual(source, destination,
+                "the two failures must not read identically");
+        }
+
+        [Test]
+        public void AnAmbiguousPathAlsoNamesItsField()
+        {
+            var path = new[] { "Combat" };
+
+            StringAssert.Contains("toStateMachine",
+                AnimatorStateMachineRules.AmbiguousMessage(path, 0, 2, "toStateMachine"));
+            StringAssert.Contains("stateMachinePath",
+                AnimatorStateMachineRules.AmbiguousMessage(path, 0, 2, "stateMachinePath"));
         }
     }
 }

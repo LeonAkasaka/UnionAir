@@ -730,6 +730,12 @@ A layer's root state machine and every machine nested in it carry the same field
 | `stateMachineTransitions` | Transitions that leave the machines nested in this one |
 | `behaviours` | Type names of the attached `StateMachineBehaviour` instances. **Read-only**, as on a state |
 
+### `layerIndex`
+
+Every animation endpoint that addresses part of a controller takes `layerIndex`, and defaults it to `0`. It may be sent in the body or as a query parameter — `?layerIndex=1` — and the body wins when both are present. A value that is present and not an integer is a `400` rather than a silent fall back to the base layer.
+
+`stateMachinePath` has no query form: it is an array, and a query string has no unambiguous way to carry one.
+
 ### `stateMachinePath`
 
 Every endpoint that names a state accepts `stateMachinePath`, an array of state machine names from the layer root:
