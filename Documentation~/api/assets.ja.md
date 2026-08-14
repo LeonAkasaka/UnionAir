@@ -1143,6 +1143,37 @@ true のインポート済み `Mesh`、`Material`、`Avatar`、`AnimationClip` �
 `localIdentifier` は10進文字列です。永続的な識別には `(guid, localIdentifier)`
 を使用します。
 
+同じ `settings` オブジェクトには次の設定も含まれます。
+
+```json
+{
+  "materials": {
+    "importMode": "ImportViaMaterialDescription",
+    "location": "InPrefab",
+    "naming": "BasedOnMaterialName",
+    "search": "RecursiveUp"
+  },
+  "materialRemaps": [{
+    "source": { "type": "UnityEngine.Material", "name": "Body" },
+    "target": { "guid": "def456...", "localIdentifier": "2100000", "name": "RobotBody", "type": "UnityEngine.Material" }
+  }],
+  "rig": {
+    "animationType": "Human",
+    "avatarSetup": "CopyFromOther",
+    "sourceAvatar": { "guid": "987abc...", "localIdentifier": "9000000", "name": "RobotAvatar", "type": "UnityEngine.Avatar" },
+    "autoGenerateAvatarMappingIfUnspecified": false,
+    "humanoidOversampling": "X2",
+    "optimizeGameObjects": true,
+    "extraExposedTransformPaths": ["Root/WeaponSocket"]
+  },
+  "unsupportedInitialSettings": ["rig.humanDescription"]
+}
+```
+
+`materialRemaps` は `GetExternalObjectMap()` の Material 項目です。null target は
+GET では返りません。`humanDescription` は任意の serialized property として公開せず、
+未対応であることをすべての設定 snapshot に明示します。
+
 ---
 
 ## POST /api/assets/model-importer/{guid}/preflight
@@ -1171,9 +1202,24 @@ PATCH の契約を検証し、変更やインポートをせずに `valid`、`re
 | `geometry` | `addCollider`、`importBlendShapes`、`importCameras`、`importLights`、`importVisibility`、`importConstraints`、`swapUvChannels`、`generateSecondaryUv`、`secondaryUvMarginMethod`、`secondaryUvAngleDistortion` (`1..75`)、`secondaryUvAreaDistortion` (`1..75`)、`secondaryUvHardAngle` (`0..180`)、`secondaryUvPackMargin` (`1..64`) |
 | `normals` | `import`、`blendShapeImport`、`calculationMode`、`smoothingSource`、`smoothingAngle` (`0..180`) |
 | `tangents` | `import` |
+| `materials` | `importMode`、`location`、`naming`、`search` |
+| `materialRemaps` | `{source: {type: "UnityEngine.Material", name}, target}` の配列。`target: null` はその source remap を削除 |
+| `rig` | `animationType`、`avatarSetup`、`sourceAvatar`、`autoGenerateAvatarMappingIfUnspecified`、`humanoidOversampling`、`optimizeGameObjects`、`extraExposedTransformPaths` |
 
 `useFileUnits` と tangent import はソースの capability に対しても検証されます。
 normal が `None` の場合、tangent も `None` でなければなりません。
+
+Material と Avatar の target は `{guid, localIdentifier}` で指定します。参照先に必要な型の
+オブジェクトが1つだけの場合に限り `localIdentifier` を省略できます。欠落、型違い、曖昧な
+target は、設定や remap を変更する前にリクエスト全体を拒否します。同じ remap source を
+1リクエスト内で繰り返すこともできません。
+
+Material の naming/search は material import が必要で、`location: InPrefab` とは互換性が
+ありません。remap の追加・置換には `None` 以外の import mode が必要ですが、古い remap の
+削除は可能です。`CopyFromOther` には有効で
+互換性のある source Avatar が必要です。`None` と `Legacy` rig には `NoAvatar` が必要です。
+humanoid oversampling は Human 専用で、自動 mapping にはさらに `CreateFromThisModel` が必要、
+exposed transform path には optimization が必要です。互換性のないフィールドは無視せず拒否します。
 
 ---
 

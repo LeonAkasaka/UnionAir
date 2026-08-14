@@ -34,7 +34,8 @@ namespace LeonAkasaka.UnionAir.Editor
             ModelImporterState before;
             ModelImporterState requested;
             List<string> changed;
-            if (!TryPrepare(request, response, importer, out before, out requested, out changed)) return;
+            ModelImporterUpdateRequest update;
+            if (!TryPrepare(request, response, importer, out before, out requested, out changed, out update)) return;
 
             RestResponse.Send(
                 response,
@@ -50,7 +51,8 @@ namespace LeonAkasaka.UnionAir.Editor
             ModelImporterState before;
             ModelImporterState requested;
             List<string> changed;
-            if (!TryPrepare(request, response, importer, out before, out requested, out changed)) return;
+            ModelImporterUpdateRequest update;
+            if (!TryPrepare(request, response, importer, out before, out requested, out changed, out update)) return;
 
             var beforeSubAssets = ModelImporterSubAssets.Capture(guid, assetPath);
             if (changed.Count == 0)
@@ -75,13 +77,13 @@ namespace LeonAkasaka.UnionAir.Editor
 
             try
             {
-                requested.Apply(importer);
+                requested.Apply(importer, update);
                 _saveAndReimport(importer);
             }
             catch (Exception ex)
             {
                 string rollbackError;
-                var restored = TryRestore(assetPath, importer, before, out rollbackError);
+                var restored = TryRestore(assetPath, importer, before, update, out rollbackError);
                 RestResponse.Send(
                     response,
                     ModelImporterJson.BuildFailure(
@@ -115,15 +117,21 @@ namespace LeonAkasaka.UnionAir.Editor
             ModelImporter importer,
             out ModelImporterState before,
             out ModelImporterState requested,
-            out List<string> changed)
+            out List<string> changed,
+            out ModelImporterUpdateRequest update)
         {
             before = null;
             requested = null;
             changed = null;
+            update = null;
 
-            ModelImporterUpdateRequest update;
             string error;
             if (!ModelImporterUpdateParser.TryParse(RequestBodyReader.ReadString(request), out update, out error))
+            {
+                RestResponse.SendError(response, error, 400);
+                return false;
+            }
+            if (!ModelImporterMaterialsRigParser.TryResolveReferences(update, out error))
             {
                 RestResponse.SendError(response, error, 400);
                 return false;
@@ -166,6 +174,7 @@ namespace LeonAkasaka.UnionAir.Editor
             string assetPath,
             ModelImporter importer,
             ModelImporterState before,
+            ModelImporterUpdateRequest update,
             out string error)
         {
             try
@@ -177,7 +186,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     return false;
                 }
 
-                before.Apply(rollbackImporter);
+                before.Apply(rollbackImporter, update);
                 var restored = ModelImporterState.Capture(rollbackImporter);
                 if (!before.EqualsState(restored))
                 {
@@ -404,7 +413,77 @@ namespace LeonAkasaka.UnionAir.Editor
               .Append(",\"calculationMode\":").Append(Q(state.NormalCalculationMode))
               .Append(",\"smoothingSource\":").Append(Q(state.NormalSmoothingSource))
               .Append(",\"smoothingAngle\":").Append(RestResponse.FormatFloat(state.NormalSmoothingAngle)).Append("}");
-            sb.Append(",\"tangents\":{\"import\":").Append(Q(state.ImportTangents)).Append("}}");
+            sb.Append(",\"tangents\":{\"import\":").Append(Q(state.ImportTangents)).Append("}");
+            sb.Append(",\"materials\":{\"importMode\":").Append(Q(state.MaterialImportMode))
+              .Append(",\"location\":").Append(Q(state.MaterialLocation))
+              .Append(",\"naming\":").Append(Q(state.MaterialName))
+              .Append(",\"search\":").Append(Q(state.MaterialSearch)).Append("}");
+            sb.Append(",\"materialRemaps\":");
+            AppendMaterialRemaps(sb, state.MaterialRemaps);
+            sb.Append(",\"rig\":{\"animationType\":").Append(Q(state.AnimationType))
+              .Append(",\"avatarSetup\":").Append(Q(state.AvatarSetup))
+              .Append(",\"sourceAvatar\":");
+            AppendObjectReference(sb, state.SourceAvatar);
+            sb.Append(",\"autoGenerateAvatarMappingIfUnspecified\":")
+              .Append(Bool(state.AutoGenerateAvatarMappingIfUnspecified))
+              .Append(",\"humanoidOversampling\":").Append(Q(state.HumanoidOversampling))
+              .Append(",\"optimizeGameObjects\":").Append(Bool(state.OptimizeGameObjects))
+              .Append(",\"extraExposedTransformPaths\":");
+            AppendStringArray(sb, state.ExtraExposedTransformPaths);
+            sb.Append("},\"unsupportedInitialSettings\":[\"rig.humanDescription\"]}");
+        }
+
+        private static void AppendMaterialRemaps(
+            StringBuilder sb, List<ModelImporterMaterialRemapState> remaps)
+        {
+            sb.Append('[');
+            if (remaps != null)
+            {
+                for (var i = 0; i < remaps.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    var remap = remaps[i];
+                    sb.Append("{\"source\":{\"type\":")
+                      .Append(RestResponse.FormatNullableString(remap.SourceType))
+                      .Append(",\"name\":")
+                      .Append(RestResponse.FormatNullableString(remap.SourceName))
+                      .Append("},\"target\":");
+                    AppendObjectReference(sb, remap.Target);
+                    sb.Append('}');
+                }
+            }
+            sb.Append(']');
+        }
+
+        private static void AppendObjectReference(StringBuilder sb, UnityEngine.Object asset)
+        {
+            if (asset == null)
+            {
+                sb.Append("null");
+                return;
+            }
+            var path = AssetDatabase.GetAssetPath(asset);
+            sb.Append("{\"guid\":")
+              .Append(RestResponse.FormatNullableString(AssetDatabase.AssetPathToGUID(path)))
+              .Append(",\"localIdentifier\":")
+              .Append(RestResponse.FormatNullableString(ModelImporterObjectIdentity.LocalIdentifier(asset)))
+              .Append(",\"name\":").Append(RestResponse.FormatNullableString(asset.name))
+              .Append(",\"type\":").Append(RestResponse.FormatNullableString(asset.GetType().FullName))
+              .Append('}');
+        }
+
+        private static void AppendStringArray(StringBuilder sb, string[] values)
+        {
+            sb.Append('[');
+            if (values != null)
+            {
+                for (var i = 0; i < values.Length; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    sb.Append(RestResponse.FormatNullableString(values[i]));
+                }
+            }
+            sb.Append(']');
         }
 
         private static void AppendSubAssets(StringBuilder sb, List<ModelImporterSubAsset> assets)

@@ -1137,6 +1137,37 @@ and `AnimationClip` objects for which `AssetDatabase.IsSubAsset` is true. Previe
 objects are excluded. `localIdentifier` is a decimal string so clients do not lose
 64-bit precision; `(guid, localIdentifier)` is the durable imported-object identity.
 
+The same `settings` object also contains:
+
+```json
+{
+  "materials": {
+    "importMode": "ImportViaMaterialDescription",
+    "location": "InPrefab",
+    "naming": "BasedOnMaterialName",
+    "search": "RecursiveUp"
+  },
+  "materialRemaps": [{
+    "source": { "type": "UnityEngine.Material", "name": "Body" },
+    "target": { "guid": "def456...", "localIdentifier": "2100000", "name": "RobotBody", "type": "UnityEngine.Material" }
+  }],
+  "rig": {
+    "animationType": "Human",
+    "avatarSetup": "CopyFromOther",
+    "sourceAvatar": { "guid": "987abc...", "localIdentifier": "9000000", "name": "RobotAvatar", "type": "UnityEngine.Avatar" },
+    "autoGenerateAvatarMappingIfUnspecified": false,
+    "humanoidOversampling": "X2",
+    "optimizeGameObjects": true,
+    "extraExposedTransformPaths": ["Root/WeaponSocket"]
+  },
+  "unsupportedInitialSettings": ["rig.humanDescription"]
+}
+```
+
+`materialRemaps` is the Material subset of `GetExternalObjectMap()`. A null target is
+not returned. `humanDescription` is deliberately not writable through arbitrary
+serialized properties; its unsupported status is explicit in every settings snapshot.
+
 ---
 
 ## POST /api/assets/model-importer/{guid}/preflight
@@ -1165,9 +1196,25 @@ names GET returns, case-insensitively.
 | `geometry` | `addCollider`, `importBlendShapes`, `importCameras`, `importLights`, `importVisibility`, `importConstraints`, `swapUvChannels`, `generateSecondaryUv`, `secondaryUvMarginMethod`, `secondaryUvAngleDistortion` (`1..75`), `secondaryUvAreaDistortion` (`1..75`), `secondaryUvHardAngle` (`0..180`), `secondaryUvPackMargin` (`1..64`) |
 | `normals` | `import`, `blendShapeImport`, `calculationMode`, `smoothingSource`, `smoothingAngle` (`0..180`) |
 | `tangents` | `import` |
+| `materials` | `importMode`, `location`, `naming`, `search` |
+| `materialRemaps` | Array of `{source: {type: "UnityEngine.Material", name}, target}`; `target: null` removes the source remap |
+| `rig` | `animationType`, `avatarSetup`, `sourceAvatar`, `autoGenerateAvatarMappingIfUnspecified`, `humanoidOversampling`, `optimizeGameObjects`, `extraExposedTransformPaths` |
 
 `useFileUnits` and tangent import are checked against source capabilities. Tangents
 must be `None` when normals are `None`.
+
+Material and Avatar targets use `{guid, localIdentifier}`. `localIdentifier` may be
+omitted only when the referenced asset contains exactly one object of the required
+type. Missing, wrong-type, and ambiguous targets reject the complete request before
+any setting or remap changes. Repeating a remap source in one request is also rejected.
+
+Material naming/search fields require material import and are incompatible with
+`location: InPrefab`; adding or replacing remaps requires an import mode other than `None`.
+Removing a stale remap remains allowed. `CopyFromOther`
+requires a valid compatible source Avatar. `None` and `Legacy` rigs require `NoAvatar`;
+humanoid oversampling is Human-only, automatic mapping additionally requires
+`CreateFromThisModel`, and exposed transform paths require optimization. Incompatible
+fields are rejected rather than ignored.
 
 ---
 

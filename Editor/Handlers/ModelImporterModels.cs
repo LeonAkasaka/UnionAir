@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEngine;
 
 namespace LeonAkasaka.UnionAir.Editor
 {
@@ -13,9 +14,13 @@ namespace LeonAkasaka.UnionAir.Editor
         internal ModelImporterGeometryPatch Geometry;
         internal ModelImporterNormalsPatch Normals;
         internal ModelImporterTangentsPatch Tangents;
+        internal ModelImporterMaterialsPatch Materials;
+        internal List<ModelImporterMaterialRemapPatch> MaterialRemaps;
+        internal ModelImporterRigPatch Rig;
 
         internal bool HasAnySetting =>
-            Model != null || Mesh != null || Geometry != null || Normals != null || Tangents != null;
+            Model != null || Mesh != null || Geometry != null || Normals != null || Tangents != null ||
+            Materials != null || MaterialRemaps != null || Rig != null;
 
         internal ModelImporterState Apply(ModelImporterState source, List<string> changedFields)
         {
@@ -25,6 +30,10 @@ namespace LeonAkasaka.UnionAir.Editor
             Geometry?.Apply(result, changedFields);
             Normals?.Apply(result, changedFields);
             Tangents?.Apply(result, changedFields);
+            Materials?.Apply(result, changedFields);
+            Rig?.Apply(result, changedFields);
+            if (MaterialRemaps != null)
+                ModelImporterMaterialsRigState.ApplyRemapPatches(result, MaterialRemaps, changedFields);
             return result;
         }
     }
@@ -219,10 +228,22 @@ namespace LeonAkasaka.UnionAir.Editor
         internal ModelImporterNormalSmoothingSource NormalSmoothingSource;
         internal float NormalSmoothingAngle;
         internal ModelImporterTangents ImportTangents;
+        internal ModelImporterMaterialImportMode MaterialImportMode;
+        internal ModelImporterMaterialLocation MaterialLocation;
+        internal ModelImporterMaterialName MaterialName;
+        internal ModelImporterMaterialSearch MaterialSearch;
+        internal List<ModelImporterMaterialRemapState> MaterialRemaps;
+        internal ModelImporterAnimationType AnimationType;
+        internal ModelImporterAvatarSetup AvatarSetup;
+        internal Avatar SourceAvatar;
+        internal bool AutoGenerateAvatarMappingIfUnspecified;
+        internal ModelImporterHumanoidOversampling HumanoidOversampling;
+        internal bool OptimizeGameObjects;
+        internal string[] ExtraExposedTransformPaths;
 
         internal static ModelImporterState Capture(ModelImporter importer)
         {
-            return new ModelImporterState
+            var state = new ModelImporterState
             {
                 GlobalScale = importer.globalScale,
                 FileScale = importer.fileScale,
@@ -260,11 +281,18 @@ namespace LeonAkasaka.UnionAir.Editor
                 NormalSmoothingAngle = importer.normalSmoothingAngle,
                 ImportTangents = importer.importTangents
             };
+            ModelImporterMaterialsRigState.Capture(importer, state);
+            return state;
         }
 
-        internal ModelImporterState Clone() => (ModelImporterState)MemberwiseClone();
+        internal ModelImporterState Clone()
+        {
+            var clone = (ModelImporterState)MemberwiseClone();
+            ModelImporterMaterialsRigState.CloneCollections(this, clone);
+            return clone;
+        }
 
-        internal void Apply(ModelImporter importer)
+        internal void Apply(ModelImporter importer, ModelImporterUpdateRequest request = null)
         {
             importer.globalScale = GlobalScale;
             importer.useFileScale = UseFileScale;
@@ -300,6 +328,7 @@ namespace LeonAkasaka.UnionAir.Editor
             importer.normalSmoothingSource = NormalSmoothingSource;
             importer.normalSmoothingAngle = NormalSmoothingAngle;
             importer.importTangents = ImportTangents;
+            ModelImporterMaterialsRigState.Apply(importer, this, request);
         }
 
         internal bool EqualsState(ModelImporterState other)
@@ -329,14 +358,15 @@ namespace LeonAkasaka.UnionAir.Editor
                    NormalCalculationMode == other.NormalCalculationMode &&
                    NormalSmoothingSource == other.NormalSmoothingSource &&
                    Math.Abs(NormalSmoothingAngle - other.NormalSmoothingAngle) < 0.000001f &&
-                   ImportTangents == other.ImportTangents;
+                   ImportTangents == other.ImportTangents &&
+                   ModelImporterMaterialsRigState.EqualsState(this, other);
         }
     }
 
     internal static class ModelImporterUpdateParser
     {
         private static readonly string[] TopFields =
-            { "schemaVersion", "model", "mesh", "geometry", "normals", "tangents" };
+            { "schemaVersion", "model", "mesh", "geometry", "normals", "tangents", "materials", "materialRemaps", "rig" };
         private static readonly string[] ModelFields =
             { "globalScale", "useFileScale", "useFileUnits", "bakeAxisConversion", "preserveHierarchy", "isReadable" };
         private static readonly string[] MeshFields =
@@ -370,7 +400,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 !TryParseMesh(body, parsed, out error) ||
                 !TryParseGeometry(body, parsed, out error) ||
                 !TryParseNormals(body, parsed, out error) ||
-                !TryParseTangents(body, parsed, out error))
+                !TryParseTangents(body, parsed, out error) ||
+                !ModelImporterMaterialsRigParser.TryParse(body, parsed, out error))
                 return false;
 
             if (!parsed.HasAnySetting)
@@ -457,8 +488,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            error = null;
-            return true;
+            return ModelImporterMaterialsRigRules.TryValidate(state, importer, request, out error);
         }
 
         private static bool TryParseModel(string body, ModelImporterUpdateRequest request, out string error)

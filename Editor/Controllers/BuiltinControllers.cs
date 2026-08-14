@@ -732,7 +732,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("GET", "{guid}",
             Category = UnionAirEndpointCategories.Read,
             BlockedDuring = UnionAirActivity.AssetUpdate,
-            Summary = "Returns normalized ModelImporter core settings and stable imported sub-asset identities. Transient preview objects are excluded.",
+            Summary = "Returns normalized ModelImporter core, material/remap, and rig/Avatar settings with stable imported sub-asset identities. Transient preview objects are excluded.",
             PathParams = new string[] { "guid" },
             ResponseExample = "{\"schemaVersion\":1,\"guid\":\"...\",\"assetPath\":\"Assets/Models/robot.fbx\",\"settings\":{\"model\":{\"globalScale\":1.0,\"isReadable\":false}},\"subAssets\":[{\"guid\":\"...\",\"localIdentifier\":\"4300000\",\"name\":\"Body\",\"type\":\"UnityEngine.Mesh\"}]}")]
         private void Get(UnionAirRequestContext ctx)
@@ -741,11 +741,11 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "{guid}/preflight",
             Category = UnionAirEndpointCategories.Read,
             BlockedDuring = UnionAirActivity.Compile | UnionAirActivity.AssetUpdate,
-            Summary = "Validates a versioned ModelImporter core-settings patch without changing the importer or reimporting the asset.",
+            Summary = "Validates a versioned ModelImporter core, material/remap, and rig/Avatar patch without changing the importer or reimporting the asset.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "schemaVersion" },
-            OptionalBody = new string[] { "model", "mesh", "geometry", "normals", "tangents" },
-            RequestExample = "{\"schemaVersion\":1,\"model\":{\"globalScale\":1.0,\"isReadable\":true},\"normals\":{\"import\":\"Calculate\"}}",
+            OptionalBody = new string[] { "model", "mesh", "geometry", "normals", "tangents", "materials", "materialRemaps", "rig" },
+            RequestExample = "{\"schemaVersion\":1,\"materials\":{\"importMode\":\"ImportStandard\",\"location\":\"External\"},\"rig\":{\"animationType\":\"Generic\",\"avatarSetup\":\"CreateFromThisModel\"}}",
             ResponseExample = "{\"schemaVersion\":1,\"guid\":\"...\",\"assetPath\":\"Assets/Models/robot.fbx\",\"valid\":true,\"reimportRequired\":true,\"changedFields\":[\"model.isReadable\"]}")]
         private void Preflight(UnionAirRequestContext ctx)
             => new ModelImporterHandler().HandlePreflight(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
@@ -754,11 +754,11 @@ namespace LeonAkasaka.UnionAir.Editor
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
             BlockedDuring = UnionAirActivity.Compile | UnionAirActivity.AssetUpdate,
-            Summary = "Validates and updates versioned ModelImporter core settings, performs at most one SaveAndReimport, and reports the before/after state, sub-asset delta, diagnostics, and rollback status.",
+            Summary = "Validates and updates versioned ModelImporter core, material/remap, and rig/Avatar settings, performs at most one SaveAndReimport, and reports the before/after state, sub-asset delta, diagnostics, and rollback status.",
             PathParams = new string[] { "guid" },
             RequiredBody = new string[] { "schemaVersion" },
-            OptionalBody = new string[] { "model", "mesh", "geometry", "normals", "tangents" },
-            RequestExample = "{\"schemaVersion\":1,\"model\":{\"globalScale\":1.0,\"isReadable\":true},\"mesh\":{\"compression\":\"Off\"}}",
+            OptionalBody = new string[] { "model", "mesh", "geometry", "normals", "tangents", "materials", "materialRemaps", "rig" },
+            RequestExample = "{\"schemaVersion\":1,\"materials\":{\"importMode\":\"ImportStandard\"},\"materialRemaps\":[{\"source\":{\"type\":\"UnityEngine.Material\",\"name\":\"Body\"},\"target\":{\"guid\":\"...\",\"localIdentifier\":\"2100000\"}}]}",
             ResponseExample = "{\"schemaVersion\":1,\"guid\":\"...\",\"assetPath\":\"Assets/Models/robot.fbx\",\"reimported\":true,\"changedFields\":[\"model.isReadable\"],\"diagnostics\":[],\"rollback\":null}")]
         private void Update(UnionAirRequestContext ctx)
             => new ModelImporterHandler().HandleUpdate(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
