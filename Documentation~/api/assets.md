@@ -684,6 +684,8 @@ Returns a ScriptableObject asset together with all readable serialized propertie
 
 Creates a new ScriptableObject asset. The type is resolved via reflection at runtime, so any project-defined ScriptableObject subclass is supported — no package changes required.
 
+When `properties` is present, it follows the same all-or-nothing validation as PATCH: every key must be unique, name a writable serialized property, and carry a compatible JSON value. A rejected request does not create the asset.
+
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
 
@@ -722,6 +724,7 @@ Creates a new ScriptableObject asset. The type is resolved via reflection at run
 | Status | Cause |
 |--------|-------|
 | 400 | Required fields are missing, `assetPath` does not end with `.asset` or does not start with `Assets/`, type not found, type is not a ScriptableObject, or type is abstract |
+| 400 | An initial `properties` key is duplicated, names no writable serialized property, or carries a value of the wrong shape |
 | 403 | Asset Write category is disabled |
 | 409 | Asset already exists at the specified path, or the Unity Editor is in Play mode |
 
@@ -729,7 +732,13 @@ Creates a new ScriptableObject asset. The type is resolved via reflection at run
 
 ## PATCH /api/assets/scriptableobjects
 
-Updates serialized properties on an existing ScriptableObject asset. Array and nested generic properties are silently skipped.
+Updates serialized properties on an existing ScriptableObject asset.
+
+Every key in `properties` must be unique and name a property this endpoint can write, and only keys at the top level are read — a name appearing inside another property's value is part of that value, not a request to write it. A duplicate key, a key that names nothing, one that names something unwritable, or one carrying a value of the wrong shape answers `400` and says which key and why. `updated` therefore always lists every key the request sent. Arrays, nested generic types, and `m_Script` cannot be written; sending one is an error rather than a no-op. An empty `properties` object is accepted and updates nothing.
+
+Color and vector objects are partial patches: omitted members retain their current values. At least one supported member must be present, every supplied member must be a JSON number, and unknown or duplicate members are rejected.
+
+ObjectReference values accept only `assetGuid`, `assetPath`, and optional `assetType`; unknown or duplicate members are rejected.
 
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
@@ -751,7 +760,7 @@ Updates serialized properties on an existing ScriptableObject asset. Array and n
 }
 ```
 
-For ObjectReference fields, supply an object with `assetGuid` or `assetPath`. To clear a reference, use `null`.
+For ObjectReference fields, supply an object with `assetGuid` or `assetPath` and optional `assetType`. Unknown or duplicate members are rejected. To clear a reference, use `null`.
 
 ```json
 { "properties": { "primaryWeapon": null } }
@@ -772,7 +781,11 @@ For ObjectReference fields, supply an object with `assetGuid` or `assetPath`. To
 
 | Status | Cause |
 |--------|-------|
-| 400 | `guid` is missing, asset is not a ScriptableObject, `properties` field is missing, or a property value is malformed |
+| 400 | `guid` is missing, asset is not a ScriptableObject, `properties` is missing, a property value is malformed, or a composite value contains an unknown member |
+| 400 | A key in `properties` names no serialized property on the asset |
+| 400 | A key in `properties`, or a member of a color, vector, or object reference value, is duplicated |
+| 400 | A key names a property this endpoint cannot write: an array, a nested generic type, `m_Script`, or a serialized type with no write support |
+| 400 | A value does not match the shape its property takes |
 | 404 | No asset found for the given GUID |
 | 403 | Asset Write category is disabled |
 | 409 | Unity Editor is in Play mode |

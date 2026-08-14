@@ -571,6 +571,12 @@ If `scenePath` is omitted, the active scene is used.
 
 Each key in `properties` is a `SerializedProperty.propertyPath`. Top-level field names are still accepted for compatibility.
 
+Every key must be unique and name a property this endpoint can write, and only keys at the top level of `properties` are read — a name appearing inside another property's value is part of that value, not a request to write it. A duplicate key, a key that names nothing, one that names something unwritable, or one carrying a value of the wrong shape answers `400` and says which key and why, rather than being passed over. `updated` therefore always lists every key the request sent, and a `200` means the whole request was applied. An empty `properties` object is accepted and updates nothing.
+
+Arrays, nested generic types, and `m_Script` are among the properties this endpoint cannot write. Sending one is an error, not a no-op. That covers an array's parts as well as the array itself: `m_Materials.Array.data[0]` and `m_Materials.Array.size` are refused for the same reason `m_Materials` is.
+
+Color and vector objects are partial patches: omitted members retain their current values. At least one supported member must be present, every supplied member must be a JSON number, and unknown or duplicate members are rejected.
+
 Supported object reference values:
 
 | Shape | Description |
@@ -584,6 +590,7 @@ Supported object reference values:
 | `{ "assetPath": "Assets/Data/config.txt", "assetType": "UnityEngine.TextAsset" }` | Assigns an asset by path |
 
 `assetType` is optional for asset references. When provided, it must resolve to a `UnityEngine.Object` type and the resolved object must be assignable to both that type and the serialized field type.
+Object reference objects accept only the members shown in the supported shapes above; unknown or duplicate members are rejected.
 
 ### Response
 
@@ -602,7 +609,12 @@ Supported object reference values:
 | Status | Cause |
 |-----------|------|
 | 400 | `target` is missing or malformed, `properties` is missing, or `type` is an unknown component name |
-| 400 | An object reference payload is malformed, or a requested type cannot be resolved |
+| 400 | An object reference payload is malformed, contains an unknown or duplicate member, or requests a type that cannot be resolved |
+| 400 | A key in `properties` names no serialized property on the component |
+| 400 | A key in `properties`, or a member of a color, vector, or object reference value, is duplicated |
+| 400 | A key names a property this endpoint cannot write: an array, a nested generic type, `m_Script`, or a serialized type with no write support |
+| 400 | A value does not match the shape its property takes — a number sent as a string, a vector sent as a scalar |
+| 400 | The value of a key is not well-formed JSON |
 | 404 | The GameObject, component, or asset does not exist |
 | 422 | `target` resolves to a GameObject but `type` was not provided; or the resolved object is not assignable to the requested type or field type |
 | 403 | Scene Write category is disabled |

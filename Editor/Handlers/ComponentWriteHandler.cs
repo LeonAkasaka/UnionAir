@@ -14,6 +14,11 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class ComponentWriteHandler
     {
+        private static readonly string[] ObjectReferenceFields =
+        {
+            "type", "value", "scenePath", "assetGuid", "assetPath", "assetType"
+        };
+
         public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             switch (request.HttpMethod)
@@ -140,6 +145,29 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            var so = new SerializedObject(comp);
+
+            // Every key the request sent has to be accounted for, so the names are needed before
+            // the write rather than after it: a key that names no property is the client's typo,
+            // and answering 200 with it missing from "updated" is not an answer a client can act on.
+            if (!RequestBodyReader.TryGetTopLevelFieldNames(
+                    propertiesJson, out var requestedKeys, out var keyError))
+            {
+                RestResponse.SendError(response, $"Invalid 'properties': {keyError}", 400);
+                return;
+            }
+            var unmatched = SerializedPropertySerializer.FindUnmatchedKey(
+                so, propertiesJson, true, requestedKeys);
+            if (unmatched != null)
+            {
+                RestResponse.SendError(
+                    response,
+                    $"No serialized property named '{unmatched}' on {typeName}. " +
+                    "Send the names GET /api/gameobjects reports for this component.",
+                    400);
+                return;
+            }
+
             var useUndo = !EditorApplication.isPlaying;
             var group = -1;
             if (useUndo)
@@ -147,7 +175,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 group = UndoGroups.Begin("UnionAir: Update Component");
             }
 
-            var so = new SerializedObject(comp);
             var updated = new System.Collections.Generic.List<string>();
 
             // Iterate over serialized properties and attempt to set matching values.
@@ -156,10 +183,18 @@ namespace LeonAkasaka.UnionAir.Editor
             while (iter.NextVisible(enterChildren))
             {
                 enterChildren = true;
-                if (iter.name == "m_Script") continue;
 
                 var jsonKey = FindPropertyKey(propertiesJson, iter);
                 if (jsonKey == null) continue;
+
+                if (iter.name == "m_Script")
+                {
+                    RestResponse.SendError(
+                        response,
+                        $"Property {jsonKey} cannot be written. Remove and add the component to change its script.",
+                        400);
+                    return;
+                }
 
                 string error;
                 int statusCode;
@@ -169,11 +204,8 @@ namespace LeonAkasaka.UnionAir.Editor
                     continue;
                 }
 
-                if (!string.IsNullOrEmpty(error))
-                {
-                    RestResponse.SendError(response, error, statusCode);
-                    return;
-                }
+                RestResponse.SendError(response, error, statusCode);
+                return;
             }
 
             so.ApplyModifiedProperties();
@@ -263,6 +295,13 @@ namespace LeonAkasaka.UnionAir.Editor
         private static bool ApplyPropertyFromJson(
             SerializedProperty prop, string json, string jsonKey, out string error, out int statusCode)
         {
+            // Checked before the dispatch below, because the ObjectReference branch is ours and
+            // would otherwise never see the shared serializer's array guard -- which is how an
+            // array element, an object reference like m_Materials.Array.data[0], was writable.
+            statusCode = 400;
+            error = SerializedPropertySerializer.DescribeUnwritableArray(prop, jsonKey);
+            if (error != null) return false;
+
             // Delegate scalar-type handling to the shared serializer, but handle ObjectReference
             // ourselves so we can also resolve scene-object references (globalObjectId).
             if (prop.propertyType != SerializedPropertyType.ObjectReference)
@@ -284,6 +323,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 error = $"Failed to update property {jsonKey}: {ex.Message}";
                 statusCode = 400;
             }
+            // A caller reports whatever comes back here, so a refusal without a reason would
+            // become an empty error body rather than a message the client can act on.
+            if (string.IsNullOrEmpty(error))
+                error = $"Property {jsonKey} expects null or a JSON object naming an object or an asset.";
             return false;
         }
 
@@ -314,6 +357,13 @@ namespace LeonAkasaka.UnionAir.Editor
             if (rawValue.Length == 0 || rawValue[0] != '{')
             {
                 error = $"Object reference property {jsonKey} must be null or an object.";
+                return false;
+            }
+
+            if (!RequestBodyReader.TryValidateObjectFields(
+                    rawValue, ObjectReferenceFields, out var objectError))
+            {
+                error = $"Invalid object reference property {jsonKey}: {objectError}";
                 return false;
             }
 

@@ -83,35 +83,45 @@ namespace LeonAkasaka.UnionAir.Editor
             // Create instance in memory first, apply properties before saving to disk.
             // This ensures a failed property validation leaves no orphaned asset on disk.
             var instance = ScriptableObject.CreateInstance(type);
-            var updated = new List<string>();
-            var propertiesJson = RequestBodyReader.GetObject(body, "properties");
-            if (!string.IsNullOrEmpty(propertiesJson))
+            try
             {
-                ApplyProperties(instance, propertiesJson, updated, response, out var earlyExit);
-                if (earlyExit) return;
+                var updated = new List<string>();
+                var propertiesJson = RequestBodyReader.GetObject(body, "properties");
+                if (!string.IsNullOrEmpty(propertiesJson))
+                {
+                    ApplyProperties(instance, propertiesJson, updated, response, out var earlyExit);
+                    if (earlyExit) return;
+                }
+
+                // All validation passed — now persist to disk.
+                var dir = System.IO.Path.GetDirectoryName(assetPath).Replace('\\', '/');
+                AssetUtils.EnsureDirectory(dir);
+                AssetDatabase.CreateAsset(instance, assetPath);
+                if (updated.Count > 0) EditorUtility.SetDirty(instance);
+                AssetDatabase.SaveAssets();
+
+                var guid = AssetDatabase.AssetPathToGUID(assetPath);
+                var sb = new StringBuilder();
+                sb.Append("{");
+                sb.Append($"\"guid\":\"{RestResponse.EscapeJson(guid)}\",");
+                sb.Append($"\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",");
+                sb.Append($"\"type\":\"{RestResponse.EscapeJson(typeName)}\",");
+                sb.Append("\"updated\":[");
+                for (int i = 0; i < updated.Count; i++)
+                {
+                    if (i > 0) sb.Append(",");
+                    sb.Append($"\"{RestResponse.EscapeJson(updated[i])}\"");
+                }
+                sb.Append("]}");
+                RestResponse.Send(response, sb.ToString(), 201);
             }
-
-            // All validation passed — now persist to disk.
-            var dir = System.IO.Path.GetDirectoryName(assetPath).Replace('\\', '/');
-            AssetUtils.EnsureDirectory(dir);
-            AssetDatabase.CreateAsset(instance, assetPath);
-            if (updated.Count > 0) EditorUtility.SetDirty(instance);
-            AssetDatabase.SaveAssets();
-
-            var guid = AssetDatabase.AssetPathToGUID(assetPath);
-            var sb = new StringBuilder();
-            sb.Append("{");
-            sb.Append($"\"guid\":\"{RestResponse.EscapeJson(guid)}\",");
-            sb.Append($"\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",");
-            sb.Append($"\"type\":\"{RestResponse.EscapeJson(typeName)}\",");
-            sb.Append("\"updated\":[");
-            for (int i = 0; i < updated.Count; i++)
+            finally
             {
-                if (i > 0) sb.Append(",");
-                sb.Append($"\"{RestResponse.EscapeJson(updated[i])}\"");
+                // Once CreateAsset succeeds, the AssetDatabase owns the instance. Before that,
+                // including every validation rejection, this method owns its native lifetime.
+                if (instance != null && !EditorUtility.IsPersistent(instance))
+                    Object.DestroyImmediate(instance);
             }
-            sb.Append("]}");
-            RestResponse.Send(response, sb.ToString(), 201);
         }
 
         // ── PATCH /api/assets/scriptableobjects?guid= ────────────────────────
@@ -222,7 +232,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Iterates all visible serialized properties on <paramref name="instance"/> and
         /// applies matching values from <paramref name="propertiesJson"/>.
-        /// Array properties are silently skipped.
+        /// Every requested property must be writable and carry a compatible JSON value.
         /// Sets <paramref name="earlyExit"/> to true if a response error was already sent.
         /// </summary>
         private static void ApplyProperties(
@@ -232,15 +242,37 @@ namespace LeonAkasaka.UnionAir.Editor
             UnionAirResponse response,
             out bool earlyExit)
         {
-            earlyExit = false;
+            earlyExit = true;
             var so = new SerializedObject(instance);
+
+            // Every key the request sent has to be accounted for. A key naming no property is
+            // found here rather than in the loop below, which can only report keys it reached.
+            if (!RequestBodyReader.TryGetTopLevelFieldNames(
+                    propertiesJson, out var requestedKeys, out var keyError))
+            {
+                RestResponse.SendError(response, $"Invalid 'properties': {keyError}", 400);
+                return;
+            }
+
+            var typeName = instance.GetType().FullName;
+            var unmatched = SerializedPropertySerializer.FindUnmatchedKey(
+                so, propertiesJson, false, requestedKeys);
+            if (unmatched != null)
+            {
+                RestResponse.SendError(
+                    response,
+                    $"No serialized property named '{unmatched}' on {typeName}. " +
+                    "Send the names GET /api/assets/scriptableobjects/{guid} reports for this asset.",
+                    400);
+                return;
+            }
+
             var iter = so.GetIterator();
             bool enterChildren = true;
 
             while (iter.NextVisible(enterChildren))
             {
                 enterChildren = false; // visit top-level properties only; do not descend into children
-                if (iter.name == "m_Script") continue;
 
                 // Try both the simple name and full propertyPath as JSON keys, top-level only:
                 // a key nested inside another property's value is not a key this request sent.
@@ -253,6 +285,16 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 if (jsonKey == null) continue;
 
+                if (iter.name == "m_Script")
+                {
+                    RestResponse.SendError(
+                        response,
+                        $"Property {jsonKey} cannot be written. The script a ScriptableObject " +
+                        "asset instantiates is fixed when the asset is created.",
+                        400);
+                    return;
+                }
+
                 if (SerializedPropertySerializer.ApplyPropertyFromJson(
                         iter, propertiesJson, jsonKey, out var error, out var statusCode))
                 {
@@ -260,15 +302,12 @@ namespace LeonAkasaka.UnionAir.Editor
                     continue;
                 }
 
-                if (!string.IsNullOrEmpty(error))
-                {
-                    RestResponse.SendError(response, error, statusCode);
-                    earlyExit = true;
-                    return;
-                }
+                RestResponse.SendError(response, error, statusCode);
+                return;
             }
 
             so.ApplyModifiedProperties();
+            earlyExit = false;
         }
     }
 }
