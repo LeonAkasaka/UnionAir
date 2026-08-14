@@ -40,6 +40,25 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         // ── A key selects only what it names at the top level ────────────────
 
         [Test]
+        public void ANestedStringValueDoesNotSelectAnotherProperty()
+        {
+            // The historical scanner searched for the quoted property name anywhere, then took
+            // the next colon as its value separator. Keep "type" after "value" so this request
+            // fails if that scanner returns: the value names m_ReceiveShadows exactly, and the
+            // later "type" colon makes the false match complete.
+            _anchor.name = "m_ReceiveShadows";
+            Assert.IsTrue(_renderer.receiveShadows, "fixture expects the Unity default");
+
+            var response = Patch(
+                "{\"properties\":{\"m_ProbeAnchor\":{\"value\":\"" + _anchor.name +
+                "\",\"type\":\"hierarchyPath\"}}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreSame(_anchor.transform, _renderer.probeAnchor);
+            Assert.IsTrue(_renderer.receiveShadows, "the nested name must not have been written");
+        }
+
+        [Test]
         public void AnObjectReferenceWithAnUnknownMemberIsRejected()
         {
             Assert.IsTrue(_renderer.receiveShadows, "fixture expects the Unity default");
