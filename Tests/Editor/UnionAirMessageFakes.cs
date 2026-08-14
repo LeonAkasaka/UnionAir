@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Specialized;
 using System.IO;
+using System.Net;
 using System.Text;
 
 namespace LeonAkasaka.UnionAir.Editor.Tests
@@ -98,6 +99,11 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             return this;
         }
 
+        // Decoded the way the framework's QueryString decodes, so that a handler taking a JSON
+        // object as a query parameter -- ?target={"type":...} -- can be tested at all. WebUtility
+        // rather than Uri.UnescapeDataString because the difference is visible: measured against a
+        // live server on 6000.0.80f1, ?target=...A+B... reaches the handler as "A B", and a fake
+        // that left the '+' alone would pass a test the real server fails.
         private static void ParseQuery(string query, NameValueCollection into)
         {
             if (string.IsNullOrEmpty(query)) return;
@@ -105,8 +111,10 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             {
                 if (pair.Length == 0) continue;
                 var separator = pair.IndexOf('=');
-                if (separator < 0) into.Add(pair, "");
-                else into.Add(pair.Substring(0, separator), pair.Substring(separator + 1));
+                if (separator < 0) into.Add(WebUtility.UrlDecode(pair), "");
+                else into.Add(
+                    WebUtility.UrlDecode(pair.Substring(0, separator)),
+                    WebUtility.UrlDecode(pair.Substring(separator + 1)));
             }
         }
     }

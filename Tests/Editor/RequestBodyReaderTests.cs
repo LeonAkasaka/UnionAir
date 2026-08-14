@@ -90,6 +90,66 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual("[[1,2],[3]]", RequestBodyReader.GetRawArray("{\"grid\":[[1,2],[3]]}", "grid"));
         }
 
+        // ── GetRawValue ─────────────────────────────────────────────────────
+
+        [Test]
+        public void GetRawValue_ReturnsTheTokenWhateverItsType()
+        {
+            const string json = "{\"o\":{\"a\":1},\"a\":[1,2],\"s\":\"x\",\"n\":5,\"z\":null,\"b\":true}";
+            Assert.AreEqual("{\"a\":1}", RequestBodyReader.GetRawValue(json, "o"));
+            Assert.AreEqual("[1,2]", RequestBodyReader.GetRawValue(json, "a"));
+            Assert.AreEqual("\"x\"", RequestBodyReader.GetRawValue(json, "s"));
+            Assert.AreEqual("5", RequestBodyReader.GetRawValue(json, "n"));
+            Assert.AreEqual("null", RequestBodyReader.GetRawValue(json, "z"));
+            Assert.AreEqual("true", RequestBodyReader.GetRawValue(json, "b"));
+        }
+
+        [Test]
+        public void GetRawValue_IgnoresAMatchingKeyInsideANestedObject()
+        {
+            // Component and ScriptableObject writes select which serialized property to write by
+            // this lookup, so a nested match writes a field the request never named.
+            const string json = "{\"outer\":{\"anchor\":{\"type\":\"hierarchyPath\"}}}";
+            Assert.IsNull(RequestBodyReader.GetRawValue(json, "anchor"));
+            Assert.IsFalse(RequestBodyReader.HasTopLevelField(json, "anchor"));
+        }
+
+        [Test]
+        public void GetRawValue_FindsATopLevelKeyThatFollowsANestedOneOfTheSameName()
+        {
+            const string json = "{\"outer\":{\"anchor\":null},\"anchor\":{\"value\":\"Rig\"}}";
+            Assert.AreEqual("{\"value\":\"Rig\"}", RequestBodyReader.GetRawValue(json, "anchor"));
+        }
+
+        [Test]
+        public void GetRawValue_ReadsAValueOnTheNextLine()
+        {
+            Assert.AreEqual("{\"x\":1}", RequestBodyReader.GetRawValue("{\n  \"v\":\n    {\"x\":1}\n}", "v"));
+        }
+
+        [Test]
+        public void GetRawValue_IgnoresAKeyNameInsideAStringLiteral()
+        {
+            const string json = "{\"note\":\"see \\\"anchor\\\": below\"}";
+            Assert.IsNull(RequestBodyReader.GetRawValue(json, "anchor"));
+        }
+
+        [Test]
+        public void GetRawValue_IgnoresAMatchingKeyInsideAnArrayElement()
+        {
+            const string json = "{\"list\":[{\"anchor\":1}]}";
+            Assert.IsNull(RequestBodyReader.GetRawValue(json, "anchor"));
+        }
+
+        [Test]
+        public void GetRawValue_ReturnsNullWhenTheKeyIsAbsent()
+        {
+            Assert.IsNull(RequestBodyReader.GetRawValue("{\"other\":1}", "v"));
+            Assert.IsNull(RequestBodyReader.GetRawValue("", "v"));
+            Assert.IsNull(RequestBodyReader.GetRawValue(null, "v"));
+            Assert.IsNull(RequestBodyReader.GetRawValue("{\"v\":1}", null));
+        }
+
         // ── GetArray anchoring ──────────────────────────────────────────────
 
         [Test]

@@ -589,6 +589,35 @@ namespace LeonAkasaka.UnionAir.Editor
             => !string.IsNullOrEmpty(json) && FindTopLevelKey(json, key) >= 0;
 
         /// <summary>
+        /// Extracts the raw JSON text of a top-level field's value, whatever type that value has.
+        /// Returns null when the key is absent from the top level or its value is malformed.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="GetObject"/> and <see cref="GetRawArray"/> each answer null for a value of the
+        /// wrong shape, which suits a field that accepts one shape. This suits a field that accepts
+        /// several -- an object reference sent as either <c>null</c> or an object -- by handing back
+        /// the token so the caller can tell the shapes apart itself, and report the one it cannot use.
+        /// </remarks>
+        internal static string GetRawValue(string json, string key)
+        {
+            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(key)) return null;
+
+            int keyIdx = FindTopLevelKey(json, key);
+            if (keyIdx < 0) return null;
+
+            int colonIdx = json.IndexOf(':', keyIdx);
+            if (colonIdx < 0) return null;
+
+            int start = colonIdx + 1;
+            SkipWhitespace(json, ref start);
+            if (start >= json.Length) return null;
+
+            int end = start;
+            if (!TrySkipValue(json, ref end)) return null;
+            return json.Substring(start, end - start);
+        }
+
+        /// <summary>
         /// Validates that a JSON object contains only the supplied top-level fields.
         /// </summary>
         /// <remarks>
