@@ -44,6 +44,7 @@
     },
     {
       "type": "UnityEngine.UI.Button",
+      "enabled": true,
       "properties": {
         "m_Interactable": true,
         "m_Transition": 1
@@ -52,6 +53,8 @@
   ]
 }
 ```
+
+`components[].enabled` は、コンポーネントの Inspector ヘッダにあるチェックボックスです。チェックボックスを持たないコンポーネント（`Transform` や `MeshFilter`）では**フィールドごと省略**されるため、「無効になっている」と「無効にできない」を読み手が区別できます。これは `properties` の一つではありません。Unity はこれをコンポーネント本体の外に描画し、`properties` は本体が描画するものだけを載せるためです。書き込みは `PATCH /api/gameobjects/components` の `enabled` フィールドを使います。
 
 `components[].properties` は `SerializedObject` 経由で取得したプロパティです。
 サポートされる `SerializedPropertyType`: `bool`、`int`、`float`、`string`、`Color`、`Vector2/3/4`、`Rect`、`ObjectReference`。配列は同じ型ルールに従う要素を持つ JSON 配列としてシリアライズされます。その他の型は `null` になります。
@@ -568,9 +571,19 @@ GameObject を別の親に移動します。
     "target": { "type": "componentPath", "value": "Canvas/Button:UnityEngine.UI.Text", "scenePath": "Assets/Scenes/Level_A.unity" },
     "textAsset": { "assetPath": "Assets/Data/config.txt", "assetType": "UnityEngine.TextAsset" },
     "optionalTarget": null
-  }
+  },
+  "enabled": false
 }
 ```
+
+| フィールド | 必須 | 説明 |
+|-----------|------|------|
+| `properties` | 条件付き | 書き込むシリアライズプロパティ。`enabled` を省略する場合は必須 |
+| `enabled` | 条件付き | Inspector ヘッダのチェックボックス。`properties` を省略する場合は必須 |
+
+どちらか一方、または両方を送ります。どちらも無いボディは `400` です。
+
+`enabled` が `properties` のキーではなく独立したフィールドなのは、チェックボックスがこのエンドポイントの扱えるプロパティではないためです。Unity はこれをコンポーネント本体ではなくヘッダに描画し、`properties` は本体が描画するものにしか届きません。`m_Enabled` をプロパティキーとして送った場合は `400` になり、その旨を返します。チェックボックスを持たないコンポーネント（`Transform`、`MeshFilter`）には有効状態が無いため、`enabled` は型名を挙げて `400` になります。
 
 `properties` の各キーは `SerializedProperty.propertyPath` です。互換性のため、トップレベルのフィールド名も引き続き受け付けます。
 
@@ -603,15 +616,19 @@ Color および Vector オブジェクトは部分更新です。省略したメ
   "globalObjectId": "GlobalObjectId_V1-...",
   "component": "UnityEngine.Light",
   "componentGlobalObjectId": "GlobalObjectId_V1-...",
+  "enabled": false,
   "updated": ["m_Intensity", "m_Color"]
 }
 ```
+
+`enabled` は、リクエストが設定したかどうかに関わらず書き込み後の状態を返し、有効状態を持たないコンポーネントでは省略されます。`updated` が列挙するのは `properties` のキーだけです。
 
 ### エラー
 
 | ステータス | 原因 |
 |-----------|------|
-| 400 | `target` の欠落・不正な形式、`properties` の欠落、または `type` が未知のコンポーネント名 |
+| 400 | `target` の欠落・不正な形式、`type` が未知のコンポーネント名、またはボディに `properties` と `enabled` のどちらも無い |
+| 400 | `enabled` が JSON の真偽値でない、または対象のコンポーネント型が有効状態を持たない |
 | 400 | オブジェクト参照ペイロードが不正、不明または重複したメンバーを含む、または要求された型を解決できない |
 | 400 | `properties` のキーが、コンポーネント上のどのシリアライズプロパティも指していない |
 | 400 | `properties` のキー、または Color / Vector / オブジェクト参照値のメンバーが重複している |

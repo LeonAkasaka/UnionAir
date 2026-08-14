@@ -494,13 +494,13 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Updates serialized component properties. Query: target={\\\"type\\\":\\\"componentPath\\\",\\\"value\\\":\\\"Path:ComponentType\\\"}. Alternatively, target a GameObject with hierarchyPath and add ?type=ComponentName. Every key in 'properties' must be unique and name a writable Unity serialized property with a compatible JSON value; composite value objects reject unknown or duplicate members.",
+            Summary = "Updates serialized component properties and the Inspector header checkbox. Query: target={\\\"type\\\":\\\"componentPath\\\",\\\"value\\\":\\\"Path:ComponentType\\\"}. Alternatively, target a GameObject with hierarchyPath and add ?type=ComponentName. Every key in 'properties' must be unique and name a writable Unity serialized property with a compatible JSON value; composite value objects reject unknown or duplicate members. 'enabled' is a field of its own because the checkbox is not a property this endpoint can address.",
             RequiredQuery = new string[] { "target" },
             OptionalQuery = new string[] { "scenePath", "allowWhilePlaying" },
-            RequiredBody = new string[] { "properties" },
+            RequiredBody = new string[] { "properties or enabled" },
             OptionalBody = new string[] { "allowWhilePlaying" },
-            RequestExample = "{\"properties\":{\"m_Mass\":1.0,\"m_UseGravity\":true,\"m_IsKinematic\":false}}",
-            ResponseExample = "{\"path\":\"Ball\",\"globalObjectId\":\"...\",\"component\":\"UnityEngine.Rigidbody\",\"componentGlobalObjectId\":\"...\",\"updated\":[\"m_Mass\",\"m_UseGravity\",\"m_IsKinematic\"]}")]
+            RequestExample = "{\"properties\":{\"m_Mass\":1.0,\"m_UseGravity\":true,\"m_IsKinematic\":false},\"enabled\":false}",
+            ResponseExample = "{\"path\":\"Ball\",\"globalObjectId\":\"...\",\"component\":\"UnityEngine.Rigidbody\",\"componentGlobalObjectId\":\"...\",\"enabled\":false,\"updated\":[\"m_Mass\",\"m_UseGravity\",\"m_IsKinematic\"]}")]
         private void Update(UnionAirRequestContext ctx)
             => new ComponentWriteHandler().Handle(ctx.Request, ctx.Response);
     }

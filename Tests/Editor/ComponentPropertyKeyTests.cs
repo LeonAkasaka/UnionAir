@@ -261,6 +261,80 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.IsFalse(_renderer.receiveShadows);
         }
 
+        // ── The Inspector header checkbox ────────────────────────────────────
+
+        [Test]
+        public void EnabledIsWritableAsItsOwnField()
+        {
+            Assert.IsTrue(_renderer.enabled, "fixture expects the Unity default");
+
+            var response = Patch("{\"enabled\":false}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            StringAssert.Contains("\"enabled\":false", response.Body);
+            Assert.IsFalse(_renderer.enabled);
+        }
+
+        [Test]
+        public void EnabledAndPropertiesTravelInOneRequest()
+        {
+            var response = Patch("{\"properties\":{\"m_ReceiveShadows\":false},\"enabled\":false}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.IsFalse(_renderer.enabled);
+            Assert.IsFalse(_renderer.receiveShadows);
+        }
+
+        [Test]
+        public void EnabledIsReportedEvenWhenTheRequestDidNotSetIt()
+        {
+            var response = Patch("{\"properties\":{\"m_ReceiveShadows\":false}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            StringAssert.Contains("\"enabled\":true", response.Body);
+        }
+
+        [Test]
+        public void EnabledIsRejectedOnAComponentThatHasNoCheckbox()
+        {
+            // Transform shows no checkbox, and has no m_Enabled behind one.
+            var response = Patch("{\"enabled\":false}", "UnityEngine.Transform");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("no enabled state", response.Body);
+        }
+
+        [Test]
+        public void EnabledRejectsANonBooleanValue()
+        {
+            var response = Patch("{\"enabled\":\"false\"}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("JSON boolean", response.Body);
+            Assert.IsTrue(_renderer.enabled);
+        }
+
+        [Test]
+        public void ARequestCarryingNeitherFieldIsRejected()
+        {
+            var response = Patch("{}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("'enabled'", response.Body);
+        }
+
+        [Test]
+        public void MEnabledSentAsAPropertyKeySaysWhereTheCheckboxLives()
+        {
+            // The name is real and serialized, but it is not in the walk this endpoint addresses,
+            // so the message has to point somewhere rather than only deny the name.
+            var response = Patch("{\"properties\":{\"m_Enabled\":false}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("'enabled' field", response.Body);
+            Assert.IsTrue(_renderer.enabled);
+        }
+
         [Test]
         public void TheFixtureDecodesItsQueryTheWayTheServerDoes()
         {

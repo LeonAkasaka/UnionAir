@@ -138,34 +138,72 @@ namespace LeonAkasaka.UnionAir.Editor
             var path = GameObjectUtils.GetPath(go);
 
             var body = RequestBodyReader.ReadString(request);
-            var propertiesJson = RequestBodyReader.GetObject(body, "properties");
-            if (string.IsNullOrEmpty(propertiesJson))
+
+            // 'enabled' is the checkbox in the Inspector header. Unity draws it outside the
+            // component body, so it is absent from the walk 'properties' addresses and cannot be
+            // reached by any key. It is its own field for that reason, and either field alone is
+            // a complete request.
+            if (!RequestBodyReader.TryGetBoolValue(body, "enabled", out var enabledValue, out var enabledPresent))
             {
-                RestResponse.SendError(response, "Missing required field: properties", 400);
+                RestResponse.SendError(response, "Field 'enabled' must be a JSON boolean.", 400);
+                return;
+            }
+
+            var propertiesJson = RequestBodyReader.GetObject(body, "properties");
+            var hasProperties = !string.IsNullOrEmpty(propertiesJson);
+            if (!hasProperties && RequestBodyReader.HasTopLevelField(body, "properties"))
+            {
+                RestResponse.SendError(response, "Field 'properties' must be a JSON object.", 400);
+                return;
+            }
+            if (!hasProperties && !enabledPresent)
+            {
+                RestResponse.SendError(
+                    response, "Missing required field: send 'properties', 'enabled', or both.", 400);
                 return;
             }
 
             var so = new SerializedObject(comp);
 
-            // Every key the request sent has to be accounted for, so the names are needed before
-            // the write rather than after it: a key that names no property is the client's typo,
-            // and answering 200 with it missing from "updated" is not an answer a client can act on.
-            if (!RequestBodyReader.TryGetTopLevelFieldNames(
-                    propertiesJson, out var requestedKeys, out var keyError))
+            SerializedProperty enabledProp = null;
+            if (enabledPresent)
             {
-                RestResponse.SendError(response, $"Invalid 'properties': {keyError}", 400);
-                return;
+                enabledProp = ComponentEnabledState.Find(so);
+                if (enabledProp == null)
+                {
+                    RestResponse.SendError(
+                        response,
+                        $"{typeName} has no enabled state. Only a component that shows a checkbox " +
+                        "in its Inspector header can be enabled or disabled.",
+                        400);
+                    return;
+                }
             }
-            var unmatched = SerializedPropertySerializer.FindUnmatchedKey(
-                so, propertiesJson, true, requestedKeys);
-            if (unmatched != null)
+
+            System.Collections.Generic.List<string> requestedKeys = null;
+            if (hasProperties)
             {
-                RestResponse.SendError(
-                    response,
-                    $"No serialized property named '{unmatched}' on {typeName}. " +
-                    "Send the names GET /api/gameobjects reports for this component.",
-                    400);
-                return;
+                // Every key the request sent has to be accounted for, so the names are needed before
+                // the write rather than after it: a key that names no property is the client's typo,
+                // and answering 200 with it missing from "updated" is not an answer a client can act on.
+                if (!RequestBodyReader.TryGetTopLevelFieldNames(
+                        propertiesJson, out requestedKeys, out var keyError))
+                {
+                    RestResponse.SendError(response, $"Invalid 'properties': {keyError}", 400);
+                    return;
+                }
+                var unmatched = SerializedPropertySerializer.FindUnmatchedKey(
+                    so, propertiesJson, true, requestedKeys);
+                if (unmatched != null)
+                {
+                    RestResponse.SendError(
+                        response,
+                        $"No serialized property named '{unmatched}' on {typeName}. " +
+                        "Send the names GET /api/gameobjects reports for this component. " +
+                        "The Inspector header checkbox is the 'enabled' field, not a property.",
+                        400);
+                    return;
+                }
             }
 
             var useUndo = !EditorApplication.isPlaying;
@@ -180,7 +218,7 @@ namespace LeonAkasaka.UnionAir.Editor
             // Iterate over serialized properties and attempt to set matching values.
             var iter = so.GetIterator();
             bool enterChildren = true;
-            while (iter.NextVisible(enterChildren))
+            while (hasProperties && iter.NextVisible(enterChildren))
             {
                 enterChildren = true;
 
@@ -208,6 +246,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return;
             }
 
+            if (enabledProp != null) enabledProp.boolValue = enabledValue;
+
             so.ApplyModifiedProperties();
             if (useUndo)
                 Undo.CollapseUndoOperations(group);
@@ -219,6 +259,13 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(go))}\",");
             sb.Append($"\"component\":\"{RestResponse.EscapeJson(typeName)}\",");
             sb.Append($"\"componentGlobalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(comp))}\",");
+
+            // Reported whether or not this request set it, so the response describes the component
+            // the same way the read does, and omitted for a component that has no checkbox.
+            var enabledAfter = ComponentEnabledState.Read(comp);
+            if (enabledAfter.HasValue)
+                sb.Append($"\"enabled\":{RestResponse.FormatBool(enabledAfter.Value)},");
+
             sb.Append("\"updated\":[");
             for (int i = 0; i < updated.Count; i++)
             {

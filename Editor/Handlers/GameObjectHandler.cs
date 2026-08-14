@@ -65,6 +65,13 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("{");
             sb.Append($"\"type\":\"{RestResponse.EscapeJson(component.GetType().FullName)}\",");
             sb.Append($"\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(component))}\",");
+
+            // Omitted rather than defaulted for a component that has no checkbox, so that a reader
+            // can tell "this cannot be disabled" from "this is disabled".
+            var enabled = ComponentEnabledState.Read(component);
+            if (enabled.HasValue)
+                sb.Append($"\"enabled\":{RestResponse.FormatBool(enabled.Value)},");
+
             sb.Append("\"properties\":{");
 
             try
