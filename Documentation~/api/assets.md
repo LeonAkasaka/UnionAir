@@ -729,7 +729,9 @@ Creates a new ScriptableObject asset. The type is resolved via reflection at run
 
 ## PATCH /api/assets/scriptableobjects
 
-Updates serialized properties on an existing ScriptableObject asset. Array and nested generic properties are silently skipped.
+Updates serialized properties on an existing ScriptableObject asset.
+
+Every key in `properties` must name a property this endpoint can write, and only keys at the top level are read — a name appearing inside another property's value is part of that value, not a request to write it. A key that names nothing, names something unwritable, or carries a value of the wrong shape answers `400` and says which key and why. `updated` therefore always lists every key the request sent. Arrays, nested generic types, and `m_Script` cannot be written; sending one is an error rather than a no-op. An empty `properties` object is accepted and updates nothing.
 
 > Can be called only when the Asset Write category is enabled.
 > Returns `409 Conflict` in Play mode.
@@ -773,6 +775,9 @@ For ObjectReference fields, supply an object with `assetGuid` or `assetPath`. To
 | Status | Cause |
 |--------|-------|
 | 400 | `guid` is missing, asset is not a ScriptableObject, `properties` field is missing, or a property value is malformed |
+| 400 | A key in `properties` names no serialized property on the asset |
+| 400 | A key names a property this endpoint cannot write: an array, a nested generic type, `m_Script`, or a serialized type with no write support |
+| 400 | A value does not match the shape its property takes |
 | 404 | No asset found for the given GUID |
 | 403 | Asset Write category is disabled |
 | 409 | Unity Editor is in Play mode |

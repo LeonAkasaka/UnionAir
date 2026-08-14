@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -131,19 +132,27 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Tries to apply the value for <paramref name="jsonKey"/> from <paramref name="json"/>
         /// to <paramref name="prop"/>.  Returns <c>true</c> if the property was updated.
-        /// <paramref name="error"/> is non-null only when the value was found but could not be applied.
-        /// Array properties are silently skipped (returns <c>false</c> with no error).
         /// </summary>
+        /// <remarks>
+        /// Every <c>false</c> carries an <paramref name="error"/> saying why. A caller sends a key
+        /// only after matching it to this property, so a value that cannot be applied is a request
+        /// to reject and not a property to pass over: the alternative is answering <c>200</c> for a
+        /// write that did not happen, which is what a client cannot see.
+        /// </remarks>
         public static bool ApplyPropertyFromJson(
             SerializedProperty prop, string json, string jsonKey, out string error, out int statusCode)
         {
             error = null;
             statusCode = 400;
 
-            // Skip array/list properties silently.
-            // Note: Unity represents string as a char array internally, so prop.isArray is true
-            // for string fields — we must not skip those, as they are handled by the String case below.
-            if (prop.isArray && prop.propertyType != SerializedPropertyType.String) return false;
+            // Unity represents string as a char array internally, so prop.isArray is true for
+            // string fields — those are handled by the String case below and must not land here.
+            if (prop.isArray && prop.propertyType != SerializedPropertyType.String)
+            {
+                error = $"Property {jsonKey} is an array. Arrays and nested generic properties " +
+                        "cannot be written through this endpoint.";
+                return false;
+            }
 
             try
             {
@@ -153,6 +162,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     {
                         var v = RequestBodyReader.GetBool(json, jsonKey);
                         if (v.HasValue) { prop.boolValue = v.Value; return true; }
+                        error = Expected(jsonKey, "a JSON boolean");
                         break;
                     }
                     case SerializedPropertyType.Integer:
@@ -161,18 +171,21 @@ namespace LeonAkasaka.UnionAir.Editor
                     {
                         var v = RequestBodyReader.GetInt(json, jsonKey);
                         if (v.HasValue) { prop.intValue = v.Value; return true; }
+                        error = Expected(jsonKey, "a JSON integer");
                         break;
                     }
                     case SerializedPropertyType.Float:
                     {
                         var v = RequestBodyReader.GetFloat(json, jsonKey);
                         if (v.HasValue) { prop.floatValue = v.Value; return true; }
+                        error = Expected(jsonKey, "a JSON number");
                         break;
                     }
                     case SerializedPropertyType.String:
                     {
                         var v = RequestBodyReader.GetString(json, jsonKey);
                         if (v != null) { prop.stringValue = v; return true; }
+                        error = Expected(jsonKey, "a JSON string");
                         break;
                     }
                     case SerializedPropertyType.Color:
@@ -187,6 +200,7 @@ namespace LeonAkasaka.UnionAir.Editor
                             prop.colorValue = new Color(r, g, b, a);
                             return true;
                         }
+                        error = Expected(jsonKey, "a JSON object with r, g, b, and a members");
                         break;
                     }
                     case SerializedPropertyType.Vector2:
@@ -199,6 +213,7 @@ namespace LeonAkasaka.UnionAir.Editor
                             prop.vector2Value = new Vector2(x, y);
                             return true;
                         }
+                        error = Expected(jsonKey, "a JSON object with x and y members");
                         break;
                     }
                     case SerializedPropertyType.Vector3:
@@ -212,6 +227,7 @@ namespace LeonAkasaka.UnionAir.Editor
                             prop.vector3Value = new Vector3(x, y, z);
                             return true;
                         }
+                        error = Expected(jsonKey, "a JSON object with x, y, and z members");
                         break;
                     }
                     case SerializedPropertyType.Vector4:
@@ -226,6 +242,7 @@ namespace LeonAkasaka.UnionAir.Editor
                             prop.vector4Value = new Vector4(x, y, z, w);
                             return true;
                         }
+                        error = Expected(jsonKey, "a JSON object with x, y, z, and w members");
                         break;
                     }
                     case SerializedPropertyType.ObjectReference:
@@ -236,6 +253,17 @@ namespace LeonAkasaka.UnionAir.Editor
                             prop.objectReferenceValue = value;
                             return true;
                         }
+                        if (error == null)
+                            error = Expected(jsonKey, "null or a JSON object naming an object or an asset");
+                        break;
+                    }
+                    default:
+                    {
+                        // Read-only by omission rather than by decision: Quaternion, Rect and Bounds
+                        // are serialized by the read direction and have no write case here. Saying
+                        // so beats reporting the write as done.
+                        error = $"Property {jsonKey} has serialized type {prop.propertyType}, " +
+                                "which this endpoint cannot write.";
                         break;
                     }
                 }
@@ -246,6 +274,46 @@ namespace LeonAkasaka.UnionAir.Editor
                 statusCode = 400;
             }
             return false;
+        }
+
+        private static string Expected(string jsonKey, string shape)
+            => $"Property {jsonKey} expects {shape}.";
+
+        /// <summary>
+        /// Returns the first of <paramref name="requestedKeys"/> that names no serialized property
+        /// on <paramref name="so"/>, or null when every key names one.
+        /// </summary>
+        /// <remarks>
+        /// The write loop can only report keys it reached. A key that matches nothing is never
+        /// reached at all, so it has to be found by walking the properties once against the keys
+        /// the request sent. <paramref name="descendIntoChildren"/> mirrors the caller's own walk,
+        /// because a key is addressable exactly when that walk would visit the property.
+        ///
+        /// Matching is on <c>propertyPath</c> alone, which is what both write loops select by. A
+        /// child's bare <c>name</c> must not count: <c>x</c> is the name of the child of every
+        /// vector property, and accepting it here while the loop looks for <c>m_LocalPosition.x</c>
+        /// would let <c>{"x": 5}</c> through the gate and then apply to nothing -- answering 200
+        /// for a write that did not happen, which is the whole failure this check exists to end.
+        /// </remarks>
+        internal static string FindUnmatchedKey(
+            SerializedObject so,
+            string propertiesJson,
+            bool descendIntoChildren,
+            IEnumerable<string> requestedKeys)
+        {
+            var matched = new HashSet<string>(StringComparer.Ordinal);
+            var iter = so.GetIterator();
+            var enterChildren = true;
+            while (iter.NextVisible(enterChildren))
+            {
+                enterChildren = descendIntoChildren;
+                if (RequestBodyReader.HasTopLevelField(propertiesJson, iter.propertyPath))
+                    matched.Add(iter.propertyPath);
+            }
+
+            foreach (var key in requestedKeys)
+                if (!matched.Contains(key)) return key;
+            return null;
         }
 
         // ── ObjectReference resolution ────────────────────────────────────────

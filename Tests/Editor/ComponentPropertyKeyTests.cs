@@ -5,15 +5,15 @@ using UnityEngine;
 namespace LeonAkasaka.UnionAir.Editor.Tests
 {
     /// <summary>
-    /// Covers which serialized property a <c>properties</c> key selects on
-    /// <c>PATCH /api/gameobjects/components</c>.
+    /// Covers what a key in <c>properties</c> selects, and what happens to one that selects
+    /// nothing writable, on <c>PATCH /api/gameobjects/components</c>.
     /// </summary>
     /// <remarks>
-    /// The selection used to be a substring search over the whole body, so a key appearing only
-    /// inside another property's value -- and every object reference, vector and colour payload is
-    /// full of them -- named a field the client never asked to write. The two negative cases below
-    /// are the two ways that escaped: one wrote a field, the other failed the whole request over a
-    /// field it should not have looked at. Both are measured requests, not invented ones.
+    /// Two defects meet here. A key used to be matched by a substring search over the whole body,
+    /// so a name appearing inside another property's value selected a field the client never asked
+    /// for. And a key that selected nothing was passed over in silence, so a typo, a number sent as
+    /// a string, and an array all answered 200 with an empty <c>updated</c> — a write that did not
+    /// happen, reported as success. The requests below are measured ones.
     /// </remarks>
     internal sealed class ComponentPropertyKeyTests
     {
@@ -37,29 +37,146 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             if (_anchor != null) UnityEngine.Object.DestroyImmediate(_anchor);
         }
 
+        // ── A key selects only what it names at the top level ────────────────
+
         [Test]
-        public void AKeyOnlyInsideANestedObjectDoesNotWriteTheField()
+        public void ANestedKeyDoesNotSelectAnotherProperty()
+        {
+            // One valid top-level key whose value carries the name of a second real property.
+            // The substring search read that name as requested and wrote it; the object reference
+            // parser ignores members it does not know, so the request itself stays valid.
+            Assert.IsTrue(_renderer.receiveShadows, "fixture expects the Unity default");
+
+            var response = Patch(
+                "{\"properties\":{\"m_ProbeAnchor\":{\"type\":\"hierarchyPath\",\"value\":\"" +
+                _anchor.name + "\",\"m_ReceiveShadows\":false}}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreSame(_anchor.transform, _renderer.probeAnchor);
+            Assert.IsTrue(_renderer.receiveShadows, "the nested name must not have been written");
+        }
+
+        [Test]
+        public void AKeyNamingNothingIsRejectedEvenWhenItNestsRealNames()
         {
             var response = Patch(
                 "{\"properties\":{\"decoy\":{\"m_ProbeAnchor\":" +
                 "{\"type\":\"hierarchyPath\",\"value\":\"" + _anchor.name + "\"}}}}");
 
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("decoy", response.Body);
+            Assert.IsNull(_renderer.probeAnchor);
+        }
+
+        // ── Every key sent is accounted for ──────────────────────────────────
+
+        [Test]
+        public void AKeyNamingNoPropertyIsRejected()
+        {
+            var response = Patch("{\"properties\":{\"decoy\":1}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("decoy", response.Body);
+            StringAssert.Contains("UnityEngine.MeshRenderer", response.Body);
+        }
+
+        [Test]
+        public void AChildPropertysBareNameIsRejected()
+        {
+            // "x" is the name of the child of every vector property, and its propertyPath is
+            // "m_LocalPosition.x". The write loop addresses children by path, so a gate that
+            // accepted the bare name let this through and then applied it to nothing.
+            var response = Patch("{\"properties\":{\"x\":5}}", "UnityEngine.Transform");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("'x'", response.Body);
+        }
+
+        [Test]
+        public void AChildPropertysFullPathStillWrites()
+        {
+            var response = Patch(
+                "{\"properties\":{\"m_LocalPosition.x\":5}}", "UnityEngine.Transform");
+
             Assert.AreEqual(200, response.StatusCode, response.Body);
-            StringAssert.Contains("\"updated\":[]", response.Body);
+            Assert.AreEqual(5f, _target.transform.localPosition.x);
+        }
+
+        [Test]
+        public void AValueOfTheWrongTypeIsRejected()
+        {
+            // A client that JSON-encodes its numbers and booleans as strings used to get a 200
+            // for a request that changed nothing.
+            var response = Patch("{\"properties\":{\"m_ReceiveShadows\":\"false\"}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("JSON boolean", response.Body);
+            Assert.IsTrue(_renderer.receiveShadows);
+        }
+
+        [Test]
+        public void AnArrayPropertyIsRejected()
+        {
+            var response = Patch("{\"properties\":{\"m_Materials\":[]}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("array", response.Body);
+        }
+
+        [Test]
+        public void APropertyWhoseSerializedTypeHasNoWriteSupportIsRejected()
+        {
+            // Rect is serialized by the read direction and has no write case, so this used to
+            // report a viewport as set that was never touched. Quaternion and Bounds are the
+            // same shape of gap. A built-in component carries one, which matters here: Unity
+            // refuses to attach a MonoBehaviour compiled into an Editor-only assembly, so this
+            // test assembly cannot supply a component of its own.
+            _target.AddComponent<Camera>();
+
+            var response = Patch(
+                "{\"properties\":{\"m_NormalizedViewPortRect\":" +
+                "{\"x\":0,\"y\":0,\"width\":0.5,\"height\":1}}}",
+                "UnityEngine.Camera");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("Rect", response.Body);
+        }
+
+        [Test]
+        public void AnUnreadableValueIsReportedWithItsKey()
+        {
+            // An unescaped Windows path. Naming the key beats reporting the body as malformed,
+            // because the key is the part the client has to fix.
+            var response = Patch(
+                "{\"properties\":{\"m_ProbeAnchor\":{\"assetPath\":\"C:\\Assets\\Foo.mat\"}}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("m_ProbeAnchor", response.Body);
             Assert.IsNull(_renderer.probeAnchor);
         }
 
         [Test]
-        public void AKeyOnlyInsideANestedObjectDoesNotFailTheRequest()
+        public void ARejectedRequestWritesNothingItAlreadyAccepted()
         {
-            // The nested value is not a legal object reference. Reading it at all answered 400 and
-            // discarded every other property in the same request.
-            var response = Patch("{\"properties\":{\"decoy\":{\"m_ProbeAnchor\":5}}}");
+            // m_ReceiveShadows is visited before m_Materials, so it is applied to the
+            // SerializedObject before the array is refused. Nothing may reach the component.
+            var response = Patch("{\"properties\":{\"m_ReceiveShadows\":false,\"m_Materials\":[]}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            Assert.IsTrue(_renderer.receiveShadows, "a refused request must not half-apply");
+        }
+
+        [Test]
+        public void AnEmptyPropertiesObjectIsAccepted()
+        {
+            // Nothing was sent, so nothing is unaccounted for.
+            var response = Patch("{\"properties\":{}}");
 
             Assert.AreEqual(200, response.StatusCode, response.Body);
             StringAssert.Contains("\"updated\":[]", response.Body);
-            Assert.IsNull(_renderer.probeAnchor);
         }
+
+        // ── The writes that must keep working ────────────────────────────────
 
         [Test]
         public void ATopLevelKeyStillWritesAnObjectReference()
@@ -86,33 +203,6 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
-        public void ATopLevelKeyIsStillFoundBesideANestedObjectCarryingTheSameName()
-        {
-            // The top-level key comes second here: a scanner that stops at the first match finds
-            // the nested one, which is the shape the substring search failed on.
-            var response = Patch(
-                "{\"properties\":{\"decoy\":{\"m_ProbeAnchor\":null},\"m_ProbeAnchor\":" +
-                "{\"type\":\"hierarchyPath\",\"value\":\"" + _anchor.name + "\"}}}");
-
-            Assert.AreEqual(200, response.StatusCode, response.Body);
-            Assert.AreSame(_anchor.transform, _renderer.probeAnchor);
-        }
-
-        [Test]
-        public void AnUnreadableObjectReferenceValueIsReported()
-        {
-            // An unescaped Windows path. The strict scanner cannot read the value, and the key is
-            // known to be there -- it is how this property was selected -- so this is a malformed
-            // request rather than an absent field, and answering 200 would hide a lost write.
-            var response = Patch(
-                "{\"properties\":{\"m_ProbeAnchor\":{\"assetPath\":\"C:\\Assets\\Foo.mat\"}}}");
-
-            Assert.AreEqual(400, response.StatusCode, response.Body);
-            StringAssert.Contains("m_ProbeAnchor", response.Body);
-            Assert.IsNull(_renderer.probeAnchor);
-        }
-
-        [Test]
         public void TheFixtureDecodesItsQueryTheWayTheServerDoes()
         {
             // This file is the only place a JSON object travels through the query string, so the
@@ -124,10 +214,10 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual("Assets/C++", request.QueryString["path"]);
         }
 
-        private FakeResponse Patch(string body)
+        private FakeResponse Patch(string body, string component = "UnityEngine.MeshRenderer")
         {
             var target = "{\"type\":\"componentPath\",\"value\":\"" +
-                         _target.name + ":UnityEngine.MeshRenderer\"}";
+                         _target.name + ":" + component + "\"}";
             var request = new FakeRequest(
                     "PATCH",
                     "/api/gameobjects/components?target=" + Uri.EscapeDataString(target))

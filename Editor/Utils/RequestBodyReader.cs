@@ -618,6 +618,55 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
+        /// Lists the field names at the top level of a JSON object, in the order they appear.
+        /// Returns false when the text is not a well-formed JSON object.
+        /// </summary>
+        /// <remarks>
+        /// The complement of <see cref="HasTopLevelField"/>: that answers "was this field sent",
+        /// this answers "what was sent", which is what an endpoint needs to tell a client that a
+        /// field it sent was never used. Duplicates are preserved rather than rejected, because
+        /// which fields are acceptable is the caller's question and not this method's.
+        /// <paramref name="malformedField"/> names the field whose value could not be read, when
+        /// that is what went wrong, so the caller can point at the part the client has to fix
+        /// rather than calling the whole object malformed.
+        /// </remarks>
+        internal static bool TryGetTopLevelFieldNames(
+            string json, out List<string> names, out string malformedField)
+        {
+            names = new List<string>();
+            malformedField = null;
+            if (string.IsNullOrEmpty(json)) return false;
+
+            int position = 0;
+            SkipWhitespace(json, ref position);
+            if (position >= json.Length || json[position] != '{') return false;
+            position++;
+
+            while (true)
+            {
+                SkipWhitespace(json, ref position);
+                if (position >= json.Length) return false;
+                if (json[position] == '}') return true;
+
+                string field;
+                if (!TryReadJsonString(json, ref position, out field)) return false;
+                names.Add(field);
+
+                SkipWhitespace(json, ref position);
+                if (position >= json.Length || json[position] != ':') return false;
+                position++;
+                SkipWhitespace(json, ref position);
+                if (!TrySkipValue(json, ref position)) { malformedField = field; return false; }
+
+                SkipWhitespace(json, ref position);
+                if (position >= json.Length) return false;
+                if (json[position] == '}') return true;
+                if (json[position] != ',') return false;
+                position++;
+            }
+        }
+
+        /// <summary>
         /// Validates that a JSON object contains only the supplied top-level fields.
         /// </summary>
         /// <remarks>

@@ -494,13 +494,13 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Updates serialized component properties. Query: target={\\\"type\\\":\\\"componentPath\\\",\\\"value\\\":\\\"Path:ComponentType\\\"}. Alternatively, target a GameObject with hierarchyPath and add ?type=ComponentName. Use Unity serialized property names.",
+            Summary = "Updates serialized component properties. Query: target={\\\"type\\\":\\\"componentPath\\\",\\\"value\\\":\\\"Path:ComponentType\\\"}. Alternatively, target a GameObject with hierarchyPath and add ?type=ComponentName. Every key in 'properties' is a Unity serialized property name and must name a writable one.",
             RequiredQuery = new string[] { "target" },
             OptionalQuery = new string[] { "scenePath", "allowWhilePlaying" },
             RequiredBody = new string[] { "properties" },
             OptionalBody = new string[] { "allowWhilePlaying" },
-            RequestExample = "{\"properties\":{\"Rigidbody\":{\"m_Mass\":1.0,\"m_UseGravity\":true,\"m_IsKinematic\":false}}}",
-            ResponseExample = "{\"updated\":[\"Rigidbody\"],\"target\":\"Ball\"}")]
+            RequestExample = "{\"properties\":{\"m_Mass\":1.0,\"m_UseGravity\":true,\"m_IsKinematic\":false}}",
+            ResponseExample = "{\"path\":\"Ball\",\"globalObjectId\":\"...\",\"component\":\"UnityEngine.Rigidbody\",\"componentGlobalObjectId\":\"...\",\"updated\":[\"m_Mass\",\"m_UseGravity\",\"m_IsKinematic\"]}")]
         private void Update(UnionAirRequestContext ctx)
             => new ComponentWriteHandler().Handle(ctx.Request, ctx.Response);
     }
@@ -669,9 +669,11 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Updates serialized properties on a ScriptableObject. Arrays and unsupported generic types are skipped.",
+            Summary = "Updates serialized properties on a ScriptableObject. Every key in 'properties' must name a writable serialized property; arrays and unsupported generic types are rejected.",
             RequiredQuery = new string[] { "guid" },
-            RequiredBody = new string[] { "properties" })]
+            RequiredBody = new string[] { "properties" },
+            RequestExample = "{\"properties\":{\"displayName\":\"Fireball\",\"cooldown\":2.5}}",
+            ResponseExample = "{\"guid\":\"...\",\"assetPath\":\"Assets/Data/Skill.asset\",\"type\":\"SkillDefinition\",\"updated\":[\"displayName\",\"cooldown\"]}")]
         private void Update(UnionAirRequestContext ctx)
             => new ScriptableObjectWriteHandler().Handle(ctx.Request, ctx.Response);
 

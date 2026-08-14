@@ -571,6 +571,10 @@ If `scenePath` is omitted, the active scene is used.
 
 Each key in `properties` is a `SerializedProperty.propertyPath`. Top-level field names are still accepted for compatibility.
 
+Every key must name a property this endpoint can write, and only keys at the top level of `properties` are read — a name appearing inside another property's value is part of that value, not a request to write it. A key that names nothing, names something unwritable, or carries a value of the wrong shape answers `400` and says which key and why, rather than being passed over. `updated` therefore always lists every key the request sent, and a `200` means the whole request was applied. An empty `properties` object is accepted and updates nothing.
+
+Arrays, nested generic types, and `m_Script` are among the properties this endpoint cannot write. Sending one is an error, not a no-op.
+
 Supported object reference values:
 
 | Shape | Description |
@@ -603,6 +607,10 @@ Supported object reference values:
 |-----------|------|
 | 400 | `target` is missing or malformed, `properties` is missing, or `type` is an unknown component name |
 | 400 | An object reference payload is malformed, or a requested type cannot be resolved |
+| 400 | A key in `properties` names no serialized property on the component |
+| 400 | A key names a property this endpoint cannot write: an array, a nested generic type, `m_Script`, or a serialized type with no write support |
+| 400 | A value does not match the shape its property takes — a number sent as a string, a vector sent as a scalar |
+| 400 | The value of a key is not well-formed JSON |
 | 404 | The GameObject, component, or asset does not exist |
 | 422 | `target` resolves to a GameObject but `type` was not provided; or the resolved object is not assignable to the requested type or field type |
 | 403 | Scene Write category is disabled |

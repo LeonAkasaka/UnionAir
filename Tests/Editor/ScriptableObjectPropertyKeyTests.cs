@@ -1,0 +1,124 @@
+using System;
+using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
+
+namespace LeonAkasaka.UnionAir.Editor.Tests
+{
+    /// <summary>
+    /// The same key accounting as <see cref="ComponentPropertyKeyTests"/>, on the second write
+    /// path. It runs its own loop over a different iteration, so a fix applied only to components
+    /// leaves this endpoint answering 200 for writes that did not happen.
+    /// </summary>
+    internal sealed class ScriptableObjectPropertyKeyTests
+    {
+        private const string Dir = "Assets/UnionAirPropertyKeyTests";
+        private const string AssetPath = Dir + "/Fixture.asset";
+
+        private string _guid;
+        private UnionAirPropertyKeyFixture _asset;
+
+        [SetUp]
+        public void CreateAsset()
+        {
+            if (!AssetDatabase.IsValidFolder(Dir))
+                AssetDatabase.CreateFolder("Assets", "UnionAirPropertyKeyTests");
+
+            AssetDatabase.DeleteAsset(AssetPath);
+            AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<UnionAirPropertyKeyFixture>(), AssetPath);
+            AssetDatabase.SaveAssets();
+
+            _guid = AssetDatabase.AssetPathToGUID(AssetPath);
+            _asset = AssetDatabase.LoadAssetAtPath<UnionAirPropertyKeyFixture>(AssetPath);
+        }
+
+        [TearDown]
+        public void DeleteAsset()
+        {
+            AssetDatabase.DeleteAsset(Dir);
+        }
+
+        [Test]
+        public void AKeyNamingNoPropertyIsRejected()
+        {
+            var response = Patch("{\"properties\":{\"dispalyName\":\"typo\"}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("dispalyName", response.Body);
+            Assert.AreEqual("start", _asset.displayName);
+        }
+
+        [Test]
+        public void AValueOfTheWrongTypeIsRejected()
+        {
+            var response = Patch("{\"properties\":{\"cooldown\":\"2.5\"}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("JSON number", response.Body);
+            Assert.AreEqual(1f, _asset.cooldown);
+        }
+
+        [Test]
+        public void AnArrayPropertyIsRejected()
+        {
+            // Documented as silently skipped until now, which meant a caller sending an array
+            // could not tell the write apart from one that worked.
+            var response = Patch("{\"properties\":{\"tags\":[\"a\"]}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("array", response.Body);
+        }
+
+        [Test]
+        public void ANestedKeyDoesNotSelectAnotherProperty()
+        {
+            // "cooldown" appears only inside the value of another field.
+            var response = Patch("{\"properties\":{\"displayName\":\"{\\\"cooldown\\\":9}\"}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(1f, _asset.cooldown, "the nested name must not have been written");
+        }
+
+        [Test]
+        public void ATopLevelKeyStillWrites()
+        {
+            var response = Patch("{\"properties\":{\"displayName\":\"Fireball\",\"cooldown\":2.5}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual("Fireball", _asset.displayName);
+            Assert.AreEqual(2.5f, _asset.cooldown);
+        }
+
+        [Test]
+        public void WritingTheScriptIsRejected()
+        {
+            // m_Script exists on a ScriptableObject and on a MonoBehaviour, and on no built-in
+            // component -- so this is the path where refusing it is reachable at all.
+            var response = Patch("{\"properties\":{\"m_Script\":null}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("cannot be written", response.Body);
+        }
+
+        [Test]
+        public void AnEmptyPropertiesObjectIsAccepted()
+        {
+            var response = Patch("{\"properties\":{}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            StringAssert.Contains("\"updated\":[]", response.Body);
+        }
+
+        private FakeResponse Patch(string body)
+        {
+            var request = new FakeRequest(
+                    "PATCH",
+                    "/api/assets/scriptableobjects?guid=" + Uri.EscapeDataString(_guid))
+                .WithJsonBody(body);
+            var response = new FakeResponse();
+
+            new ScriptableObjectWriteHandler().Handle(request, response);
+            return response;
+        }
+    }
+}

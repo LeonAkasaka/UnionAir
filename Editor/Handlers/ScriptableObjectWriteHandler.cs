@@ -232,15 +232,42 @@ namespace LeonAkasaka.UnionAir.Editor
             UnionAirResponse response,
             out bool earlyExit)
         {
-            earlyExit = false;
+            earlyExit = true;
             var so = new SerializedObject(instance);
+
+            // Every key the request sent has to be accounted for. A key naming no property is
+            // found here rather than in the loop below, which can only report keys it reached.
+            if (!RequestBodyReader.TryGetTopLevelFieldNames(
+                    propertiesJson, out var requestedKeys, out var malformedKey))
+            {
+                RestResponse.SendError(
+                    response,
+                    malformedKey != null
+                        ? $"The value of '{malformedKey}' in 'properties' is not well-formed JSON."
+                        : "'properties' is not a well-formed JSON object.",
+                    400);
+                return;
+            }
+
+            var typeName = instance.GetType().FullName;
+            var unmatched = SerializedPropertySerializer.FindUnmatchedKey(
+                so, propertiesJson, false, requestedKeys);
+            if (unmatched != null)
+            {
+                RestResponse.SendError(
+                    response,
+                    $"No serialized property named '{unmatched}' on {typeName}. " +
+                    "Send the names GET /api/assets/scriptableobjects/{guid} reports for this asset.",
+                    400);
+                return;
+            }
+
             var iter = so.GetIterator();
             bool enterChildren = true;
 
             while (iter.NextVisible(enterChildren))
             {
                 enterChildren = false; // visit top-level properties only; do not descend into children
-                if (iter.name == "m_Script") continue;
 
                 // Try both the simple name and full propertyPath as JSON keys, top-level only:
                 // a key nested inside another property's value is not a key this request sent.
@@ -253,6 +280,16 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 if (jsonKey == null) continue;
 
+                if (iter.name == "m_Script")
+                {
+                    RestResponse.SendError(
+                        response,
+                        $"Property {jsonKey} cannot be written. The script a ScriptableObject " +
+                        "asset instantiates is fixed when the asset is created.",
+                        400);
+                    return;
+                }
+
                 if (SerializedPropertySerializer.ApplyPropertyFromJson(
                         iter, propertiesJson, jsonKey, out var error, out var statusCode))
                 {
@@ -260,15 +297,12 @@ namespace LeonAkasaka.UnionAir.Editor
                     continue;
                 }
 
-                if (!string.IsNullOrEmpty(error))
-                {
-                    RestResponse.SendError(response, error, statusCode);
-                    earlyExit = true;
-                    return;
-                }
+                RestResponse.SendError(response, error, statusCode);
+                return;
             }
 
             so.ApplyModifiedProperties();
+            earlyExit = false;
         }
     }
 }
