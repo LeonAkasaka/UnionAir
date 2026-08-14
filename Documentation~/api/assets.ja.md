@@ -1108,3 +1108,89 @@ unchanged request は `reimported: false` と空の diagnostics 配列を返し�
 | 500 | normalization の書き込み、reimport が失敗、または reimport 後に importer が消失 |
 
 ---
+
+## GET /api/assets/model-importer/{guid}
+
+アセットの `ModelImporter` 基本設定と永続的なインポート済みサブアセットを、
+バージョン付きの正規化形式で返します。この Read エンドポイントはアセット更新中に
+利用できません。
+
+```json
+{
+  "schemaVersion": 1,
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Models/robot.fbx",
+  "capabilities": {
+    "unityVersion": "6000.0.80f1",
+    "useFileUnits": true,
+    "tangentImport": true,
+    "bakeIk": true
+  },
+  "settings": {
+    "model": { "globalScale": 1.0, "fileScale": 1.0, "useFileScale": true, "useFileUnits": true, "bakeAxisConversion": false, "preserveHierarchy": false, "isReadable": false },
+    "mesh": { "compression": "Off", "indexFormat": "Auto", "keepQuads": false, "weldVertices": true, "skinWeights": "Standard", "maxBonesPerVertex": 4, "minBoneWeight": 0.001, "optimizePolygons": true, "optimizeVertices": true },
+    "geometry": { "addCollider": false, "importBlendShapes": true, "importCameras": true, "importLights": true, "importVisibility": true, "importConstraints": true, "swapUvChannels": false, "generateSecondaryUv": false, "secondaryUvMarginMethod": "Manual", "secondaryUvAngleDistortion": 8.0, "secondaryUvAreaDistortion": 15.0, "secondaryUvHardAngle": 88.0, "secondaryUvPackMargin": 4.0 },
+    "normals": { "import": "Import", "blendShapeImport": "Calculate", "calculationMode": "AreaAndAngleWeighted", "smoothingSource": "PreferSmoothingGroups", "smoothingAngle": 60.0 },
+    "tangents": { "import": "CalculateMikk" }
+  },
+  "subAssets": [{ "guid": "a1b2c3...", "localIdentifier": "4300000", "name": "Body", "type": "UnityEngine.Mesh" }]
+}
+```
+
+`fileScale` は読み取り専用です。`subAssets` には `AssetDatabase.IsSubAsset` が
+true のインポート済み `Mesh`、`Material`、`Avatar`、`AnimationClip` が入り、
+プレビューオブジェクトは除外されます。64 bit 精度を失わないよう
+`localIdentifier` は10進文字列です。永続的な識別には `(guid, localIdentifier)`
+を使用します。
+
+---
+
+## POST /api/assets/model-importer/{guid}/preflight
+
+PATCH の契約を検証し、変更やインポートをせずに `valid`、`reimportRequired`、
+`changedFields`、正規化された `before` と `after` の設定を返します。
+
+```json
+{
+  "schemaVersion": 1,
+  "model": { "globalScale": 1.0, "isReadable": true },
+  "normals": { "import": "Calculate" },
+  "tangents": { "import": "CalculateMikk" }
+}
+```
+
+`schemaVersion` は必須で整数 `1` です。空でない設定グループが1つ以上必要です。
+各グループは部分更新で、省略フィールドは現在値を維持します。未知または重複した
+フィールドと不正な JSON 型は拒否されます。enum は GET が返す名前を大文字小文字を
+区別せず受け付けます。
+
+| Group | 書き込み可能なフィールド |
+|-------|---------------------------|
+| `model` | `globalScale` (`> 0`、`<= 100000`)、`useFileScale`、`useFileUnits`、`bakeAxisConversion`、`preserveHierarchy`、`isReadable` |
+| `mesh` | `compression`、`indexFormat`、`keepQuads`、`weldVertices`、`skinWeights`、`maxBonesPerVertex` (`1..255`)、`minBoneWeight` (`0..1`)、`optimizePolygons`、`optimizeVertices` |
+| `geometry` | `addCollider`、`importBlendShapes`、`importCameras`、`importLights`、`importVisibility`、`importConstraints`、`swapUvChannels`、`generateSecondaryUv`、`secondaryUvMarginMethod`、`secondaryUvAngleDistortion` (`1..75`)、`secondaryUvAreaDistortion` (`1..75`)、`secondaryUvHardAngle` (`0..180`)、`secondaryUvPackMargin` (`1..64`) |
+| `normals` | `import`、`blendShapeImport`、`calculationMode`、`smoothingSource`、`smoothingAngle` (`0..180`) |
+| `tangents` | `import` |
+
+`useFileUnits` と tangent import はソースの capability に対しても検証されます。
+normal が `None` の場合、tangent も `None` でなければなりません。
+
+---
+
+## PATCH /api/assets/model-importer/{guid}
+
+preflight の契約を適用し、`SaveAndReimport()` を最大1回呼びます。変更がなければ
+再インポートせず `reimported: false` を返します。変更時のレスポンスには完全な
+設定とサブアセットを持つ `before` と `after`、`subAssetDelta`、`diagnostics`、
+`rollback` が含まれます。再インポートが例外になった場合、元の設定の復元を試み、
+構造化された rollback 結果とともに `500` を返します。
+
+| ステータス | 原因 |
+|-------------|------|
+| 400 | 不正な schema、フィールド、型、範囲、enum、組み合わせ、capability、または Model 以外のアセット |
+| 403 | Asset Write カテゴリが無効 |
+| 404 | 指定 GUID のアセットがない |
+| 409 | Play mode、競合 activity、ロード済み Scene の競合、または編集不能な Importer |
+| 500 | 再インポート失敗、または再インポート後に Importer が見つからない |
+
+---
