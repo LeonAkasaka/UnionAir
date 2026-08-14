@@ -41,6 +41,7 @@ If `scenePath` is omitted, the active scene is used.
     },
     {
       "type": "UnityEngine.UI.Button",
+      "enabled": true,
       "properties": {
         "m_Interactable": true,
         "m_Transition": 1
@@ -49,6 +50,8 @@ If `scenePath` is omitted, the active scene is used.
   ]
 }
 ```
+
+`components[].enabled` is the checkbox in the component's Inspector header. It is omitted for a component that has none — a `Transform` or a `MeshFilter` shows no checkbox — so that a reader can tell "this cannot be disabled" from "this is disabled". It is not one of `properties`: Unity draws it outside the component body, and `properties` carries only what the body draws. Write it through the `enabled` field of `PATCH /api/gameobjects/components`.
 
 `components[].properties` are properties obtained via `SerializedObject`.
 Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Color`, `Vector2/3/4`, `Rect`, `ObjectReference`. Arrays are serialized as JSON arrays whose elements follow the same type rules. Other types are `null`.
@@ -565,9 +568,19 @@ If `scenePath` is omitted, the active scene is used.
     "target": { "type": "componentPath", "value": "Canvas/Button:UnityEngine.UI.Text", "scenePath": "Assets/Scenes/Level_A.unity" },
     "textAsset": { "assetPath": "Assets/Data/config.txt", "assetType": "UnityEngine.TextAsset" },
     "optionalTarget": null
-  }
+  },
+  "enabled": false
 }
 ```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `properties` | Conditional | Serialized properties to write. Required when `enabled` is omitted |
+| `enabled` | Conditional | The Inspector header checkbox. Required when `properties` is omitted |
+
+Send either field or both; a body carrying neither answers `400`.
+
+`enabled` is a field of its own rather than a key in `properties` because the checkbox is not a property this endpoint can address: Unity draws it in the component header rather than in the body, and `properties` reaches only what the body draws. Sending `m_Enabled` as a property key answers `400` and says so. A component that shows no checkbox — a `Transform`, a `MeshFilter` — has no enabled state, and `enabled` answers `400` naming the type.
 
 Each key in `properties` is a `SerializedProperty.propertyPath`. Top-level field names are still accepted for compatibility.
 
@@ -600,15 +613,19 @@ Object reference objects accept only the members shown in the supported shapes a
   "globalObjectId": "GlobalObjectId_V1-...",
   "component": "UnityEngine.Light",
   "componentGlobalObjectId": "GlobalObjectId_V1-...",
+  "enabled": false,
   "updated": ["m_Intensity", "m_Color"]
 }
 ```
+
+`enabled` reports the state after the write whether or not the request set it, and is omitted for a component that has none. `updated` lists `properties` keys only.
 
 ### Errors
 
 | Status | Cause |
 |-----------|------|
-| 400 | `target` is missing or malformed, `properties` is missing, or `type` is an unknown component name |
+| 400 | `target` is missing or malformed, `type` is an unknown component name, or the body carries neither `properties` nor `enabled` |
+| 400 | `enabled` is not a JSON boolean, or the target component type has no enabled state |
 | 400 | An object reference payload is malformed, contains an unknown or duplicate member, or requests a type that cannot be resolved |
 | 400 | A key in `properties` names no serialized property on the component |
 | 400 | A key in `properties`, or a member of a color, vector, or object reference value, is duplicated |
