@@ -192,13 +192,14 @@ namespace LeonAkasaka.UnionAir.Editor
                     RestResponse.SendError(response, $"Invalid 'properties': {keyError}", 400);
                     return;
                 }
-                var unmatched = SerializedPropertySerializer.FindUnmatchedKey(
-                    so, propertiesJson, true, requestedKeys);
-                if (unmatched != null)
+                var unwritable = SerializedPropertySerializer.FindUnwritableKey(
+                    so, propertiesJson, true, requestedKeys, out var reason);
+                if (unwritable != null)
                 {
                     RestResponse.SendError(
                         response,
-                        $"No serialized property named '{unmatched}' on {typeName}. " +
+                        reason ??
+                        $"No serialized property named '{unwritable}' on {typeName}. " +
                         "Send the names GET /api/gameobjects reports for this component. " +
                         "The Inspector header checkbox is the 'enabled' field, not a property.",
                         400);
@@ -222,6 +223,15 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 enterChildren = true;
 
+                // An array and everything inside it is written by the pass below, which resolves
+                // an element from its array instead of from wherever this walk reaches, and does
+                // not resize an array while a walk over it is in progress.
+                if (SerializedPropertySerializer.IsWritableAsArray(iter))
+                {
+                    enterChildren = false;
+                    continue;
+                }
+
                 var jsonKey = FindPropertyKey(propertiesJson, iter);
                 if (jsonKey == null) continue;
 
@@ -243,6 +253,15 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
 
                 RestResponse.SendError(response, error, statusCode);
+                return;
+            }
+
+            if (hasProperties &&
+                !SerializedPropertySerializer.TryApplyArrayKeys(
+                    so, propertiesJson, requestedKeys, ApplyPropertyFromJson, updated,
+                    out var arrayError, out var arrayStatusCode))
+            {
+                RestResponse.SendError(response, arrayError, arrayStatusCode);
                 return;
             }
 
@@ -339,18 +358,14 @@ namespace LeonAkasaka.UnionAir.Editor
             return null;
         }
 
+        // Also the element writer the array pass calls: an element of m_Materials resolves a scene
+        // object exactly as m_ProbeAnchor does, and would not if the shared serializer handled it.
         private static bool ApplyPropertyFromJson(
             SerializedProperty prop, string json, string jsonKey, out string error, out int statusCode)
         {
-            // Checked before the dispatch below, because the ObjectReference branch is ours and
-            // would otherwise never see the shared serializer's array guard -- which is how an
-            // array element, an object reference like m_Materials.Array.data[0], was writable.
-            statusCode = 400;
-            error = SerializedPropertySerializer.DescribeUnwritableArray(prop, jsonKey);
-            if (error != null) return false;
-
             // Delegate scalar-type handling to the shared serializer, but handle ObjectReference
             // ourselves so we can also resolve scene-object references (globalObjectId).
+            statusCode = 400;
             if (prop.propertyType != SerializedPropertyType.ObjectReference)
                 return SerializedPropertySerializer.ApplyPropertyFromJson(prop, json, jsonKey, out error, out statusCode);
 

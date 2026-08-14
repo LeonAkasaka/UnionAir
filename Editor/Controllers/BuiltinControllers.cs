@@ -494,7 +494,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Updates serialized component properties and the Inspector header checkbox. Query: target={\\\"type\\\":\\\"componentPath\\\",\\\"value\\\":\\\"Path:ComponentType\\\"}. Alternatively, target a GameObject with hierarchyPath and add ?type=ComponentName. Every key in 'properties' must be unique and name a writable Unity serialized property with a compatible JSON value; composite value objects reject unknown or duplicate members. 'enabled' is a field of its own because the checkbox is not a property this endpoint can address.",
+            Summary = "Updates serialized component properties and the Inspector header checkbox. Query: target={\\\"type\\\":\\\"componentPath\\\",\\\"value\\\":\\\"Path:ComponentType\\\"}. Alternatively, target a GameObject with hierarchyPath and add ?type=ComponentName. Every key in 'properties' must be unique and name a writable Unity serialized property with a compatible JSON value; composite value objects reject unknown or duplicate members. An array is written whole as a JSON array, one element at a time as 'name.Array.data[i]', or resized as 'name.Array.size'. 'enabled' is a field of its own because the checkbox is not a property this endpoint can address.",
             RequiredQuery = new string[] { "target" },
             OptionalQuery = new string[] { "scenePath", "allowWhilePlaying" },
             RequiredBody = new string[] { "properties or enabled" },
@@ -652,7 +652,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
         [UnionAirEndpoint("GET", "{guid}",
             Category = UnionAirEndpointCategories.Read,
-            Summary = "Returns a ScriptableObject asset with all readable serialized properties. Arrays are returned as null.",
+            Summary = "Returns a ScriptableObject asset with all readable serialized properties. An array is returned as a JSON array whose elements follow the same type rules.",
             PathParams = new string[] { "guid" })]
         private void Detail(UnionAirRequestContext ctx)
             => new ScriptableObjectReadHandler().Handle(ctx.Request, ctx.Response);
@@ -671,7 +671,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Updates serialized properties on a ScriptableObject. Every key in 'properties' must be unique and name a writable serialized property with a compatible JSON value; composite value objects reject unknown or duplicate members, and arrays and unsupported generic types are rejected.",
+            Summary = "Updates serialized properties on a ScriptableObject. Every key in 'properties' must be unique and name a writable serialized property with a compatible JSON value; composite value objects reject unknown or duplicate members, and unsupported generic types are rejected. An array is written whole as a JSON array, one element at a time as 'name.Array.data[i]', or resized as 'name.Array.size'.",
             RequiredQuery = new string[] { "guid" },
             RequiredBody = new string[] { "properties" },
             RequestExample = "{\"properties\":{\"displayName\":\"Fireball\",\"cooldown\":2.5}}",

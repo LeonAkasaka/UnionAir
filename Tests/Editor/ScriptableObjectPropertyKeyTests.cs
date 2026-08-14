@@ -133,15 +133,82 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual(1f, _asset.cooldown);
         }
 
+        // ── The three array addresses ────────────────────────────────────────
+
         [Test]
-        public void AnArrayPropertyIsRejected()
+        public void AWholeArrayIsReplaced()
         {
-            // Documented as silently skipped until now, which meant a caller sending an array
-            // could not tell the write apart from one that worked.
-            var response = Patch("{\"properties\":{\"tags\":[\"a\"]}}");
+            var response = Patch("{\"properties\":{\"tags\":[\"fire\",\"aoe\"]}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            StringAssert.Contains("\"tags\"", response.Body);
+            CollectionAssert.AreEqual(new[] { "fire", "aoe" }, _asset.tags);
+        }
+
+        [Test]
+        public void AnArrayElementIsWrittenInPlace()
+        {
+            // This endpoint walks top-level properties only, so it never reached an element path
+            // and reported one as naming nothing. The address resolves through the array instead.
+            Patch("{\"properties\":{\"tags\":[\"fire\",\"aoe\"]}}");
+
+            var response = Patch("{\"properties\":{\"tags.Array.data[1]\":\"single\"}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            CollectionAssert.AreEqual(new[] { "fire", "single" }, _asset.tags);
+        }
+
+        [Test]
+        public void AnArraySizeResizes()
+        {
+            var response = Patch("{\"properties\":{\"tags.Array.size\":3}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(3, _asset.tags.Length);
+        }
+
+        [Test]
+        public void AnObjectReferenceElementResolvesAnAsset()
+        {
+            var response = Patch(
+                "{\"properties\":{\"references\":[{\"assetPath\":\"" + AssetPath + "\"}]}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(1, _asset.references.Length);
+            Assert.AreSame(_asset, _asset.references[0]);
+        }
+
+        [Test]
+        public void AnArrayOfUnwritableElementsIsRejectedForWhatItHolds()
+        {
+            var response = Patch("{\"properties\":{\"entries\":[]}}");
 
             Assert.AreEqual(400, response.StatusCode, response.Body);
-            StringAssert.Contains("array", response.Body);
+            StringAssert.Contains("entries", response.Body);
+            StringAssert.Contains("cannot write", response.Body);
+            Assert.AreEqual(1, _asset.entries.Length, "clearing must not have reached the asset");
+        }
+
+        [Test]
+        public void AnArrayOfUnwritableElementsIsRejectedForWhatAResizeWouldGiveIt()
+        {
+            // Empty, so there is nothing to inspect until the resize has happened. Refusing only
+            // on the way in would let an empty array of unwritable elements be filled.
+            var response = Patch("{\"properties\":{\"spares\":[{\"hp\":1}]}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("spares", response.Body);
+            StringAssert.Contains("cannot write", response.Body);
+            Assert.AreEqual(0, _asset.spares.Length);
+        }
+
+        [Test]
+        public void AnUnwritableElementTypeIsRefusedThroughItsLengthToo()
+        {
+            var response = Patch("{\"properties\":{\"spares.Array.size\":2}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            Assert.AreEqual(0, _asset.spares.Length);
         }
 
         [Test]
@@ -190,7 +257,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             var transientCountBefore = CountTransientFixtures();
             var body = "{\"typeName\":\"" + typeof(UnionAirPropertyKeyFixture).FullName +
                        "\",\"assetPath\":\"" + CreatedAssetPath +
-                       "\",\"properties\":{\"tags\":[\"a\"]}}";
+                       "\",\"properties\":{\"entries\":[{\"hp\":1}]}}";
             var request = new FakeRequest("POST", "/api/assets/scriptableobjects")
                 .WithJsonBody(body);
             var response = new FakeResponse();
