@@ -14,6 +14,11 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class ComponentWriteHandler
     {
+        private static readonly string[] ObjectReferenceFields =
+        {
+            "type", "value", "scenePath", "assetGuid", "assetPath", "assetType"
+        };
+
         public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             switch (request.HttpMethod)
@@ -345,6 +350,13 @@ namespace LeonAkasaka.UnionAir.Editor
             if (rawValue.Length == 0 || rawValue[0] != '{')
             {
                 error = $"Object reference property {jsonKey} must be null or an object.";
+                return false;
+            }
+
+            if (!RequestBodyReader.TryValidateObjectFields(
+                    rawValue, ObjectReferenceFields, out var objectError))
+            {
+                error = $"Invalid object reference property {jsonKey}: {objectError}";
                 return false;
             }
 

@@ -590,6 +590,7 @@ Supported object reference values:
 | `{ "assetPath": "Assets/Data/config.txt", "assetType": "UnityEngine.TextAsset" }` | Assigns an asset by path |
 
 `assetType` is optional for asset references. When provided, it must resolve to a `UnityEngine.Object` type and the resolved object must be assignable to both that type and the serialized field type.
+Object reference objects accept only the members shown in the supported shapes above; unknown or duplicate members are rejected.
 
 ### Response
 
@@ -608,9 +609,9 @@ Supported object reference values:
 | Status | Cause |
 |-----------|------|
 | 400 | `target` is missing or malformed, `properties` is missing, or `type` is an unknown component name |
-| 400 | An object reference payload is malformed, or a requested type cannot be resolved |
+| 400 | An object reference payload is malformed, contains an unknown or duplicate member, or requests a type that cannot be resolved |
 | 400 | A key in `properties` names no serialized property on the component |
-| 400 | A key in `properties`, or a member of a color or vector value, is duplicated |
+| 400 | A key in `properties`, or a member of a color, vector, or object reference value, is duplicated |
 | 400 | A key names a property this endpoint cannot write: an array, a nested generic type, `m_Script`, or a serialized type with no write support |
 | 400 | A value does not match the shape its property takes — a number sent as a string, a vector sent as a scalar |
 | 400 | The value of a key is not well-formed JSON |

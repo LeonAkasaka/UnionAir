@@ -12,6 +12,11 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal static class SerializedPropertySerializer
     {
+        private static readonly string[] AssetObjectReferenceFields =
+        {
+            "assetGuid", "assetPath", "assetType"
+        };
+
         // ── Read direction ────────────────────────────────────────────────────
 
         /// <summary>
@@ -432,6 +437,13 @@ namespace LeonAkasaka.UnionAir.Editor
             if (rawValue.Length == 0 || rawValue[0] != '{')
             {
                 error = $"Object reference property {jsonKey} must be null or an object.";
+                return false;
+            }
+
+            if (!RequestBodyReader.TryValidateObjectFields(
+                    rawValue, AssetObjectReferenceFields, out var objectError))
+            {
+                error = $"Invalid object reference property {jsonKey}: {objectError}";
                 return false;
             }
 

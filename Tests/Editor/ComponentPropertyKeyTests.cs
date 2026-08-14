@@ -40,20 +40,30 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         // ── A key selects only what it names at the top level ────────────────
 
         [Test]
-        public void ANestedKeyDoesNotSelectAnotherProperty()
+        public void AnObjectReferenceWithAnUnknownMemberIsRejected()
         {
-            // One valid top-level key whose value carries the name of a second real property.
-            // The substring search read that name as requested and wrote it; the object reference
-            // parser ignores members it does not know, so the request itself stays valid.
             Assert.IsTrue(_renderer.receiveShadows, "fixture expects the Unity default");
 
             var response = Patch(
                 "{\"properties\":{\"m_ProbeAnchor\":{\"type\":\"hierarchyPath\",\"value\":\"" +
-                _anchor.name + "\",\"m_ReceiveShadows\":false}}}");
+                _anchor.name + "\",\"typo\":1}}}");
 
-            Assert.AreEqual(200, response.StatusCode, response.Body);
-            Assert.AreSame(_anchor.transform, _renderer.probeAnchor);
-            Assert.IsTrue(_renderer.receiveShadows, "the nested name must not have been written");
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("typo", response.Body);
+            Assert.IsNull(_renderer.probeAnchor);
+            Assert.IsTrue(_renderer.receiveShadows);
+        }
+
+        [Test]
+        public void AnObjectReferenceWithADuplicateMemberIsRejected()
+        {
+            var response = Patch(
+                "{\"properties\":{\"m_ProbeAnchor\":{\"type\":\"hierarchyPath\",\"type\":\"componentPath\",\"value\":\"" +
+                _anchor.name + "\"}}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("Duplicate field 'type'", response.Body);
+            Assert.IsNull(_renderer.probeAnchor);
         }
 
         [Test]

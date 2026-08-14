@@ -83,35 +83,45 @@ namespace LeonAkasaka.UnionAir.Editor
             // Create instance in memory first, apply properties before saving to disk.
             // This ensures a failed property validation leaves no orphaned asset on disk.
             var instance = ScriptableObject.CreateInstance(type);
-            var updated = new List<string>();
-            var propertiesJson = RequestBodyReader.GetObject(body, "properties");
-            if (!string.IsNullOrEmpty(propertiesJson))
+            try
             {
-                ApplyProperties(instance, propertiesJson, updated, response, out var earlyExit);
-                if (earlyExit) return;
+                var updated = new List<string>();
+                var propertiesJson = RequestBodyReader.GetObject(body, "properties");
+                if (!string.IsNullOrEmpty(propertiesJson))
+                {
+                    ApplyProperties(instance, propertiesJson, updated, response, out var earlyExit);
+                    if (earlyExit) return;
+                }
+
+                // All validation passed — now persist to disk.
+                var dir = System.IO.Path.GetDirectoryName(assetPath).Replace('\\', '/');
+                AssetUtils.EnsureDirectory(dir);
+                AssetDatabase.CreateAsset(instance, assetPath);
+                if (updated.Count > 0) EditorUtility.SetDirty(instance);
+                AssetDatabase.SaveAssets();
+
+                var guid = AssetDatabase.AssetPathToGUID(assetPath);
+                var sb = new StringBuilder();
+                sb.Append("{");
+                sb.Append($"\"guid\":\"{RestResponse.EscapeJson(guid)}\",");
+                sb.Append($"\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",");
+                sb.Append($"\"type\":\"{RestResponse.EscapeJson(typeName)}\",");
+                sb.Append("\"updated\":[");
+                for (int i = 0; i < updated.Count; i++)
+                {
+                    if (i > 0) sb.Append(",");
+                    sb.Append($"\"{RestResponse.EscapeJson(updated[i])}\"");
+                }
+                sb.Append("]}");
+                RestResponse.Send(response, sb.ToString(), 201);
             }
-
-            // All validation passed — now persist to disk.
-            var dir = System.IO.Path.GetDirectoryName(assetPath).Replace('\\', '/');
-            AssetUtils.EnsureDirectory(dir);
-            AssetDatabase.CreateAsset(instance, assetPath);
-            if (updated.Count > 0) EditorUtility.SetDirty(instance);
-            AssetDatabase.SaveAssets();
-
-            var guid = AssetDatabase.AssetPathToGUID(assetPath);
-            var sb = new StringBuilder();
-            sb.Append("{");
-            sb.Append($"\"guid\":\"{RestResponse.EscapeJson(guid)}\",");
-            sb.Append($"\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",");
-            sb.Append($"\"type\":\"{RestResponse.EscapeJson(typeName)}\",");
-            sb.Append("\"updated\":[");
-            for (int i = 0; i < updated.Count; i++)
+            finally
             {
-                if (i > 0) sb.Append(",");
-                sb.Append($"\"{RestResponse.EscapeJson(updated[i])}\"");
+                // Once CreateAsset succeeds, the AssetDatabase owns the instance. Before that,
+                // including every validation rejection, this method owns its native lifetime.
+                if (instance != null && !EditorUtility.IsPersistent(instance))
+                    Object.DestroyImmediate(instance);
             }
-            sb.Append("]}");
-            RestResponse.Send(response, sb.ToString(), 201);
         }
 
         // ── PATCH /api/assets/scriptableobjects?guid= ────────────────────────

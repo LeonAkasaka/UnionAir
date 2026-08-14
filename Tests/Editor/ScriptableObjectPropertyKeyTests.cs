@@ -91,6 +91,30 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void AnObjectReferenceWithAnUnknownMemberIsRejected()
+        {
+            var response = Patch(
+                "{\"properties\":{\"reference\":{\"assetPath\":\"" + AssetPath +
+                "\",\"typo\":1}}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("typo", response.Body);
+            Assert.IsNull(_asset.reference);
+        }
+
+        [Test]
+        public void AnObjectReferenceWithADuplicateMemberIsRejected()
+        {
+            var response = Patch(
+                "{\"properties\":{\"reference\":{\"assetPath\":\"" + AssetPath +
+                "\",\"assetPath\":\"" + AssetPath + "\"}}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("Duplicate field 'assetPath'", response.Body);
+            Assert.IsNull(_asset.reference);
+        }
+
+        [Test]
         public void ACompositeObjectCanPatchOneMember()
         {
             var response = Patch("{\"properties\":{\"offset\":{\"x\":9}}}");
@@ -163,6 +187,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         [Test]
         public void CreateRejectsInvalidInitialPropertiesWithoutCreatingAnAsset()
         {
+            var transientCountBefore = CountTransientFixtures();
             var body = "{\"typeName\":\"" + typeof(UnionAirPropertyKeyFixture).FullName +
                        "\",\"assetPath\":\"" + CreatedAssetPath +
                        "\",\"properties\":{\"tags\":[\"a\"]}}";
@@ -175,6 +200,20 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual(400, response.StatusCode, response.Body);
             StringAssert.Contains("array", response.Body);
             Assert.IsNull(AssetDatabase.LoadAssetAtPath<UnionAirPropertyKeyFixture>(CreatedAssetPath));
+            Assert.AreEqual(
+                transientCountBefore,
+                CountTransientFixtures(),
+                "a rejected create must destroy its unsaved ScriptableObject instance");
+        }
+
+        private static int CountTransientFixtures()
+        {
+            var count = 0;
+            foreach (var instance in Resources.FindObjectsOfTypeAll<UnionAirPropertyKeyFixture>())
+            {
+                if (!EditorUtility.IsPersistent(instance)) count++;
+            }
+            return count;
         }
 
         private FakeResponse Patch(string body)

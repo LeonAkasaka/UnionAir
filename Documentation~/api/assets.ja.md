@@ -742,6 +742,8 @@ ScriptableObject アセットを、読み取り可能なすべてのシリアラ
 
 Color および Vector オブジェクトは部分更新です。省略したメンバーは現在値を保持します。サポートされるメンバーを少なくとも1つ指定し、指定した各メンバーを JSON 数値にする必要があります。不明または重複したメンバーは拒否されます。
 
+ObjectReference 値が受け付けるのは `assetGuid`、`assetPath`、および任意の `assetType` だけです。不明または重複したメンバーは拒否されます。
+
 > Asset Write カテゴリが有効な場合のみ呼び出せます。
 > Play モード中は `409 Conflict` を返します。
 
@@ -762,7 +764,7 @@ Color および Vector オブジェクトは部分更新です。省略したメ
 }
 ```
 
-ObjectReference フィールドには `assetGuid` または `assetPath` を持つオブジェクトを指定します。参照をクリアするには `null` を使用します。
+ObjectReference フィールドには `assetGuid` または `assetPath` と任意の `assetType` を持つオブジェクトを指定します。不明または重複したメンバーは拒否されます。参照をクリアするには `null` を使用します。
 
 ```json
 { "properties": { "primaryWeapon": null } }
@@ -783,9 +785,9 @@ ObjectReference フィールドには `assetGuid` または `assetPath` を持�
 
 | ステータス | 原因 |
 |--------|-------|
-| 400 | `guid` の欠落、アセットが ScriptableObject でない、`properties` フィールドの欠落、またはプロパティ値が不正 |
+| 400 | `guid` の欠落、アセットが ScriptableObject でない、`properties` の欠落、プロパティ値が不正、または複合値に不明なメンバーが含まれている |
 | 400 | `properties` のキーが、アセット上のどのシリアライズプロパティも指していない |
-| 400 | `properties` のキー、または Color / Vector 値のメンバーが重複している |
+| 400 | `properties` のキー、または Color / Vector / ObjectReference 値のメンバーが重複している |
 | 400 | キーが、このエンドポイントでは書き込めないプロパティを指している（配列、ネストしたジェネリック型、`m_Script`、書き込み未対応のシリアライズ型） |
 | 400 | 値がプロパティの受け取る形と一致しない |
 | 404 | 指定 GUID のアセットが見つからない |
