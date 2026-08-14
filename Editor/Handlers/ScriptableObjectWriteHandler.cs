@@ -222,7 +222,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <summary>
         /// Iterates all visible serialized properties on <paramref name="instance"/> and
         /// applies matching values from <paramref name="propertiesJson"/>.
-        /// Array properties are silently skipped.
+        /// Every requested property must be writable and carry a compatible JSON value.
         /// Sets <paramref name="earlyExit"/> to true if a response error was already sent.
         /// </summary>
         private static void ApplyProperties(
@@ -238,14 +238,9 @@ namespace LeonAkasaka.UnionAir.Editor
             // Every key the request sent has to be accounted for. A key naming no property is
             // found here rather than in the loop below, which can only report keys it reached.
             if (!RequestBodyReader.TryGetTopLevelFieldNames(
-                    propertiesJson, out var requestedKeys, out var malformedKey))
+                    propertiesJson, out var requestedKeys, out var keyError))
             {
-                RestResponse.SendError(
-                    response,
-                    malformedKey != null
-                        ? $"The value of '{malformedKey}' in 'properties' is not well-formed JSON."
-                        : "'properties' is not a well-formed JSON object.",
-                    400);
+                RestResponse.SendError(response, $"Invalid 'properties': {keyError}", 400);
                 return;
             }
 

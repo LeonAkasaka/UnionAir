@@ -494,7 +494,7 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.SceneWrite,
             PlayModePolicy = UnionAirPlayModePolicy.ExplicitOptIn,
-            Summary = "Updates serialized component properties. Query: target={\\\"type\\\":\\\"componentPath\\\",\\\"value\\\":\\\"Path:ComponentType\\\"}. Alternatively, target a GameObject with hierarchyPath and add ?type=ComponentName. Every key in 'properties' is a Unity serialized property name and must name a writable one.",
+            Summary = "Updates serialized component properties. Query: target={\\\"type\\\":\\\"componentPath\\\",\\\"value\\\":\\\"Path:ComponentType\\\"}. Alternatively, target a GameObject with hierarchyPath and add ?type=ComponentName. Every key in 'properties' must be unique and name a writable Unity serialized property with a compatible JSON value.",
             RequiredQuery = new string[] { "target" },
             OptionalQuery = new string[] { "scenePath", "allowWhilePlaying" },
             RequiredBody = new string[] { "properties" },
@@ -660,16 +660,18 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("POST", "",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Creates a ScriptableObject asset from a type name.",
+            Summary = "Creates a ScriptableObject asset from a type name. Optional initial properties follow the PATCH contract: every key must be unique, writable, and carry a compatible JSON value.",
             RequiredBody = new string[] { "typeName", "assetPath" },
-            OptionalBody = new string[] { "properties" })]
+            OptionalBody = new string[] { "properties" },
+            RequestExample = "{\"typeName\":\"SkillDefinition\",\"assetPath\":\"Assets/Data/Fireball.asset\",\"properties\":{\"displayName\":\"Fireball\",\"cooldown\":2.5}}",
+            ResponseExample = "{\"guid\":\"...\",\"assetPath\":\"Assets/Data/Fireball.asset\",\"type\":\"SkillDefinition\",\"updated\":[\"displayName\",\"cooldown\"]}")]
         private void Create(UnionAirRequestContext ctx)
             => new ScriptableObjectWriteHandler().Handle(ctx.Request, ctx.Response);
 
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Updates serialized properties on a ScriptableObject. Every key in 'properties' must name a writable serialized property; arrays and unsupported generic types are rejected.",
+            Summary = "Updates serialized properties on a ScriptableObject. Every key in 'properties' must be unique and name a writable serialized property with a compatible JSON value; arrays and unsupported generic types are rejected.",
             RequiredQuery = new string[] { "guid" },
             RequiredBody = new string[] { "properties" },
             RequestExample = "{\"properties\":{\"displayName\":\"Fireball\",\"cooldown\":2.5}}",

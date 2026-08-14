@@ -160,8 +160,12 @@ namespace LeonAkasaka.UnionAir.Editor
                 {
                     case SerializedPropertyType.Boolean:
                     {
-                        var v = RequestBodyReader.GetBool(json, jsonKey);
-                        if (v.HasValue) { prop.boolValue = v.Value; return true; }
+                        if (RequestBodyReader.TryGetBoolValue(
+                                json, jsonKey, out var value, out var present) && present)
+                        {
+                            prop.boolValue = value;
+                            return true;
+                        }
                         error = Expected(jsonKey, "a JSON boolean");
                         break;
                     }
@@ -169,80 +173,132 @@ namespace LeonAkasaka.UnionAir.Editor
                     case SerializedPropertyType.LayerMask:
                     case SerializedPropertyType.Enum:
                     {
-                        var v = RequestBodyReader.GetInt(json, jsonKey);
-                        if (v.HasValue) { prop.intValue = v.Value; return true; }
+                        if (RequestBodyReader.TryGetIntValue(
+                                json, jsonKey, out var value, out var present) && present)
+                        {
+                            prop.intValue = value;
+                            return true;
+                        }
                         error = Expected(jsonKey, "a JSON integer");
                         break;
                     }
                     case SerializedPropertyType.Float:
                     {
-                        var v = RequestBodyReader.GetFloat(json, jsonKey);
-                        if (v.HasValue) { prop.floatValue = v.Value; return true; }
+                        if (RequestBodyReader.TryGetFloatValue(
+                                json, jsonKey, out var value, out var present) && present)
+                        {
+                            prop.floatValue = value;
+                            return true;
+                        }
                         error = Expected(jsonKey, "a JSON number");
                         break;
                     }
                     case SerializedPropertyType.String:
                     {
-                        var v = RequestBodyReader.GetString(json, jsonKey);
-                        if (v != null) { prop.stringValue = v; return true; }
+                        if (RequestBodyReader.TryGetStringValue(
+                                json, jsonKey, out var value, out var present) && present)
+                        {
+                            prop.stringValue = value;
+                            return true;
+                        }
                         error = Expected(jsonKey, "a JSON string");
                         break;
                     }
                     case SerializedPropertyType.Color:
                     {
                         var obj = RequestBodyReader.GetObject(json, jsonKey);
-                        if (obj != null)
+                        if (obj != null && TryValidateCompositeObject(
+                                obj, jsonKey, new[] { "r", "g", "b", "a" }, out error))
                         {
-                            var r = RequestBodyReader.GetFloat(obj, "r") ?? prop.colorValue.r;
-                            var g = RequestBodyReader.GetFloat(obj, "g") ?? prop.colorValue.g;
-                            var b = RequestBodyReader.GetFloat(obj, "b") ?? prop.colorValue.b;
-                            var a = RequestBodyReader.GetFloat(obj, "a") ?? prop.colorValue.a;
+                            bool hasR, hasG, hasB, hasA;
+                            float r, g, b, a;
+                            if (!TryReadFloatMember(obj, jsonKey, "r", prop.colorValue.r, out r, out hasR, out error) ||
+                                !TryReadFloatMember(obj, jsonKey, "g", prop.colorValue.g, out g, out hasG, out error) ||
+                                !TryReadFloatMember(obj, jsonKey, "b", prop.colorValue.b, out b, out hasB, out error) ||
+                                !TryReadFloatMember(obj, jsonKey, "a", prop.colorValue.a, out a, out hasA, out error))
+                                break;
+                            if (!hasR && !hasG && !hasB && !hasA)
+                            {
+                                error = Expected(jsonKey, "a JSON object containing at least one of r, g, b, or a");
+                                break;
+                            }
                             prop.colorValue = new Color(r, g, b, a);
                             return true;
                         }
-                        error = Expected(jsonKey, "a JSON object with r, g, b, and a members");
+                        if (error == null)
+                            error = Expected(jsonKey, "a JSON object with r, g, b, and a members");
                         break;
                     }
                     case SerializedPropertyType.Vector2:
                     {
                         var obj = RequestBodyReader.GetObject(json, jsonKey);
-                        if (obj != null)
+                        if (obj != null && TryValidateCompositeObject(
+                                obj, jsonKey, new[] { "x", "y" }, out error))
                         {
-                            var x = RequestBodyReader.GetFloat(obj, "x") ?? prop.vector2Value.x;
-                            var y = RequestBodyReader.GetFloat(obj, "y") ?? prop.vector2Value.y;
+                            bool hasX, hasY;
+                            float x, y;
+                            if (!TryReadFloatMember(obj, jsonKey, "x", prop.vector2Value.x, out x, out hasX, out error) ||
+                                !TryReadFloatMember(obj, jsonKey, "y", prop.vector2Value.y, out y, out hasY, out error))
+                                break;
+                            if (!hasX && !hasY)
+                            {
+                                error = Expected(jsonKey, "a JSON object containing at least one of x or y");
+                                break;
+                            }
                             prop.vector2Value = new Vector2(x, y);
                             return true;
                         }
-                        error = Expected(jsonKey, "a JSON object with x and y members");
+                        if (error == null)
+                            error = Expected(jsonKey, "a JSON object with x and y members");
                         break;
                     }
                     case SerializedPropertyType.Vector3:
                     {
                         var obj = RequestBodyReader.GetObject(json, jsonKey);
-                        if (obj != null)
+                        if (obj != null && TryValidateCompositeObject(
+                                obj, jsonKey, new[] { "x", "y", "z" }, out error))
                         {
-                            var x = RequestBodyReader.GetFloat(obj, "x") ?? prop.vector3Value.x;
-                            var y = RequestBodyReader.GetFloat(obj, "y") ?? prop.vector3Value.y;
-                            var z = RequestBodyReader.GetFloat(obj, "z") ?? prop.vector3Value.z;
+                            bool hasX, hasY, hasZ;
+                            float x, y, z;
+                            if (!TryReadFloatMember(obj, jsonKey, "x", prop.vector3Value.x, out x, out hasX, out error) ||
+                                !TryReadFloatMember(obj, jsonKey, "y", prop.vector3Value.y, out y, out hasY, out error) ||
+                                !TryReadFloatMember(obj, jsonKey, "z", prop.vector3Value.z, out z, out hasZ, out error))
+                                break;
+                            if (!hasX && !hasY && !hasZ)
+                            {
+                                error = Expected(jsonKey, "a JSON object containing at least one of x, y, or z");
+                                break;
+                            }
                             prop.vector3Value = new Vector3(x, y, z);
                             return true;
                         }
-                        error = Expected(jsonKey, "a JSON object with x, y, and z members");
+                        if (error == null)
+                            error = Expected(jsonKey, "a JSON object with x, y, and z members");
                         break;
                     }
                     case SerializedPropertyType.Vector4:
                     {
                         var obj = RequestBodyReader.GetObject(json, jsonKey);
-                        if (obj != null)
+                        if (obj != null && TryValidateCompositeObject(
+                                obj, jsonKey, new[] { "x", "y", "z", "w" }, out error))
                         {
-                            var x = RequestBodyReader.GetFloat(obj, "x") ?? prop.vector4Value.x;
-                            var y = RequestBodyReader.GetFloat(obj, "y") ?? prop.vector4Value.y;
-                            var z = RequestBodyReader.GetFloat(obj, "z") ?? prop.vector4Value.z;
-                            var w = RequestBodyReader.GetFloat(obj, "w") ?? prop.vector4Value.w;
+                            bool hasX, hasY, hasZ, hasW;
+                            float x, y, z, w;
+                            if (!TryReadFloatMember(obj, jsonKey, "x", prop.vector4Value.x, out x, out hasX, out error) ||
+                                !TryReadFloatMember(obj, jsonKey, "y", prop.vector4Value.y, out y, out hasY, out error) ||
+                                !TryReadFloatMember(obj, jsonKey, "z", prop.vector4Value.z, out z, out hasZ, out error) ||
+                                !TryReadFloatMember(obj, jsonKey, "w", prop.vector4Value.w, out w, out hasW, out error))
+                                break;
+                            if (!hasX && !hasY && !hasZ && !hasW)
+                            {
+                                error = Expected(jsonKey, "a JSON object containing at least one of x, y, z, or w");
+                                break;
+                            }
                             prop.vector4Value = new Vector4(x, y, z, w);
                             return true;
                         }
-                        error = Expected(jsonKey, "a JSON object with x, y, z, and w members");
+                        if (error == null)
+                            error = Expected(jsonKey, "a JSON object with x, y, z, and w members");
                         break;
                     }
                     case SerializedPropertyType.ObjectReference:
@@ -278,6 +334,39 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static string Expected(string jsonKey, string shape)
             => $"Property {jsonKey} expects {shape}.";
+
+        private static bool TryValidateCompositeObject(
+            string json, string jsonKey, string[] allowedMembers, out string error)
+        {
+            if (RequestBodyReader.TryValidateObjectFields(json, allowedMembers, out var objectError))
+            {
+                error = null;
+                return true;
+            }
+
+            error = $"Property {jsonKey} has an invalid JSON object: {objectError}";
+            return false;
+        }
+
+        private static bool TryReadFloatMember(
+            string json,
+            string jsonKey,
+            string member,
+            float currentValue,
+            out float value,
+            out bool present,
+            out string error)
+        {
+            if (!RequestBodyReader.TryGetFloatValue(json, member, out value, out present))
+            {
+                error = $"Property {jsonKey}.{member} expects a JSON number.";
+                return false;
+            }
+
+            if (!present) value = currentValue;
+            error = null;
+            return true;
+        }
 
         /// <summary>
         /// Returns the first of <paramref name="requestedKeys"/> that names no serialized property

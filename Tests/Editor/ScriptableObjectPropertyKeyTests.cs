@@ -14,6 +14,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
     {
         private const string Dir = "Assets/UnionAirPropertyKeyTests";
         private const string AssetPath = Dir + "/Fixture.asset";
+        private const string CreatedAssetPath = Dir + "/Created.asset";
 
         private string _guid;
         private UnionAirPropertyKeyFixture _asset;
@@ -25,6 +26,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
                 AssetDatabase.CreateFolder("Assets", "UnionAirPropertyKeyTests");
 
             AssetDatabase.DeleteAsset(AssetPath);
+            AssetDatabase.DeleteAsset(CreatedAssetPath);
             AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<UnionAirPropertyKeyFixture>(), AssetPath);
             AssetDatabase.SaveAssets();
 
@@ -55,6 +57,55 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 
             Assert.AreEqual(400, response.StatusCode, response.Body);
             StringAssert.Contains("JSON number", response.Body);
+            Assert.AreEqual(1f, _asset.cooldown);
+        }
+
+        [Test]
+        public void AStringPropertyRejectsANonStringValue()
+        {
+            var response = Patch("{\"properties\":{\"displayName\":123}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("JSON string", response.Body);
+            Assert.AreEqual("start", _asset.displayName);
+        }
+
+        [Test]
+        public void ACompositeMemberOfTheWrongTypeIsRejected()
+        {
+            var response = Patch("{\"properties\":{\"offset\":{\"x\":\"9\"}}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("offset.x", response.Body);
+            Assert.AreEqual(new Vector3(1f, 2f, 3f), _asset.offset);
+        }
+
+        [Test]
+        public void AnEmptyCompositeObjectIsRejected()
+        {
+            var response = Patch("{\"properties\":{\"offset\":{}}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("at least", response.Body);
+            Assert.AreEqual(new Vector3(1f, 2f, 3f), _asset.offset);
+        }
+
+        [Test]
+        public void ACompositeObjectCanPatchOneMember()
+        {
+            var response = Patch("{\"properties\":{\"offset\":{\"x\":9}}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(new Vector3(9f, 2f, 3f), _asset.offset);
+        }
+
+        [Test]
+        public void ADuplicatePropertyKeyIsRejected()
+        {
+            var response = Patch("{\"properties\":{\"cooldown\":2.5,\"cooldown\":\"bad\"}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("Duplicate field 'cooldown'", response.Body);
             Assert.AreEqual(1f, _asset.cooldown);
         }
 
@@ -107,6 +158,23 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 
             Assert.AreEqual(200, response.StatusCode, response.Body);
             StringAssert.Contains("\"updated\":[]", response.Body);
+        }
+
+        [Test]
+        public void CreateRejectsInvalidInitialPropertiesWithoutCreatingAnAsset()
+        {
+            var body = "{\"typeName\":\"" + typeof(UnionAirPropertyKeyFixture).FullName +
+                       "\",\"assetPath\":\"" + CreatedAssetPath +
+                       "\",\"properties\":{\"tags\":[\"a\"]}}";
+            var request = new FakeRequest("POST", "/api/assets/scriptableobjects")
+                .WithJsonBody(body);
+            var response = new FakeResponse();
+
+            new ScriptableObjectWriteHandler().Handle(request, response);
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("array", response.Body);
+            Assert.IsNull(AssetDatabase.LoadAssetAtPath<UnionAirPropertyKeyFixture>(CreatedAssetPath));
         }
 
         private FakeResponse Patch(string body)

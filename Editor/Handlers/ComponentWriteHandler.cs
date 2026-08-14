@@ -146,14 +146,9 @@ namespace LeonAkasaka.UnionAir.Editor
             // the write rather than after it: a key that names no property is the client's typo,
             // and answering 200 with it missing from "updated" is not an answer a client can act on.
             if (!RequestBodyReader.TryGetTopLevelFieldNames(
-                    propertiesJson, out var requestedKeys, out var malformedKey))
+                    propertiesJson, out var requestedKeys, out var keyError))
             {
-                RestResponse.SendError(
-                    response,
-                    malformedKey != null
-                        ? $"The value of '{malformedKey}' in 'properties' is not well-formed JSON."
-                        : "'properties' is not a well-formed JSON object.",
-                    400);
+                RestResponse.SendError(response, $"Invalid 'properties': {keyError}", 400);
                 return;
             }
             var unmatched = SerializedPropertySerializer.FindUnmatchedKey(

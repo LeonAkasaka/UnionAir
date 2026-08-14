@@ -618,51 +618,104 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// Lists the field names at the top level of a JSON object, in the order they appear.
-        /// Returns false when the text is not a well-formed JSON object.
+        /// Lists the unique field names at the top level of a JSON object, in the order they appear.
+        /// Returns false with an actionable error when the text is not a well-formed JSON object
+        /// or repeats a field name.
         /// </summary>
         /// <remarks>
         /// The complement of <see cref="HasTopLevelField"/>: that answers "was this field sent",
         /// this answers "what was sent", which is what an endpoint needs to tell a client that a
-        /// field it sent was never used. Duplicates are preserved rather than rejected, because
-        /// which fields are acceptable is the caller's question and not this method's.
-        /// <paramref name="malformedField"/> names the field whose value could not be read, when
-        /// that is what went wrong, so the caller can point at the part the client has to fix
-        /// rather than calling the whole object malformed.
+        /// field it sent was never used. Duplicate names are rejected because the property readers
+        /// select one value by name; accepting a duplicate would leave another value unaccounted for.
         /// </remarks>
         internal static bool TryGetTopLevelFieldNames(
-            string json, out List<string> names, out string malformedField)
+            string json, out List<string> names, out string error)
         {
             names = new List<string>();
-            malformedField = null;
-            if (string.IsNullOrEmpty(json)) return false;
+            error = null;
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                error = "Expected a JSON object.";
+                return false;
+            }
+
+            var seen = new HashSet<string>(System.StringComparer.Ordinal);
 
             int position = 0;
             SkipWhitespace(json, ref position);
-            if (position >= json.Length || json[position] != '{') return false;
+            if (position >= json.Length || json[position] != '{')
+            {
+                error = "Expected a JSON object.";
+                return false;
+            }
             position++;
 
             while (true)
             {
                 SkipWhitespace(json, ref position);
-                if (position >= json.Length) return false;
-                if (json[position] == '}') return true;
+                if (position >= json.Length)
+                {
+                    error = "The JSON object is incomplete.";
+                    return false;
+                }
+                if (json[position] == '}')
+                {
+                    position++;
+                    SkipWhitespace(json, ref position);
+                    if (position != json.Length)
+                    {
+                        error = "The JSON object has trailing content.";
+                        return false;
+                    }
+                    return true;
+                }
 
                 string field;
-                if (!TryReadJsonString(json, ref position, out field)) return false;
+                if (!TryReadJsonString(json, ref position, out field))
+                {
+                    error = "The JSON object contains an invalid field name.";
+                    return false;
+                }
+                if (!seen.Add(field))
+                {
+                    error = $"Duplicate field '{field}'.";
+                    return false;
+                }
                 names.Add(field);
 
                 SkipWhitespace(json, ref position);
-                if (position >= json.Length || json[position] != ':') return false;
+                if (position >= json.Length || json[position] != ':')
+                {
+                    error = $"Field '{field}' is missing its value separator.";
+                    return false;
+                }
                 position++;
                 SkipWhitespace(json, ref position);
-                if (!TrySkipValue(json, ref position)) { malformedField = field; return false; }
+                if (!TrySkipValue(json, ref position))
+                {
+                    error = $"The value of '{field}' is not well-formed JSON.";
+                    return false;
+                }
 
                 SkipWhitespace(json, ref position);
-                if (position >= json.Length) return false;
-                if (json[position] == '}') return true;
-                if (json[position] != ',') return false;
+                if (position >= json.Length)
+                {
+                    error = "The JSON object is incomplete.";
+                    return false;
+                }
+                if (json[position] == '}') continue;
+                if (json[position] != ',')
+                {
+                    error = "The JSON object is not well formed.";
+                    return false;
+                }
                 position++;
+                SkipWhitespace(json, ref position);
+                if (position < json.Length && json[position] == '}')
+                {
+                    error = "The JSON object must not have a trailing comma.";
+                    return false;
+                }
             }
         }
 

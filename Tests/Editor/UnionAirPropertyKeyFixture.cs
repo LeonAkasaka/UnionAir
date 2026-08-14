@@ -14,6 +14,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
     {
         public string displayName = "start";
         public float cooldown = 1f;
+        public Vector3 offset = new Vector3(1f, 2f, 3f);
         public string[] tags = new string[0];
     }
 }
