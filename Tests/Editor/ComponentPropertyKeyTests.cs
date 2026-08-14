@@ -112,6 +112,18 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.IsNull(_renderer.probeAnchor);
         }
 
+        [Test]
+        public void TheFixtureDecodesItsQueryTheWayTheServerDoes()
+        {
+            // This file is the only place a JSON object travels through the query string, so the
+            // fake's decoding is load-bearing here. Measured against a live server on 6000.0.80f1:
+            // ?target=...A+B... reaches the handler as "A B", and %2B reaches it as "+".
+            var request = new FakeRequest("GET", "/api/test?name=A+B&path=Assets%2FC%2B%2B");
+
+            Assert.AreEqual("A B", request.QueryString["name"]);
+            Assert.AreEqual("Assets/C++", request.QueryString["path"]);
+        }
+
         private FakeResponse Patch(string body)
         {
             var target = "{\"type\":\"componentPath\",\"value\":\"" +
