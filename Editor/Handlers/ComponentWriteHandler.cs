@@ -250,10 +250,13 @@ namespace LeonAkasaka.UnionAir.Editor
             return true;
         }
 
+        // Top-level keys only. Every nested object a request sends carries key names that also name
+        // serialized fields somewhere -- the "x" of a vector, the "assetPath" of an object reference --
+        // so a search of the whole body reports a field as requested that the client never named.
         private static string FindPropertyKey(string json, SerializedProperty prop)
         {
-            if (SerializedPropertySerializer.PropertyExistsInJson(json, prop.propertyPath)) return prop.propertyPath;
-            if (prop.propertyPath == prop.name && SerializedPropertySerializer.PropertyExistsInJson(json, prop.name)) return prop.name;
+            if (RequestBodyReader.HasTopLevelField(json, prop.propertyPath)) return prop.propertyPath;
+            if (prop.propertyPath == prop.name && RequestBodyReader.HasTopLevelField(json, prop.name)) return prop.name;
             return null;
         }
 
@@ -292,7 +295,7 @@ namespace LeonAkasaka.UnionAir.Editor
             error = null;
             statusCode = 400;
 
-            var rawValue = SerializedPropertySerializer.FindJsonValue(json, jsonKey);
+            var rawValue = RequestBodyReader.GetRawValue(json, jsonKey);
             if (rawValue == null) return false;
 
             rawValue = rawValue.Trim();

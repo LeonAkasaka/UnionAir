@@ -242,12 +242,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 enterChildren = false; // visit top-level properties only; do not descend into children
                 if (iter.name == "m_Script") continue;
 
-                // Try both the simple name and full propertyPath as JSON keys
+                // Try both the simple name and full propertyPath as JSON keys, top-level only:
+                // a key nested inside another property's value is not a key this request sent.
                 string jsonKey = null;
-                if (SerializedPropertySerializer.PropertyExistsInJson(propertiesJson, iter.name))
+                if (RequestBodyReader.HasTopLevelField(propertiesJson, iter.name))
                     jsonKey = iter.name;
                 else if (iter.propertyPath != iter.name &&
-                         SerializedPropertySerializer.PropertyExistsInJson(propertiesJson, iter.propertyPath))
+                         RequestBodyReader.HasTopLevelField(propertiesJson, iter.propertyPath))
                     jsonKey = iter.propertyPath;
 
                 if (jsonKey == null) continue;

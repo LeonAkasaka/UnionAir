@@ -98,6 +98,9 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             return this;
         }
 
+        // Percent-escapes are decoded, because the framework's QueryString hands handlers the
+        // decoded value and a fake that did not would make an endpoint taking a JSON object as a
+        // query parameter -- ?target={"type":...} -- look broken when it is not.
         private static void ParseQuery(string query, NameValueCollection into)
         {
             if (string.IsNullOrEmpty(query)) return;
@@ -105,8 +108,10 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             {
                 if (pair.Length == 0) continue;
                 var separator = pair.IndexOf('=');
-                if (separator < 0) into.Add(pair, "");
-                else into.Add(pair.Substring(0, separator), pair.Substring(separator + 1));
+                if (separator < 0) into.Add(Uri.UnescapeDataString(pair), "");
+                else into.Add(
+                    Uri.UnescapeDataString(pair.Substring(0, separator)),
+                    Uri.UnescapeDataString(pair.Substring(separator + 1)));
             }
         }
     }

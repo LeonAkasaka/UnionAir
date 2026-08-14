@@ -248,12 +248,6 @@ namespace LeonAkasaka.UnionAir.Editor
             return false;
         }
 
-        /// <summary>
-        /// Checks whether <paramref name="json"/> contains a key named <paramref name="propName"/>.
-        /// </summary>
-        public static bool PropertyExistsInJson(string json, string propName)
-            => FindJsonValue(json, propName) != null;
-
         // ── ObjectReference resolution ────────────────────────────────────────
 
         private static bool TryResolveObjectReference(
@@ -264,7 +258,7 @@ namespace LeonAkasaka.UnionAir.Editor
             error = null;
             statusCode = 400;
 
-            var rawValue = FindJsonValue(json, jsonKey);
+            var rawValue = RequestBodyReader.GetRawValue(json, jsonKey);
             if (rawValue == null) return false;
 
             rawValue = rawValue.Trim();
@@ -308,81 +302,5 @@ namespace LeonAkasaka.UnionAir.Editor
             error = $"Object reference property {jsonKey} requires assetGuid or assetPath.";
             return false;
         }
-
-        // ── JSON parsing helpers ──────────────────────────────────────────────
-
-        internal static string FindJsonValue(string json, string key)
-        {
-            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(key)) return null;
-
-            var searchKey = $"\"{key}\"";
-            int keyIdx = json.IndexOf(searchKey, StringComparison.Ordinal);
-            if (keyIdx < 0) return null;
-
-            int colonIdx = json.IndexOf(':', keyIdx + searchKey.Length);
-            if (colonIdx < 0) return null;
-
-            int start = colonIdx + 1;
-            while (start < json.Length && char.IsWhiteSpace(json[start])) start++;
-            if (start >= json.Length) return null;
-
-            int end = FindJsonValueEnd(json, start);
-            if (end <= start) return null;
-
-            return json.Substring(start, end - start);
-        }
-
-        internal static int FindJsonValueEnd(string json, int start)
-        {
-            if (json[start] == '"')
-            {
-                int end = start + 1;
-                while (end < json.Length)
-                {
-                    if (json[end] == '\\') { end += 2; continue; }
-                    if (json[end] == '"') return end + 1;
-                    end++;
-                }
-                return json.Length;
-            }
-
-            if (json[start] == '{' || json[start] == '[')
-            {
-                char open  = json[start];
-                char close = open == '{' ? '}' : ']';
-                int depth = 0;
-                bool inString = false;
-                int end = start;
-                while (end < json.Length)
-                {
-                    var c = json[end];
-                    if (inString)
-                    {
-                        if (c == '\\') end++;
-                        else if (c == '"') inString = false;
-                    }
-                    else
-                    {
-                        if (c == '"') inString = true;
-                        else if (c == open) depth++;
-                        else if (c == close) { depth--; if (depth == 0) return end + 1; }
-                    }
-                    end++;
-                }
-                return json.Length;
-            }
-
-            int scalarEnd = start;
-            while (scalarEnd < json.Length &&
-                   json[scalarEnd] != ',' &&
-                   json[scalarEnd] != '}' &&
-                   json[scalarEnd] != '\n' &&
-                   json[scalarEnd] != '\r')
-            {
-                scalarEnd++;
-            }
-            return scalarEnd;
-        }
-
     }
 }
