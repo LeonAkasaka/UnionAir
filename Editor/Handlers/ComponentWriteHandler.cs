@@ -296,7 +296,16 @@ namespace LeonAkasaka.UnionAir.Editor
             statusCode = 400;
 
             var rawValue = RequestBodyReader.GetRawValue(json, jsonKey);
-            if (rawValue == null) return false;
+            if (rawValue == null)
+            {
+                // The key was selected by its presence at the top level, so no value here means the
+                // value is present and unreadable -- an unescaped backslash in a Windows path is the
+                // likely one -- rather than the field being absent. Returning false in silence would
+                // answer 200 for a write that never happened.
+                if (RequestBodyReader.HasTopLevelField(json, jsonKey))
+                    error = $"Object reference property {jsonKey} is not a well-formed JSON value.";
+                return false;
+            }
 
             rawValue = rawValue.Trim();
             if (rawValue == "null")

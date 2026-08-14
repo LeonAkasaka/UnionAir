@@ -259,7 +259,14 @@ namespace LeonAkasaka.UnionAir.Editor
             statusCode = 400;
 
             var rawValue = RequestBodyReader.GetRawValue(json, jsonKey);
-            if (rawValue == null) return false;
+            if (rawValue == null)
+            {
+                // Selected by top-level presence, so an unreadable value is not an absent field.
+                // See the matching note in ComponentWriteHandler.TryResolveObjectReference.
+                if (RequestBodyReader.HasTopLevelField(json, jsonKey))
+                    error = $"Object reference property {jsonKey} is not a well-formed JSON value.";
+                return false;
+            }
 
             rawValue = rawValue.Trim();
             if (rawValue == "null")

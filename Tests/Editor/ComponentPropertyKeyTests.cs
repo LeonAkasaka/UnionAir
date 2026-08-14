@@ -98,6 +98,20 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreSame(_anchor.transform, _renderer.probeAnchor);
         }
 
+        [Test]
+        public void AnUnreadableObjectReferenceValueIsReported()
+        {
+            // An unescaped Windows path. The strict scanner cannot read the value, and the key is
+            // known to be there -- it is how this property was selected -- so this is a malformed
+            // request rather than an absent field, and answering 200 would hide a lost write.
+            var response = Patch(
+                "{\"properties\":{\"m_ProbeAnchor\":{\"assetPath\":\"C:\\Assets\\Foo.mat\"}}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("m_ProbeAnchor", response.Body);
+            Assert.IsNull(_renderer.probeAnchor);
+        }
+
         private FakeResponse Patch(string body)
         {
             var target = "{\"type\":\"componentPath\",\"value\":\"" +
