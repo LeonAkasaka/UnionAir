@@ -136,8 +136,18 @@ namespace LeonAkasaka.UnionAir.Editor
                 RestResponse.SendError(response, error, 400);
                 return false;
             }
+            if (!ModelImporterClipsParser.TryResolveReferences(update, out error))
+            {
+                RestResponse.SendError(response, error, 400);
+                return false;
+            }
 
             before = ModelImporterState.Capture(importer);
+            if (!ModelImporterClipsParser.TryPrepare(update, before, out error))
+            {
+                RestResponse.SendError(response, error, 400);
+                return false;
+            }
             changed = new List<string>();
             requested = update.Apply(before, changed);
             if (!ModelImporterUpdateParser.TryValidateFinalState(requested, importer, update, out error))
@@ -374,7 +384,27 @@ namespace LeonAkasaka.UnionAir.Editor
               .Append(",\"useFileUnits\":").Append(Bool(importer.isUseFileUnitsSupported))
               .Append(",\"tangentImport\":").Append(Bool(importer.isTangentImportSupported))
               .Append(",\"bakeIk\":").Append(Bool(importer.isBakeIKSupported))
-              .Append("}");
+              .Append(",\"settings\":{\"model.useFileUnits\":")
+              .Append(Bool(importer.isUseFileUnitsSupported))
+              .Append(",\"tangents.import\":").Append(Bool(importer.isTangentImportSupported))
+              .Append(",\"clips.definitions\":true,\"clips.avatarMask\":true,\"clips.events\":true")
+              .Append(",\"clips.curves\":false")
+              .Append(",\"rig.humanDescription\":false}")
+              .Append(",\"unavailableSettings\":[");
+            var separator = false;
+            if (!importer.isUseFileUnitsSupported)
+            {
+                sb.Append("\"model.useFileUnits\"");
+                separator = true;
+            }
+            if (!importer.isTangentImportSupported)
+            {
+                if (separator) sb.Append(',');
+                sb.Append("\"tangents.import\"");
+                separator = true;
+            }
+            if (separator) sb.Append(',');
+            sb.Append("\"rig.humanDescription\",\"clips.curves\"]}");
         }
 
         internal static void AppendSettings(StringBuilder sb, ModelImporterState state)
@@ -430,7 +460,52 @@ namespace LeonAkasaka.UnionAir.Editor
               .Append(",\"optimizeGameObjects\":").Append(Bool(state.OptimizeGameObjects))
               .Append(",\"extraExposedTransformPaths\":");
             AppendStringArray(sb, state.ExtraExposedTransformPaths);
-            sb.Append("},\"unsupportedInitialSettings\":[\"rig.humanDescription\"]}");
+            sb.Append("},\"clips\":");
+            AppendClips(sb, state);
+            sb.Append(",\"unsupportedInitialSettings\":[\"rig.humanDescription\",\"clips.curves\"]}");
+        }
+
+        private static void AppendClips(StringBuilder sb, ModelImporterState state)
+        {
+            sb.Append("{\"derivedFromDefaults\":")
+              .Append(Bool(ModelImporterClipsState.DerivedFromDefaults(state)))
+              .Append(",\"definitions\":[");
+            var clips = ModelImporterClipsState.Effective(state);
+            for (var i = 0; i < clips.Length; i++)
+            {
+                if (i > 0) sb.Append(',');
+                var clip = clips[i];
+                sb.Append("{\"takeName\":").Append(RestResponse.FormatNullableString(clip.takeName))
+                  .Append(",\"name\":").Append(RestResponse.FormatNullableString(clip.name))
+                  .Append(",\"firstFrame\":").Append(RestResponse.FormatFloat(clip.firstFrame))
+                  .Append(",\"lastFrame\":").Append(RestResponse.FormatFloat(clip.lastFrame))
+                  .Append(",\"wrapMode\":").Append(Q(clip.wrapMode))
+                  .Append(",\"loop\":").Append(Bool(clip.loop))
+                  .Append(",\"loopTime\":").Append(Bool(clip.loopTime))
+                  .Append(",\"loopPose\":").Append(Bool(clip.loopPose))
+                  .Append(",\"mirror\":").Append(Bool(clip.mirror))
+                  .Append(",\"lockRootRotation\":").Append(Bool(clip.lockRootRotation))
+                  .Append(",\"keepOriginalOrientation\":").Append(Bool(clip.keepOriginalOrientation))
+                  .Append(",\"rotationOffset\":").Append(RestResponse.FormatFloat(clip.rotationOffset))
+                  .Append(",\"lockRootHeightY\":").Append(Bool(clip.lockRootHeightY))
+                  .Append(",\"keepOriginalPositionY\":").Append(Bool(clip.keepOriginalPositionY))
+                  .Append(",\"heightFromFeet\":").Append(Bool(clip.heightFromFeet))
+                  .Append(",\"heightOffset\":").Append(RestResponse.FormatFloat(clip.heightOffset))
+                  .Append(",\"lockRootPositionXZ\":").Append(Bool(clip.lockRootPositionXZ))
+                  .Append(",\"keepOriginalPositionXZ\":").Append(Bool(clip.keepOriginalPositionXZ))
+                  .Append(",\"cycleOffset\":").Append(RestResponse.FormatFloat(clip.cycleOffset))
+                  .Append(",\"hasAdditiveReferencePose\":").Append(Bool(clip.hasAdditiveReferencePose))
+                  .Append(",\"additiveReferencePoseFrame\":")
+                  .Append(RestResponse.FormatFloat(clip.additiveReferencePoseFrame))
+                  .Append(",\"maskType\":").Append(Q(clip.maskType))
+                  .Append(",\"maskSource\":");
+                AppendObjectReference(sb, clip.maskSource);
+                sb.Append(",\"maskNeedsUpdating\":").Append(Bool(clip.maskNeedsUpdating))
+                  .Append(",\"events\":");
+                AnimationEventJson.Append(sb, clip.events ?? new AnimationEvent[0]);
+                sb.Append('}');
+            }
+            sb.Append("]}");
         }
 
         private static void AppendMaterialRemaps(

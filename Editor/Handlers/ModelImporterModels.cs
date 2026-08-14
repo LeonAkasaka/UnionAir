@@ -17,10 +17,12 @@ namespace LeonAkasaka.UnionAir.Editor
         internal ModelImporterMaterialsPatch Materials;
         internal List<ModelImporterMaterialRemapPatch> MaterialRemaps;
         internal ModelImporterRigPatch Rig;
+        internal List<ModelImporterClipPatch> Clips;
+        internal ModelImporterClipAnimation[] PreparedClips;
 
         internal bool HasAnySetting =>
             Model != null || Mesh != null || Geometry != null || Normals != null || Tangents != null ||
-            Materials != null || MaterialRemaps != null || Rig != null;
+            Materials != null || MaterialRemaps != null || Rig != null || Clips != null;
 
         internal ModelImporterState Apply(ModelImporterState source, List<string> changedFields)
         {
@@ -34,6 +36,8 @@ namespace LeonAkasaka.UnionAir.Editor
             Rig?.Apply(result, changedFields);
             if (MaterialRemaps != null)
                 ModelImporterMaterialsRigState.ApplyRemapPatches(result, MaterialRemaps, changedFields);
+            if (Clips != null)
+                ModelImporterClipsState.ApplyPrepared(result, PreparedClips, changedFields);
             return result;
         }
     }
@@ -240,6 +244,8 @@ namespace LeonAkasaka.UnionAir.Editor
         internal ModelImporterHumanoidOversampling HumanoidOversampling;
         internal bool OptimizeGameObjects;
         internal string[] ExtraExposedTransformPaths;
+        internal ModelImporterClipAnimation[] StoredClipAnimations;
+        internal ModelImporterClipAnimation[] DefaultClipAnimations;
 
         internal static ModelImporterState Capture(ModelImporter importer)
         {
@@ -282,6 +288,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 ImportTangents = importer.importTangents
             };
             ModelImporterMaterialsRigState.Capture(importer, state);
+            ModelImporterClipsState.Capture(importer, state);
             return state;
         }
 
@@ -289,6 +296,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             var clone = (ModelImporterState)MemberwiseClone();
             ModelImporterMaterialsRigState.CloneCollections(this, clone);
+            ModelImporterClipsState.CloneCollections(this, clone);
             return clone;
         }
 
@@ -329,6 +337,7 @@ namespace LeonAkasaka.UnionAir.Editor
             importer.normalSmoothingAngle = NormalSmoothingAngle;
             importer.importTangents = ImportTangents;
             ModelImporterMaterialsRigState.Apply(importer, this, request);
+            ModelImporterClipsState.Apply(importer, this, request);
         }
 
         internal bool EqualsState(ModelImporterState other)
@@ -359,14 +368,15 @@ namespace LeonAkasaka.UnionAir.Editor
                    NormalSmoothingSource == other.NormalSmoothingSource &&
                    Math.Abs(NormalSmoothingAngle - other.NormalSmoothingAngle) < 0.000001f &&
                    ImportTangents == other.ImportTangents &&
-                   ModelImporterMaterialsRigState.EqualsState(this, other);
+                   ModelImporterMaterialsRigState.EqualsState(this, other) &&
+                   ModelImporterClipsState.EqualsState(this, other);
         }
     }
 
     internal static class ModelImporterUpdateParser
     {
         private static readonly string[] TopFields =
-            { "schemaVersion", "model", "mesh", "geometry", "normals", "tangents", "materials", "materialRemaps", "rig" };
+            { "schemaVersion", "model", "mesh", "geometry", "normals", "tangents", "materials", "materialRemaps", "rig", "clips" };
         private static readonly string[] ModelFields =
             { "globalScale", "useFileScale", "useFileUnits", "bakeAxisConversion", "preserveHierarchy", "isReadable" };
         private static readonly string[] MeshFields =
@@ -401,7 +411,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 !TryParseGeometry(body, parsed, out error) ||
                 !TryParseNormals(body, parsed, out error) ||
                 !TryParseTangents(body, parsed, out error) ||
-                !ModelImporterMaterialsRigParser.TryParse(body, parsed, out error))
+                !ModelImporterMaterialsRigParser.TryParse(body, parsed, out error) ||
+                !ModelImporterClipsParser.TryParse(body, parsed, out error))
                 return false;
 
             if (!parsed.HasAnySetting)
@@ -488,7 +499,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            return ModelImporterMaterialsRigRules.TryValidate(state, importer, request, out error);
+            if (!ModelImporterMaterialsRigRules.TryValidate(state, importer, request, out error)) return false;
+            return ModelImporterClipsRules.TryValidate(state, request, out error);
         }
 
         private static bool TryParseModel(string body, ModelImporterUpdateRequest request, out string error)

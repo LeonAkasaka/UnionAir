@@ -156,7 +156,7 @@ projectとすべてのlocal API clientを信頼できるものとして扱って
 |-------|-------|----------|
 | **Read** | シーン階層、ロード済みシーン、GameObject、アセット、カメラ、ログ、検索、コンパイル結果 | 常時有効 |
 | **Scene Write** | シーンの作成/オープン/アンロード、GameObject・コンポーネントの作成/更新/削除 | 既定で無効 |
-| **Asset Write** | プレハブ、マテリアル、アセットファイル、AssetDatabase リフレッシュ、コンパイル要求 | 既定で無効 |
+| **Asset Write** | プレハブ、マテリアル、アセットファイル、型付き AudioImporter/ModelImporter 設定、AssetDatabase リフレッシュ、コンパイル要求 | 既定で無効 |
 | **Play Mode** | Play モードの開始/終了/一時停止/ステップ、Input System アクション、Canvas UI 操作 | 既定で無効 |
 | **Editor Actions** | 選択、オブジェクトの ping、アセットのオープン、Unity Editor メニュー項目の実行 | 既定で無効 |
 | **Test Runner** | EditMode / PlayMode テストの発見、実行、監視、キャンセル、結果ダウンロード | 既定で無効。Unity Test Framework 1.4.0 以降の導入時のみ利用可能 |

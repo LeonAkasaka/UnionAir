@@ -1119,7 +1119,17 @@ its durable imported sub-assets. This Read endpoint is unavailable during asset 
     "unityVersion": "6000.0.80f1",
     "useFileUnits": true,
     "tangentImport": true,
-    "bakeIk": true
+    "bakeIk": true,
+    "settings": {
+      "model.useFileUnits": true,
+      "tangents.import": true,
+      "clips.definitions": true,
+      "clips.avatarMask": true,
+      "clips.events": true,
+      "clips.curves": false,
+      "rig.humanDescription": false
+    },
+    "unavailableSettings": ["rig.humanDescription", "clips.curves"]
   },
   "settings": {
     "model": { "globalScale": 1.0, "fileScale": 1.0, "useFileScale": true, "useFileUnits": true, "bakeAxisConversion": false, "preserveHierarchy": false, "isReadable": false },
@@ -1160,7 +1170,37 @@ The same `settings` object also contains:
     "optimizeGameObjects": true,
     "extraExposedTransformPaths": ["Root/WeaponSocket"]
   },
-  "unsupportedInitialSettings": ["rig.humanDescription"]
+  "clips": {
+    "derivedFromDefaults": false,
+    "definitions": [{
+      "takeName": "Take 001",
+      "name": "Idle",
+      "firstFrame": 0.0,
+      "lastFrame": 60.0,
+      "wrapMode": "Default",
+      "loop": false,
+      "loopTime": true,
+      "loopPose": true,
+      "mirror": false,
+      "lockRootRotation": true,
+      "keepOriginalOrientation": true,
+      "rotationOffset": 0.0,
+      "lockRootHeightY": true,
+      "keepOriginalPositionY": true,
+      "heightFromFeet": false,
+      "heightOffset": 0.0,
+      "lockRootPositionXZ": true,
+      "keepOriginalPositionXZ": true,
+      "cycleOffset": 0.0,
+      "hasAdditiveReferencePose": false,
+      "additiveReferencePoseFrame": 0.0,
+      "maskType": "CreateFromThisModel",
+      "maskSource": null,
+      "maskNeedsUpdating": false,
+      "events": []
+    }]
+  },
+  "unsupportedInitialSettings": ["rig.humanDescription", "clips.curves"]
 }
 ```
 
@@ -1168,6 +1208,9 @@ The same `settings` object also contains:
 is returned as null so clients can identify and remove stale remaps. `humanDescription`
 is deliberately not writable through arbitrary serialized properties; its unsupported
 status is explicit in every settings snapshot.
+When `clipAnimations` is empty, `clips.definitions` is populated from
+`defaultClipAnimations` and `derivedFromDefaults` is true. This separates “no stored
+override array” from “no animation take.” Clip curves are unsupported in schema version 1.
 
 ---
 
@@ -1200,6 +1243,7 @@ names GET returns, case-insensitively.
 | `materials` | `importMode`, `location`, `naming`, `search` |
 | `materialRemaps` | Array of `{source: {type: "UnityEngine.Material", name}, target}`; `target: null` removes the source remap |
 | `rig` | `animationType`, `avatarSetup`, `sourceAvatar`, `autoGenerateAvatarMappingIfUnspecified`, `humanoidOversampling`, `optimizeGameObjects`, `extraExposedTransformPaths` |
+| `clips` | Full ordered replacement array; each entry requires `takeName`, unique `name`, `firstFrame`, and `lastFrame` |
 
 `useFileUnits` and tangent import are checked against source capabilities. Tangents
 must be `None` when normals are `None`.
@@ -1216,6 +1260,33 @@ requires a valid compatible source Avatar. `None` and `Legacy` rigs require `NoA
 humanoid oversampling is Human-only, automatic mapping additionally requires
 `CreateFromThisModel`, and exposed transform paths require optimization. Incompatible
 fields are rejected rather than ignored.
+
+### Imported clip definitions
+
+`clips` replaces `ModelImporter.clipAnimations` as one ordered array. Sending `[]`
+removes the stored array, so the next read is default-derived. Each definition starts
+from the same stored `(takeName, name)` definition when one exists, or otherwise from
+the named default take. Omitted optional fields retain that baseline.
+
+Optional fields are `wrapMode`, `loop`, `loopTime`, `loopPose`, `mirror`,
+`lockRootRotation`, `keepOriginalOrientation`, `rotationOffset`, `lockRootHeightY`,
+`keepOriginalPositionY`, `heightFromFeet`, `heightOffset`, `lockRootPositionXZ`,
+`keepOriginalPositionXZ`, `cycleOffset`, `hasAdditiveReferencePose`,
+`additiveReferencePoseFrame`, `maskType`, `maskSource`, and `events`.
+
+The take must exist in `defaultClipAnimations`, and the finite frame range must be
+ordered and stay inside that take. Clip names are unique across the replacement.
+`loopPose` requires `loopTime`; an additive reference frame requires the additive mode
+and must lie in the clip range; mirror is Human-only.
+`maskType: CopyFromOther` requires an `AvatarMask` `maskSource`, while other mask types
+require null. Mask and event object references use the same GUID/local-identifier rules
+as Material and Avatar references.
+
+`events` is an ordered full replacement per definition. Every event requires finite,
+non-negative `time` and non-empty `functionName`; optional fields are `stringParameter`,
+`floatParameter`, `intParameter`, `objectReferenceParameter`, and `messageOptions`
+(`DontRequireReceiver` or `RequireReceiver`). Unknown nested fields reject the whole
+array before mutation.
 
 ---
 

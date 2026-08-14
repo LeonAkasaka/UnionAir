@@ -1124,7 +1124,17 @@ unchanged request は `reimported: false` と空の diagnostics 配列を返し�
     "unityVersion": "6000.0.80f1",
     "useFileUnits": true,
     "tangentImport": true,
-    "bakeIk": true
+    "bakeIk": true,
+    "settings": {
+      "model.useFileUnits": true,
+      "tangents.import": true,
+      "clips.definitions": true,
+      "clips.avatarMask": true,
+      "clips.events": true,
+      "clips.curves": false,
+      "rig.humanDescription": false
+    },
+    "unavailableSettings": ["rig.humanDescription", "clips.curves"]
   },
   "settings": {
     "model": { "globalScale": 1.0, "fileScale": 1.0, "useFileScale": true, "useFileUnits": true, "bakeAxisConversion": false, "preserveHierarchy": false, "isReadable": false },
@@ -1166,13 +1176,46 @@ true のインポート済み `Mesh`、`Material`、`Avatar`、`AnimationClip` �
     "optimizeGameObjects": true,
     "extraExposedTransformPaths": ["Root/WeaponSocket"]
   },
-  "unsupportedInitialSettings": ["rig.humanDescription"]
+  "clips": {
+    "derivedFromDefaults": false,
+    "definitions": [{
+      "takeName": "Take 001",
+      "name": "Idle",
+      "firstFrame": 0.0,
+      "lastFrame": 60.0,
+      "wrapMode": "Default",
+      "loop": false,
+      "loopTime": true,
+      "loopPose": true,
+      "mirror": false,
+      "lockRootRotation": true,
+      "keepOriginalOrientation": true,
+      "rotationOffset": 0.0,
+      "lockRootHeightY": true,
+      "keepOriginalPositionY": true,
+      "heightFromFeet": false,
+      "heightOffset": 0.0,
+      "lockRootPositionXZ": true,
+      "keepOriginalPositionXZ": true,
+      "cycleOffset": 0.0,
+      "hasAdditiveReferencePose": false,
+      "additiveReferencePoseFrame": 0.0,
+      "maskType": "CreateFromThisModel",
+      "maskSource": null,
+      "maskNeedsUpdating": false,
+      "events": []
+    }]
+  },
+  "unsupportedInitialSettings": ["rig.humanDescription", "clips.curves"]
 }
 ```
 
 `materialRemaps` は `GetExternalObjectMap()` の Material 項目です。参照先が欠落した target は
 null として返すため、client は stale remap を検出して削除できます。`humanDescription` は
 任意の serialized property として公開せず、未対応であることをすべての設定 snapshot に明示します。
+`clipAnimations` が空の場合、`clips.definitions` は `defaultClipAnimations` から作られ、
+`derivedFromDefaults` は true です。これにより「保存済み override 配列がない」と
+「animation take がない」を区別できます。schema version 1 では clip curve は未対応です。
 
 ---
 
@@ -1205,6 +1248,7 @@ PATCH の契約を検証し、変更やインポートをせずに `valid`、`re
 | `materials` | `importMode`、`location`、`naming`、`search` |
 | `materialRemaps` | `{source: {type: "UnityEngine.Material", name}, target}` の配列。`target: null` はその source remap を削除 |
 | `rig` | `animationType`、`avatarSetup`、`sourceAvatar`、`autoGenerateAvatarMappingIfUnspecified`、`humanoidOversampling`、`optimizeGameObjects`、`extraExposedTransformPaths` |
+| `clips` | 順序付き配列の全置換。各 entry に `takeName`、一意な `name`、`firstFrame`、`lastFrame` が必須 |
 
 `useFileUnits` と tangent import はソースの capability に対しても検証されます。
 normal が `None` の場合、tangent も `None` でなければなりません。
@@ -1220,6 +1264,31 @@ Material の naming/search は material import が必要で、`location: InPrefa
 互換性のある source Avatar が必要です。`None` と `Legacy` rig には `NoAvatar` が必要です。
 humanoid oversampling は Human 専用で、自動 mapping にはさらに `CreateFromThisModel` が必要、
 exposed transform path には optimization が必要です。互換性のないフィールドは無視せず拒否します。
+
+### Imported clip definition
+
+`clips` は `ModelImporter.clipAnimations` を順序付き配列として一括置換します。`[]` を
+送ると保存済み配列が削除され、次の読み取りは default-derived になります。同じ
+`(takeName, name)` の保存済み definition があれば各 entry の基準にし、なければ指定した
+default take を基準にします。省略した任意フィールドはその基準値を維持します。
+
+任意フィールドは `wrapMode`、`loop`、`loopTime`、`loopPose`、`mirror`、
+`lockRootRotation`、`keepOriginalOrientation`、`rotationOffset`、`lockRootHeightY`、
+`keepOriginalPositionY`、`heightFromFeet`、`heightOffset`、`lockRootPositionXZ`、
+`keepOriginalPositionXZ`、`cycleOffset`、`hasAdditiveReferencePose`、
+`additiveReferencePoseFrame`、`maskType`、`maskSource`、`events` です。
+
+take は `defaultClipAnimations` に存在する必要があり、有限の frame range は順序が正しく、
+その take 内でなければなりません。置換配列内の clip name は一意です。`loopPose` には
+`loopTime` が必要です。additive reference frame は additive mode が必要で
+clip range 内、mirror は Human 専用です。`maskType: CopyFromOther` には `AvatarMask` の
+`maskSource` が必要で、それ以外の mask type では null が必要です。Mask と event object の
+参照には Material/Avatar と同じ GUID/local identifier 規則を使います。
+
+`events` は definition ごとの順序付き全置換です。各 event には有限で非負の `time` と空でない
+`functionName` が必須です。任意フィールドは `stringParameter`、`floatParameter`、
+`intParameter`、`objectReferenceParameter`、`messageOptions` (`DontRequireReceiver` または
+`RequireReceiver`) です。未知の nested field は変更前に配列全体を拒否します。
 
 ---
 

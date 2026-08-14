@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset>
+    <contributor><authoring_tool>UnionAir test fixture</authoring_tool></contributor>
+    <created>2026-01-01T00:00:00Z</created>
+    <modified>2026-01-01T00:00:00Z</modified>
+    <unit name="meter" meter="1"/>
+    <up_axis>Y_UP</up_axis>
+  </asset>
+  <library_geometries>
+    <geometry id="Triangle-mesh" name="Triangle">
+      <mesh>
+        <source id="Triangle-positions">
+          <float_array id="Triangle-positions-array" count="9">0 0 0 1 0 0 0 1 0</float_array>
+          <technique_common>
+            <accessor source="#Triangle-positions-array" count="3" stride="3">
+              <param name="X" type="float"/><param name="Y" type="float"/><param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="Triangle-vertices"><input semantic="POSITION" source="#Triangle-positions"/></vertices>
+        <triangles count="1"><input semantic="VERTEX" source="#Triangle-vertices" offset="0"/><p>0 1 2</p></triangles>
+      </mesh>
+    </geometry>
+  </library_geometries>
+  <library_animations>
+    <animation id="Triangle-location-X">
+      <source id="Triangle-location-X-input">
+        <float_array id="Triangle-location-X-input-array" count="2">0 1</float_array>
+        <technique_common><accessor source="#Triangle-location-X-input-array" count="2" stride="1"><param name="TIME" type="float"/></accessor></technique_common>
+      </source>
+      <source id="Triangle-location-X-output">
+        <float_array id="Triangle-location-X-output-array" count="2">0 1</float_array>
+        <technique_common><accessor source="#Triangle-location-X-output-array" count="2" stride="1"><param name="X" type="float"/></accessor></technique_common>
+      </source>
+      <source id="Triangle-location-X-interpolation">
+        <Name_array id="Triangle-location-X-interpolation-array" count="2">LINEAR LINEAR</Name_array>
+        <technique_common><accessor source="#Triangle-location-X-interpolation-array" count="2" stride="1"><param name="INTERPOLATION" type="Name"/></accessor></technique_common>
+      </source>
+      <sampler id="Triangle-location-X-sampler">
+        <input semantic="INPUT" source="#Triangle-location-X-input"/>
+        <input semantic="OUTPUT" source="#Triangle-location-X-output"/>
+        <input semantic="INTERPOLATION" source="#Triangle-location-X-interpolation"/>
+      </sampler>
+      <channel source="#Triangle-location-X-sampler" target="Triangle/location.X"/>
+    </animation>
+  </library_animations>
+  <library_visual_scenes>
+    <visual_scene id="Scene" name="Scene">
+      <node id="Triangle" name="Triangle" type="NODE">
+        <translate sid="location">0 0 0</translate>
+        <instance_geometry url="#Triangle-mesh"/>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+  <scene><instance_visual_scene url="#Scene"/></scene>
+</COLLADA>
