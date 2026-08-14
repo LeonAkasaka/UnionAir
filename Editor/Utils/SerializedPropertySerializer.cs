@@ -150,14 +150,8 @@ namespace LeonAkasaka.UnionAir.Editor
             error = null;
             statusCode = 400;
 
-            // Unity represents string as a char array internally, so prop.isArray is true for
-            // string fields — those are handled by the String case below and must not land here.
-            if (prop.isArray && prop.propertyType != SerializedPropertyType.String)
-            {
-                error = $"Property {jsonKey} is an array. Arrays and nested generic properties " +
-                        "cannot be written through this endpoint.";
-                return false;
-            }
+            error = DescribeUnwritableArray(prop, jsonKey);
+            if (error != null) return false;
 
             try
             {
@@ -339,6 +333,33 @@ namespace LeonAkasaka.UnionAir.Editor
 
         private static string Expected(string jsonKey, string shape)
             => $"Property {jsonKey} expects {shape}.";
+
+        /// <summary>
+        /// Returns why <paramref name="prop"/> cannot be written because it is an array or part of
+        /// one, or null when it is neither.
+        /// </summary>
+        /// <remarks>
+        /// A whole array is refused by <c>isArray</c>, but the component walk descends into
+        /// children, so <c>m_Materials.Array.data[0]</c> arrives here as an ordinary object
+        /// reference and used to be written one element at a time -- against an endpoint whose
+        /// contract says arrays are not writable. The element path is Unity's own canonical
+        /// spelling, and the array's size arrives as its own <c>ArraySize</c> property.
+        /// </remarks>
+        internal static string DescribeUnwritableArray(SerializedProperty prop, string jsonKey)
+        {
+            // Unity represents string as a char array internally, so prop.isArray is true for
+            // string fields — those are written by the String case and must not land here.
+            if (prop.isArray && prop.propertyType != SerializedPropertyType.String)
+                return $"Property {jsonKey} is an array. Arrays and nested generic properties " +
+                       "cannot be written through this endpoint.";
+
+            if (prop.propertyType == SerializedPropertyType.ArraySize ||
+                prop.propertyPath.IndexOf(".Array.data[", StringComparison.Ordinal) >= 0)
+                return $"Property {jsonKey} is part of an array. Arrays and nested generic " +
+                       "properties cannot be written through this endpoint.";
+
+            return null;
+        }
 
         private static bool TryValidateCompositeObject(
             string json, string jsonKey, string[] allowedMembers, out string error)

@@ -295,6 +295,13 @@ namespace LeonAkasaka.UnionAir.Editor
         private static bool ApplyPropertyFromJson(
             SerializedProperty prop, string json, string jsonKey, out string error, out int statusCode)
         {
+            // Checked before the dispatch below, because the ObjectReference branch is ours and
+            // would otherwise never see the shared serializer's array guard -- which is how an
+            // array element, an object reference like m_Materials.Array.data[0], was writable.
+            statusCode = 400;
+            error = SerializedPropertySerializer.DescribeUnwritableArray(prop, jsonKey);
+            if (error != null) return false;
+
             // Delegate scalar-type handling to the shared serializer, but handle ObjectReference
             // ourselves so we can also resolve scene-object references (globalObjectId).
             if (prop.propertyType != SerializedPropertyType.ObjectReference)

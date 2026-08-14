@@ -573,7 +573,7 @@ Each key in `properties` is a `SerializedProperty.propertyPath`. Top-level field
 
 Every key must be unique and name a property this endpoint can write, and only keys at the top level of `properties` are read — a name appearing inside another property's value is part of that value, not a request to write it. A duplicate key, a key that names nothing, one that names something unwritable, or one carrying a value of the wrong shape answers `400` and says which key and why, rather than being passed over. `updated` therefore always lists every key the request sent, and a `200` means the whole request was applied. An empty `properties` object is accepted and updates nothing.
 
-Arrays, nested generic types, and `m_Script` are among the properties this endpoint cannot write. Sending one is an error, not a no-op.
+Arrays, nested generic types, and `m_Script` are among the properties this endpoint cannot write. Sending one is an error, not a no-op. That covers an array's parts as well as the array itself: `m_Materials.Array.data[0]` and `m_Materials.Array.size` are refused for the same reason `m_Materials` is.
 
 Color and vector objects are partial patches: omitted members retain their current values. At least one supported member must be present, every supplied member must be a JSON number, and unknown or duplicate members are rejected.
 

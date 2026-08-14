@@ -20,6 +20,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         private GameObject _target;
         private GameObject _anchor;
         private MeshRenderer _renderer;
+        private Material _material;
 
         [SetUp]
         public void SetUp()
@@ -28,6 +29,10 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             _target = new GameObject("UnionAirPropertyKeyTarget_" + suffix);
             _anchor = new GameObject("UnionAirPropertyKeyAnchor_" + suffix);
             _renderer = _target.AddComponent<MeshRenderer>();
+
+            // One material, so m_Materials has an element for the array-path tests to address.
+            _material = new Material(Shader.Find("Unlit/Color"));
+            _renderer.sharedMaterial = _material;
         }
 
         [TearDown]
@@ -35,6 +40,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         {
             if (_target != null) UnityEngine.Object.DestroyImmediate(_target);
             if (_anchor != null) UnityEngine.Object.DestroyImmediate(_anchor);
+            if (_material != null) UnityEngine.Object.DestroyImmediate(_material);
         }
 
         // ── A key selects only what it names at the top level ────────────────
@@ -150,6 +156,30 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 
             Assert.AreEqual(400, response.StatusCode, response.Body);
             StringAssert.Contains("array", response.Body);
+        }
+
+        [Test]
+        public void AnArrayElementIsRejected()
+        {
+            // The walk descends into children, so this arrives as an ordinary object reference and
+            // was written one element at a time -- past the guard that refuses the array itself.
+            var response = Patch("{\"properties\":{\"m_Materials.Array.data[0]\":null}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("array", response.Body);
+            Assert.AreSame(_material, _renderer.sharedMaterial);
+        }
+
+        [Test]
+        public void AnArraySizeIsRejected()
+        {
+            // Refused for being part of an array rather than for its serialized type, which is
+            // what the catch-all used to say and what said nothing about arrays.
+            var response = Patch("{\"properties\":{\"m_Materials.Array.size\":2}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("array", response.Body);
+            Assert.AreEqual(1, _renderer.sharedMaterials.Length);
         }
 
         [Test]
