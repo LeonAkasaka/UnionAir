@@ -729,12 +729,10 @@ namespace LeonAkasaka.UnionAir.Editor
         /// <c>y</c> holds. The write succeeds, the curve is applied, and the rotation is wrong
         /// by an amount nothing in the response would otherwise show.
         ///
-        /// Only at the key times. A correctly authored quaternion is not unit length between
-        /// its keys either -- Unity interpolates the four components and normalizes on apply,
-        /// so a check anywhere else would report every rotation curve ever written. Measured
-        /// on 6000.0.80f1, a group write resamples every component onto the union of the
-        /// group's key times, so each component carries a key wherever any of them does and
-        /// one component's times are the group's times.
+        /// Only at the key times, which <see cref="KeyTimes"/> takes across all four curves. A
+        /// correctly authored quaternion is not unit length between its keys either -- Unity
+        /// interpolates the four components and normalizes on apply, so a check anywhere else
+        /// would report every rotation curve ever written.
         ///
         /// This is a warning rather than an error because the write did store something, and
         /// because a caller may complete the quaternion over several requests: a later write
@@ -756,19 +754,19 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (curves[i] == null) return;
             }
 
-            foreach (var key in curves[0].keys)
+            foreach (var time in KeyTimes(curves))
             {
-                var x = curves[0].Evaluate(key.time);
-                var y = curves[1].Evaluate(key.time);
-                var z = curves[2].Evaluate(key.time);
-                var w = curves[3].Evaluate(key.time);
+                var x = curves[0].Evaluate(time);
+                var y = curves[1].Evaluate(time);
+                var z = curves[2].Evaluate(time);
+                var w = curves[3].Evaluate(time);
 
                 var length = Mathf.Sqrt(x * x + y * y + z * z + w * w);
                 if (Mathf.Abs(length - 1f) <= RotationUnitTolerance) continue;
 
                 var where = string.IsNullOrEmpty(write.RelativePath) ? "the root" : $"'{write.RelativePath}'";
                 warnings.Add(
-                    $"Rotation on {where} is not a unit quaternion at t={RestResponse.FormatFloat(key.time)}: " +
+                    $"Rotation on {where} is not a unit quaternion at t={RestResponse.FormatFloat(time)}: " +
                     $"{RotationGroupName}.x/.y/.z/.w = ({RestResponse.FormatFloat(x)}, {RestResponse.FormatFloat(y)}, " +
                     $"{RestResponse.FormatFloat(z)}, {RestResponse.FormatFloat(w)}), length " +
                     $"{RestResponse.FormatFloat(length)}. SetCurve fills the components a request does not name " +
@@ -776,6 +774,36 @@ namespace LeonAkasaka.UnionAir.Editor
                     $"it carries. Write rotation as 'localEulerAngles.*', or send all four components.");
                 return;
             }
+        }
+
+        /// <summary>
+        /// Every distinct time any of the curves is keyed at, in order.
+        ///
+        /// Measured on 6000.0.80f1, a group write resamples the whole group onto the union of
+        /// its key times -- writing one component in its own request gives the other three a
+        /// key wherever that component has one -- so any single curve's times are already the
+        /// group's times, and this returns what iterating one of them would. It is built as a
+        /// union anyway: that resampling is undocumented Unity behaviour measured on one
+        /// version, and a version that does not do it would leave the check reading times
+        /// that only describe part of the group. The union does not depend on it.
+        /// </summary>
+        private static List<float> KeyTimes(AnimationCurve[] curves)
+        {
+            var times = new List<float>();
+            foreach (var curve in curves)
+            {
+                foreach (var key in curve.keys)
+                {
+                    var seen = false;
+                    foreach (var time in times)
+                        if (Mathf.Approximately(time, key.time)) { seen = true; break; }
+
+                    if (!seen) times.Add(key.time);
+                }
+            }
+
+            times.Sort();
+            return times;
         }
 
         /// <summary>
