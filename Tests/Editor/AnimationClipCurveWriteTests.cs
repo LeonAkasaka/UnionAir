@@ -398,6 +398,25 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void Post_ReportsABadRotationSuffixOnceRatherThanTwice()
+        {
+            // The two checks meet on this entry: it is a rotation group, and it stored none of
+            // its keys. They stay disjoint because the group comes out empty -- there are no
+            // key times to evaluate a quaternion at -- so it is an error and not also a
+            // warning. Stated as a test because the response shape depends on it.
+            AllowUnitysInvalidPropertyLog();
+
+            var response = Post(FloatCurve("Transform", "m_LocalRotation.v"));
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("stored none of its keys", response.Body);
+            StringAssert.Contains(
+                "m_LocalRotation.x, m_LocalRotation.y, m_LocalRotation.z, m_LocalRotation.w",
+                response.Body);
+            StringAssert.Contains("\"warnings\":[]", response.Body);
+        }
+
+        [Test]
         public void Post_DoesNotWarnAboutEulerAngles()
         {
             // Euler is the group that survives a single entry: the components it does not
