@@ -54,6 +54,28 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
+        public void Capture_DoesNotAliasExtraExposedTransformPaths()
+        {
+            CreateAssets();
+            try
+            {
+                var importer = AssetImporter.GetAtPath(ModelPath) as ModelImporter;
+                Assert.IsNotNull(importer);
+                importer.extraExposedTransformPaths = new[] { "Root/Hand" };
+
+                var state = ModelImporterState.Capture(importer);
+                state.ExtraExposedTransformPaths[0] = "Changed";
+
+                CollectionAssert.AreEqual(
+                    new[] { "Root/Hand" }, importer.extraExposedTransformPaths);
+            }
+            finally
+            {
+                DeleteAssets();
+            }
+        }
+
+        [Test]
         public void Preflight_RejectsWrongMissingAndAmbiguousMaterialTargetsWithoutMutation()
         {
             CreateAssets();

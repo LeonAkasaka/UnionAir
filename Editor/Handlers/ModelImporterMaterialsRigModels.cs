@@ -539,7 +539,10 @@ namespace LeonAkasaka.UnionAir.Editor
             state.AutoGenerateAvatarMappingIfUnspecified = importer.autoGenerateAvatarMappingIfUnspecified;
             state.HumanoidOversampling = importer.humanoidOversampling;
             state.OptimizeGameObjects = importer.optimizeGameObjects;
-            state.ExtraExposedTransformPaths = importer.extraExposedTransformPaths ?? new string[0];
+            var extraExposedTransformPaths = importer.extraExposedTransformPaths;
+            state.ExtraExposedTransformPaths = extraExposedTransformPaths == null
+                ? new string[0]
+                : (string[])extraExposedTransformPaths.Clone();
         }
 
         internal static void CloneCollections(ModelImporterState source, ModelImporterState clone)

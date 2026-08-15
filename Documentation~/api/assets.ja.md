@@ -1170,9 +1170,9 @@ true のインポート済み `Mesh`、`Material`、`Avatar`、`AnimationClip` �
 }
 ```
 
-`materialRemaps` は `GetExternalObjectMap()` の Material 項目です。null target は
-GET では返りません。`humanDescription` は任意の serialized property として公開せず、
-未対応であることをすべての設定 snapshot に明示します。
+`materialRemaps` は `GetExternalObjectMap()` の Material 項目です。参照先が欠落した target は
+null として返すため、client は stale remap を検出して削除できます。`humanDescription` は
+任意の serialized property として公開せず、未対応であることをすべての設定 snapshot に明示します。
 
 ---
 

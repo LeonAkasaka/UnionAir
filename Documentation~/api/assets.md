@@ -1164,9 +1164,10 @@ The same `settings` object also contains:
 }
 ```
 
-`materialRemaps` is the Material subset of `GetExternalObjectMap()`. A null target is
-not returned. `humanDescription` is deliberately not writable through arbitrary
-serialized properties; its unsupported status is explicit in every settings snapshot.
+`materialRemaps` is the Material subset of `GetExternalObjectMap()`. A missing target
+is returned as null so clients can identify and remove stale remaps. `humanDescription`
+is deliberately not writable through arbitrary serialized properties; its unsupported
+status is explicit in every settings snapshot.
 
 ---
 
