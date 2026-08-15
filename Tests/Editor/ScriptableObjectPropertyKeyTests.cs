@@ -192,8 +192,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         [Test]
         public void AnArrayOfUnwritableElementsIsRejectedForWhatAResizeWouldGiveIt()
         {
-            // Empty, so there is nothing to inspect until the resize has happened. Refusing only
-            // on the way in would let an empty array of unwritable elements be filled.
+            // Empty, so there is nothing to inspect without asking the array for its element type.
             var response = Patch("{\"properties\":{\"spares\":[{\"hp\":1}]}}");
 
             Assert.AreEqual(400, response.StatusCode, response.Body);
@@ -202,13 +201,48 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual(0, _asset.spares.Length);
         }
 
-        [Test]
-        public void AnUnwritableElementTypeIsRefusedThroughItsLengthToo()
+        [TestCase("{\"spares\":[]}",           TestName = "clearing an empty one")]
+        [TestCase("{\"spares.Array.size\":0}", TestName = "resizing an empty one to empty")]
+        [TestCase("{\"spares.Array.size\":2}", TestName = "growing an empty one")]
+        public void AnUnwritableElementTypeIsRefusedWhateverTheArrayCurrentlyHolds(string properties)
         {
-            var response = Patch("{\"properties\":{\"spares.Array.size\":2}}");
+            // Judging writability by what an array holds made it depend on the array's length: a
+            // request that left an empty one empty wrote nothing and answered 200, so a caller
+            // clearing an empty list was told the field was writable and found out otherwise the
+            // moment the list had an element in it.
+            var response = Patch("{\"properties\":" + properties + "}");
 
             Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("spares", response.Body);
+            StringAssert.Contains("cannot write", response.Body);
             Assert.AreEqual(0, _asset.spares.Length);
+        }
+
+        [Test]
+        public void AnElementAddressOnAnUnwritableArrayNamesTheElementTypeRatherThanTheRange()
+        {
+            // Refused before the index is looked at, so the message is about the array's elements
+            // rather than about an empty array having no index 0.
+            var response = Patch("{\"properties\":{\"spares.Array.data[0]\":{\"hp\":1}}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("cannot write", response.Body);
+        }
+
+        [Test]
+        public void AnEmptyWritableArrayIsUnchangedByTheElementTypeCheck()
+        {
+            // The check grows an empty array by one to read its element type. Nothing may survive
+            // that, on the array it inspected or on the request that follows.
+            var response = Patch("{\"properties\":{\"tags\":[]}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(0, _asset.tags.Length);
+
+            response = Patch("{\"properties\":{\"references\":[]}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(0, _asset.references.Length);
         }
 
         [Test]

@@ -450,17 +450,30 @@ namespace LeonAkasaka.UnionAir.Editor
         /// so a write that replaces or drops it destroys content on the caller's behalf. That rules
         /// out a whole-array write and a shrinking resize; growing alone would be safe, but a
         /// contract permitting one direction of a resize and not the other is worse to describe
-        /// than one that refuses the array. The element type is read from the array as it stands,
-        /// so an array being emptied is judged by what it currently holds.
+        /// than one that refuses the array.
+        ///
+        /// An empty array has an element type all the same, and answering "writable" because there
+        /// is nothing to look at makes writability depend on the array's current length. A caller
+        /// clearing an empty list would be told <c>200</c> and the same request against a list with
+        /// one element <c>400</c> -- the state-dependent success this endpoint exists to not give.
+        /// So an empty array is grown by one to be read and put back, which no caller can observe:
+        /// nothing here is committed until <c>ApplyModifiedProperties</c>, and the length is
+        /// restored before this returns.
         /// </remarks>
         internal static string DescribeUnwritableElements(SerializedProperty arrayProp, string jsonKey)
         {
-            if (arrayProp.arraySize == 0) return null;
+            var probing = arrayProp.arraySize == 0;
+            if (probing) arrayProp.arraySize = 1;
 
             var element = arrayProp.GetArrayElementAtIndex(0);
-            if (element.propertyType != SerializedPropertyType.Generic) return null;
+            var isGeneric = element.propertyType == SerializedPropertyType.Generic;
+            var elementType = element.type;
 
-            return $"Property {jsonKey} is an array of {element.type} elements, whose serialized " +
+            if (probing) arrayProp.arraySize = 0;
+
+            if (!isGeneric) return null;
+
+            return $"Property {jsonKey} is an array of {elementType} elements, whose serialized " +
                    "type this endpoint cannot write. Only arrays of a type it writes can be " +
                    "addressed.";
         }
@@ -510,15 +523,12 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (!TryBoundLength(elements.Count, jsonKey, out error)) return false;
 
-            // What the array holds now, before the resize can drop any of it.
+            // Asked of the array rather than of what it currently holds, so an empty one is judged
+            // by its element type like any other and nothing is dropped before the refusal.
             error = DescribeUnwritableElements(arrayProp, jsonKey);
             if (error != null) return false;
 
             arrayProp.arraySize = elements.Count;
-
-            // And what it holds after, so an array that was empty is judged by what it became.
-            error = DescribeUnwritableElements(arrayProp, jsonKey);
-            if (error != null) return false;
 
             for (int i = 0; i < elements.Count; i++)
             {
@@ -624,11 +634,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (!TryBoundLength(size, jsonKey, out error)) return false;
 
                 arrayProp.arraySize = size;
-
-                // Growing an empty array of an unwritable element type produces elements the
-                // caller could not have written one at a time either.
-                error = DescribeUnwritableElements(arrayProp, jsonKey);
-                return error == null;
+                return true;
             }
 
             // Range-checked here rather than left to a lookup, which would report an index past the
