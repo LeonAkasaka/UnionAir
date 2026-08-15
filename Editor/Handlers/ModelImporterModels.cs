@@ -29,6 +29,17 @@ namespace LeonAkasaka.UnionAir.Editor
         }
     }
 
+    internal static class ModelImporterPatchValue
+    {
+        internal static bool Same<T>(T left, T right) where T : struct
+        {
+            if (typeof(T) == typeof(float))
+                return RestResponse.FormatFloat((float)(object)left) ==
+                       RestResponse.FormatFloat((float)(object)right);
+            return EqualityComparer<T>.Default.Equals(left, right);
+        }
+    }
+
     internal sealed class ModelImporterModelPatch
     {
         internal float? GlobalScale;
@@ -53,7 +64,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (!requested.HasValue) return;
             setter(requested.Value);
-            if (!EqualityComparer<T>.Default.Equals(requested.Value, current)) changed.Add(path);
+            if (!ModelImporterPatchValue.Same(requested.Value, current)) changed.Add(path);
         }
     }
 
@@ -87,7 +98,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (!requested.HasValue) return;
             setter(requested.Value);
-            if (!EqualityComparer<T>.Default.Equals(requested.Value, current)) changed.Add(path);
+            if (!ModelImporterPatchValue.Same(requested.Value, current)) changed.Add(path);
         }
     }
 
@@ -129,7 +140,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (!requested.HasValue) return;
             setter(requested.Value);
-            if (!EqualityComparer<T>.Default.Equals(requested.Value, current)) changed.Add(path);
+            if (!ModelImporterPatchValue.Same(requested.Value, current)) changed.Add(path);
         }
     }
 
@@ -155,7 +166,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             if (!requested.HasValue) return;
             setter(requested.Value);
-            if (!EqualityComparer<T>.Default.Equals(requested.Value, current)) changed.Add(path);
+            if (!ModelImporterPatchValue.Same(requested.Value, current)) changed.Add(path);
         }
     }
 

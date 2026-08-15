@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
 using UnityEditor;
@@ -27,6 +28,26 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual(4, request.Mesh.MaxBonesPerVertex);
             Assert.AreEqual(ModelImporterNormals.Calculate, request.Normals.Import);
             Assert.AreEqual(ModelImporterTangents.CalculateMikk, request.Tangents.Import);
+        }
+
+        [Test]
+        public void Apply_TreatsAGetFormattedFloatAsUnchanged()
+        {
+            const float stored = 1.2345678f;
+            const float echoed = 1.234568f;
+            Assert.AreNotEqual(stored, echoed);
+            Assert.AreEqual(RestResponse.FormatFloat(stored), RestResponse.FormatFloat(echoed));
+
+            var state = new ModelImporterState { GlobalScale = stored };
+            var request = new ModelImporterUpdateRequest
+            {
+                Model = new ModelImporterModelPatch { GlobalScale = echoed }
+            };
+            var changed = new List<string>();
+
+            request.Apply(state, changed);
+
+            Assert.IsEmpty(changed);
         }
 
         [TestCase("{}", "schemaVersion")]
