@@ -63,15 +63,19 @@
 
 参照の値は変換なしにそのまま `PATCH /api/gameobjects/components` へ送り返せます。コンポーネントに対する read-modify-write が成立するのはこのためです。
 
+アセットの場合:
+
 ```json
-// アセット
 "m_Mesh": {
   "assetGuid": "a1b2...",
   "assetPath": "Assets/Meshes/Rock.fbx",
   "assetType": "UnityEngine.Mesh"
 }
+```
 
-// ロード済みシーン内のオブジェクト
+ロード済みシーン内のオブジェクトの場合:
+
+```json
 "m_ProbeAnchor": {
   "type": "globalObjectId",
   "value": "GlobalObjectId_V1-2-..."

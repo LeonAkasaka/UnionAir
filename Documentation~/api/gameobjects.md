@@ -60,15 +60,19 @@ Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Co
 
 A reference value can be sent straight back to `PATCH /api/gameobjects/components` without translation, which is what makes read-modify-write possible on a component.
 
+An asset:
+
 ```json
-// an asset
 "m_Mesh": {
   "assetGuid": "a1b2...",
   "assetPath": "Assets/Meshes/Rock.fbx",
   "assetType": "UnityEngine.Mesh"
 }
+```
 
-// an object in a loaded scene
+An object in a loaded scene:
+
+```json
 "m_ProbeAnchor": {
   "type": "globalObjectId",
   "value": "GlobalObjectId_V1-2-..."
