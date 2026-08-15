@@ -56,6 +56,34 @@ If `scenePath` is omitted, the active scene is used.
 `components[].properties` are properties obtained via `SerializedObject`.
 Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Color`, `Vector2/3/4`, `Rect`, `ObjectReference`. Arrays are serialized as JSON arrays whose elements follow the same type rules. Other types are `null`.
 
+### An object reference is spelled the way the write reads it
+
+A reference value can be sent straight back to `PATCH /api/gameobjects/components` without translation, which is what makes read-modify-write possible on a component.
+
+```json
+// an asset
+"m_Mesh": {
+  "assetGuid": "a1b2...",
+  "assetPath": "Assets/Meshes/Rock.fbx",
+  "assetType": "UnityEngine.Mesh"
+}
+
+// an object in a loaded scene
+"m_ProbeAnchor": {
+  "type": "globalObjectId",
+  "value": "GlobalObjectId_V1-2-..."
+}
+```
+
+`type` here means what it means in the request — the *kind of reference*, not the object's class. The class is `assetType`, and only assets carry one. This is the same spelling `GET /api/assets/scriptableobjects/{guid}` uses for an asset reference, so both reads agree.
+
+Two things follow from using Unity's own identities rather than a description:
+
+- **There is no display name.** No field of the write carries one, so reporting it would mean the write either refusing the value again or accepting a key it ignores. `assetPath` names an asset; a scene object is named by resolving it.
+- **A scene object in a scene that has never been saved cannot be addressed.** Unity has no `GlobalObjectId` for it and answers the null id `GlobalObjectId_V1-0-0000...-0-0`, which resolves to nothing. This is a property of the identity, not of this endpoint: save the scene and the reference addresses normally.
+
+A reference to a **built-in Unity resource** — the mesh on a primitive, `Library/unity default resources` — reports its GUID and path like any asset, and sending it back answers `404`. Those objects are addressed by GUID *and* file ID, and the write vocabulary has no file ID. Reading them works; writing them is out of reach.
+
 ### Errors
 
 | Status | Cause |

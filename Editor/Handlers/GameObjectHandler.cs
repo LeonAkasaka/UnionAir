@@ -152,10 +152,11 @@ namespace LeonAkasaka.UnionAir.Editor
                     sb.Append($"{{\"x\":{RestResponse.FormatFloat(rect.x)},\"y\":{RestResponse.FormatFloat(rect.y)},\"width\":{RestResponse.FormatFloat(rect.width)},\"height\":{RestResponse.FormatFloat(rect.height)}}}");
                     break;
                 case SerializedPropertyType.ObjectReference:
-                    if (prop.objectReferenceValue != null)
-                        sb.Append($"{{\"type\":\"{RestResponse.EscapeJson(prop.objectReferenceValue.GetType().Name)}\",\"name\":\"{RestResponse.EscapeJson(prop.objectReferenceValue.name)}\",\"globalObjectId\":\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(prop.objectReferenceValue))}\"}}");
-                    else
-                        sb.Append("null");
+                    // Spelled the way PATCH /api/gameobjects/components reads it, so a value
+                    // taken from here can be sent back without translation. That endpoint
+                    // resolves scene objects, so they are reported rather than dropped.
+                    SerializedPropertySerializer.AppendObjectReferenceJson(
+                        sb, prop.objectReferenceValue, true);
                     break;
                 default:
                     sb.Append("null");
