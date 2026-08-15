@@ -370,9 +370,10 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         [UnionAirEndpoint("GET", "",
             Category = UnionAirEndpointCategories.Read,
-            Summary = "Returns GameObject details including components.",
+            Summary = "Returns GameObject details including components. An object reference in components[].properties is spelled the way PATCH /api/gameobjects/components reads it, so a value can be sent straight back: an asset as {assetGuid, assetPath, assetType}, an object in a loaded scene as {type: globalObjectId, value: ...}. 'type' means the kind of reference and not the object's class, which is 'assetType'. There is no display name, because no field of the write carries one. A scene that has never been saved has no GlobalObjectId for its objects, and a built-in Unity resource reports a GUID the write cannot resolve, since those are addressed by GUID and file ID together.",
             RequiredQuery = new string[] { "target" },
-            OptionalQuery = new string[] { "scenePath" })]
+            OptionalQuery = new string[] { "scenePath" },
+            ResponseExample = "{\"name\":\"Cube\",\"path\":\"Cube\",\"globalObjectId\":\"GlobalObjectId_V1-...\",\"isActive\":true,\"tag\":\"Untagged\",\"layer\":0,\"components\":[{\"type\":\"UnityEngine.MeshRenderer\",\"globalObjectId\":\"GlobalObjectId_V1-...\",\"enabled\":true,\"properties\":{\"m_Materials\":[{\"assetGuid\":\"a1b2...\",\"assetPath\":\"Assets/Materials/Rock.mat\",\"assetType\":\"UnityEngine.Material\"}],\"m_ProbeAnchor\":{\"type\":\"globalObjectId\",\"value\":\"GlobalObjectId_V1-...\"}}}]}")]
         private void Detail(UnionAirRequestContext ctx)
             => new GameObjectHandler().Handle(ctx.Request, ctx.Response);
 

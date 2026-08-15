@@ -59,6 +59,38 @@
 `components[].properties` は `SerializedObject` 経由で取得したプロパティです。
 サポートされる `SerializedPropertyType`: `bool`、`int`、`float`、`string`、`Color`、`Vector2/3/4`、`Rect`、`ObjectReference`。配列は同じ型ルールに従う要素を持つ JSON 配列としてシリアライズされます。その他の型は `null` になります。
 
+### オブジェクト参照は書き込みが読む綴りで返ります
+
+参照の値は変換なしにそのまま `PATCH /api/gameobjects/components` へ送り返せます。コンポーネントに対する read-modify-write が成立するのはこのためです。
+
+アセットの場合:
+
+```json
+"m_Mesh": {
+  "assetGuid": "a1b2...",
+  "assetPath": "Assets/Meshes/Rock.fbx",
+  "assetType": "UnityEngine.Mesh"
+}
+```
+
+ロード済みシーン内のオブジェクトの場合:
+
+```json
+"m_ProbeAnchor": {
+  "type": "globalObjectId",
+  "value": "GlobalObjectId_V1-2-..."
+}
+```
+
+ここでの `type` はリクエストでの意味と同じ、すなわち**参照の種別**であって、オブジェクトのクラスではありません。クラスは `assetType` が担い、これを持つのはアセットだけです。`GET /api/assets/scriptableobjects/{guid}` がアセット参照に使う綴りと同一なので、2 つの読み取りは一致します。
+
+説明ではなく Unity 自身の識別子を使うことから、2 点が導かれます。
+
+- **表示名はありません。** 書き込みのどのフィールドも名前を運ばないため、これを載せると書き込みが再びその値を拒否するか、無視するキーを受け入れるかのどちらかになります。アセットは `assetPath` が名前を兼ね、シーンオブジェクトは解決して名前を得ます。
+- **一度も保存されていないシーンのオブジェクトは指定できません。** Unity がそのオブジェクトの `GlobalObjectId` を持たず、何も解決しない null id `GlobalObjectId_V1-0-0000...-0-0` を返すためです。これは識別子側の性質であってこのエンドポイントの都合ではありません。シーンを保存すれば通常どおり指定できます。
+
+**Unity 組み込みリソース**への参照(プリミティブのメッシュ、`Library/unity default resources`)は他のアセットと同様に GUID と path を返しますが、送り返すと `404` になります。これらは GUID **と** file ID の組で指定されるもので、書き込み語彙に file ID がないためです。読み取りは可能、書き込みは到達不能です。
+
 ### エラー
 
 | ステータス | 原因 |

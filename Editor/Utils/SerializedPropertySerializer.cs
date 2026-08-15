@@ -143,32 +143,69 @@ namespace LeonAkasaka.UnionAir.Editor
                     break;
                 }
                 case SerializedPropertyType.ObjectReference:
-                {
-                    var obj = prop.objectReferenceValue;
-                    if (obj == null)
-                    {
-                        sb.Append("null");
-                        break;
-                    }
-                    var assetPath = AssetDatabase.GetAssetPath(obj);
-                    if (string.IsNullOrEmpty(assetPath))
-                    {
-                        // Scene object — not serialisable as an asset reference
-                        sb.Append("null");
-                        break;
-                    }
-                    var assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
-                    var typeName  = obj.GetType().FullName;
-                    sb.Append($"{{\"assetGuid\":\"{RestResponse.EscapeJson(assetGuid)}\",");
-                    sb.Append($"\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",");
-                    sb.Append($"\"assetType\":\"{RestResponse.EscapeJson(typeName)}\"}}");
+                    // This endpoint's write has no scene vocabulary -- an asset cannot hold a
+                    // scene reference, and PATCH .../scriptableobjects accepts only the asset
+                    // fields -- so a scene object stays null here rather than being reported
+                    // in a spelling this endpoint would refuse.
+                    AppendObjectReferenceJson(sb, prop.objectReferenceValue, false);
                     break;
-                }
                 default:
                     // Generic (arrays, nested structs) and unsupported types → null
                     sb.Append("null");
                     break;
             }
+        }
+
+        /// <summary>
+        /// Appends an <c>ObjectReference</c> value in the vocabulary the write endpoints
+        /// accept, so a value read out of a component can be sent straight back.
+        ///
+        /// The read used to describe what the object is -- a class name, a display name, and
+        /// an identity -- while the write describes how to find one, and the two never agreed.
+        /// <c>type</c> was the sharp edge: it carried the object's class in the read and the
+        /// kind of reference in the write, so a client echoing a read was told its type was
+        /// unknown, about a field it never meant to fill in. Here <c>type</c> has the write's
+        /// meaning and nothing else.
+        ///
+        /// <paramref name="sceneObjectsResolvable"/> says whether the caller's own write
+        /// accepts a scene reference. Each read emits what its write takes: the component
+        /// endpoint resolves <c>globalObjectId</c>, the ScriptableObject endpoint does not, and
+        /// reporting a reference the matching write would refuse is the defect this replaces
+        /// rather than a smaller version of it. An asset is spelled identically either way,
+        /// which is what makes the two reads agree.
+        ///
+        /// The display name is gone. It was the readable half, and no field of the write
+        /// carries it -- keeping it would mean the write either refusing the read again or
+        /// accepting a key it ignores, which is the silence #104 removed. <c>assetPath</c>
+        /// names an asset; a scene object is named by resolving it.
+        /// </summary>
+        internal static void AppendObjectReferenceJson(
+            StringBuilder sb, UnityEngine.Object obj, bool sceneObjectsResolvable)
+        {
+            if (obj == null)
+            {
+                sb.Append("null");
+                return;
+            }
+
+            var assetPath = AssetDatabase.GetAssetPath(obj);
+            if (!string.IsNullOrEmpty(assetPath))
+            {
+                var assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
+                sb.Append($"{{\"assetGuid\":\"{RestResponse.EscapeJson(assetGuid)}\",");
+                sb.Append($"\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",");
+                sb.Append($"\"assetType\":\"{RestResponse.EscapeJson(obj.GetType().FullName)}\"}}");
+                return;
+            }
+
+            if (!sceneObjectsResolvable)
+            {
+                sb.Append("null");
+                return;
+            }
+
+            sb.Append("{\"type\":\"globalObjectId\",\"value\":");
+            sb.Append($"\"{RestResponse.EscapeJson(ObjectIdUtils.GetGlobalObjectId(obj))}\"}}");
         }
 
         // ── Write direction ───────────────────────────────────────────────────
