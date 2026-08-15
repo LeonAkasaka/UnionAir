@@ -65,7 +65,7 @@ GameObject read, search, create/update/delete, and component operations:
 
 Asset browsing, search, prefabs, materials, ScriptableObjects, and importers:
 
-`GET /api/assets` · `GET /api/assets/{guid}` · `GET /api/search/asset-refs` · `GET /api/assets/dependents` · `POST /api/assets/prefabs` (+ `apply`, `revert`) · `POST|PATCH /api/assets/materials` · `DELETE /api/assets/{guid}` · `POST /api/assets/move` · `POST /api/assets/open` · `POST /api/assets/reimport` · ScriptableObject CRUD (`/api/assets/scriptableobjects`) · `PATCH /api/assets/texture-importer/{guid}` · `GET|PATCH /api/assets/audio-importer/{guid}`
+`GET /api/assets` · `GET /api/assets/{guid}` · `GET /api/search/asset-refs` · `GET /api/assets/dependents` · `POST /api/assets/prefabs` (+ `apply`, `revert`) · `POST|PATCH /api/assets/materials` · `DELETE /api/assets/{guid}` · `POST /api/assets/move` · `POST /api/assets/open` · `POST /api/assets/reimport` · ScriptableObject CRUD (`/api/assets/scriptableobjects`) · `PATCH /api/assets/texture-importer/{guid}` · `GET|PATCH /api/assets/audio-importer/{guid}` · ModelImporter core, material/remap, rig/Avatar, and imported-clip settings through `GET|PATCH /api/assets/model-importer/{guid}` and `POST /api/assets/model-importer/{guid}/preflight`
 
 ### [Animation](api/animation.md)
 

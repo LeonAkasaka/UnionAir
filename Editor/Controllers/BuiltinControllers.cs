@@ -726,6 +726,44 @@ namespace LeonAkasaka.UnionAir.Editor
             => new AudioImporterHandler().HandleUpdate(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
     }
 
+    [UnionAirController("assets/model-importer")]
+    internal sealed class ModelImporterController
+    {
+        [UnionAirEndpoint("GET", "{guid}",
+            Category = UnionAirEndpointCategories.Read,
+            BlockedDuring = UnionAirActivity.AssetUpdate,
+            Summary = "Returns normalized ModelImporter core, material/remap, rig/Avatar, and imported clip settings with explicit compatibility metadata and stable imported sub-asset identities. Transient preview objects are excluded.",
+            PathParams = new string[] { "guid" },
+            ResponseExample = "{\"schemaVersion\":1,\"guid\":\"...\",\"assetPath\":\"Assets/Models/robot.fbx\",\"settings\":{\"model\":{\"globalScale\":1.0,\"isReadable\":false}},\"subAssets\":[{\"guid\":\"...\",\"localIdentifier\":\"4300000\",\"name\":\"Body\",\"type\":\"UnityEngine.Mesh\"}]}")]
+        private void Get(UnionAirRequestContext ctx)
+            => new ModelImporterHandler().HandleGet(ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("POST", "{guid}/preflight",
+            Category = UnionAirEndpointCategories.Read,
+            BlockedDuring = UnionAirActivity.Compile | UnionAirActivity.AssetUpdate,
+            Summary = "Validates a versioned ModelImporter core, material/remap, rig/Avatar, and full imported-clip replacement without changing the importer or reimporting the asset.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "schemaVersion" },
+            OptionalBody = new string[] { "model", "mesh", "geometry", "normals", "tangents", "materials", "materialRemaps", "rig", "clips" },
+            RequestExample = "{\"schemaVersion\":1,\"clips\":[{\"takeName\":\"Take 001\",\"name\":\"Idle\",\"firstFrame\":0,\"lastFrame\":60,\"loopTime\":true,\"loopPose\":true}]}",
+            ResponseExample = "{\"schemaVersion\":1,\"guid\":\"...\",\"assetPath\":\"Assets/Models/robot.fbx\",\"valid\":true,\"reimportRequired\":true,\"changedFields\":[\"model.isReadable\"]}")]
+        private void Preflight(UnionAirRequestContext ctx)
+            => new ModelImporterHandler().HandlePreflight(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("PATCH", "{guid}",
+            Category = UnionAirEndpointCategories.AssetWrite,
+            PlayModePolicy = UnionAirPlayModePolicy.Blocked,
+            BlockedDuring = UnionAirActivity.Compile | UnionAirActivity.AssetUpdate,
+            Summary = "Validates and updates versioned ModelImporter core, material/remap, rig/Avatar, and imported clip settings, performs at most one SaveAndReimport, and reports the before/after state, generated sub-asset delta, diagnostics, and rollback status.",
+            PathParams = new string[] { "guid" },
+            RequiredBody = new string[] { "schemaVersion" },
+            OptionalBody = new string[] { "model", "mesh", "geometry", "normals", "tangents", "materials", "materialRemaps", "rig", "clips" },
+            RequestExample = "{\"schemaVersion\":1,\"clips\":[{\"takeName\":\"Take 001\",\"name\":\"Idle\",\"firstFrame\":0,\"lastFrame\":60,\"loopTime\":true,\"events\":[{\"time\":0.5,\"functionName\":\"Footstep\"}]}]}",
+            ResponseExample = "{\"schemaVersion\":1,\"guid\":\"...\",\"assetPath\":\"Assets/Models/robot.fbx\",\"reimported\":true,\"changedFields\":[\"model.isReadable\"],\"diagnostics\":[],\"rollback\":null}")]
+        private void Update(UnionAirRequestContext ctx)
+            => new ModelImporterHandler().HandleUpdate(ctx.Request, ctx.Response, ctx.RouteValues["guid"]);
+    }
+
     [UnionAirController("assets/animation-clips")]
     internal sealed class AnimationClipsController
     {

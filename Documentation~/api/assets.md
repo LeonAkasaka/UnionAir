@@ -1104,3 +1104,206 @@ and does not call `SaveAndReimport()`.
 | 500 | Normalization could not be written, reimport threw, or the importer disappeared after reimport |
 
 ---
+
+## GET /api/assets/model-importer/{guid}
+
+Returns a versioned, normalized view of an asset's `ModelImporter` core settings and
+its durable imported sub-assets. This Read endpoint is unavailable during asset updates.
+
+```json
+{
+  "schemaVersion": 1,
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Models/robot.fbx",
+  "capabilities": {
+    "unityVersion": "6000.0.80f1",
+    "useFileUnits": true,
+    "tangentImport": true,
+    "bakeIk": true,
+    "settings": {
+      "model.useFileUnits": true,
+      "tangents.import": true,
+      "clips.definitions": true,
+      "clips.avatarMask": true,
+      "clips.events": true,
+      "clips.curves": false,
+      "rig.humanDescription": false
+    },
+    "unavailableSettings": ["rig.humanDescription", "clips.curves"]
+  },
+  "settings": {
+    "model": { "globalScale": 1.0, "fileScale": 1.0, "useFileScale": true, "useFileUnits": true, "bakeAxisConversion": false, "preserveHierarchy": false, "isReadable": false },
+    "mesh": { "compression": "Off", "indexFormat": "Auto", "keepQuads": false, "weldVertices": true, "skinWeights": "Standard", "maxBonesPerVertex": 4, "minBoneWeight": 0.001, "optimizePolygons": true, "optimizeVertices": true },
+    "geometry": { "addCollider": false, "importBlendShapes": true, "importCameras": true, "importLights": true, "importVisibility": true, "importConstraints": true, "swapUvChannels": false, "generateSecondaryUv": false, "secondaryUvMarginMethod": "Manual", "secondaryUvAngleDistortion": 8.0, "secondaryUvAreaDistortion": 15.0, "secondaryUvHardAngle": 88.0, "secondaryUvPackMargin": 4.0 },
+    "normals": { "import": "Import", "blendShapeImport": "Calculate", "calculationMode": "AreaAndAngleWeighted", "smoothingSource": "PreferSmoothingGroups", "smoothingAngle": 60.0 },
+    "tangents": { "import": "CalculateMikk" }
+  },
+  "subAssets": [{ "guid": "a1b2c3...", "localIdentifier": "4300000", "name": "Body", "type": "UnityEngine.Mesh" }]
+}
+```
+
+`fileScale` is read-only. `subAssets` contains imported `Mesh`, `Material`, `Avatar`,
+and `AnimationClip` objects for which `AssetDatabase.IsSubAsset` is true. Preview
+objects are excluded. `localIdentifier` is a decimal string so clients do not lose
+64-bit precision; `(guid, localIdentifier)` is the durable imported-object identity.
+
+The same `settings` object also contains:
+
+```json
+{
+  "materials": {
+    "importMode": "ImportViaMaterialDescription",
+    "location": "InPrefab",
+    "naming": "BasedOnMaterialName",
+    "search": "RecursiveUp"
+  },
+  "materialRemaps": [{
+    "source": { "type": "UnityEngine.Material", "name": "Body" },
+    "target": { "guid": "def456...", "localIdentifier": "2100000", "name": "RobotBody", "type": "UnityEngine.Material" }
+  }],
+  "rig": {
+    "animationType": "Human",
+    "avatarSetup": "CopyFromOther",
+    "sourceAvatar": { "guid": "987abc...", "localIdentifier": "9000000", "name": "RobotAvatar", "type": "UnityEngine.Avatar" },
+    "autoGenerateAvatarMappingIfUnspecified": false,
+    "humanoidOversampling": "X2",
+    "optimizeGameObjects": true,
+    "extraExposedTransformPaths": ["Root/WeaponSocket"]
+  },
+  "clips": {
+    "derivedFromDefaults": false,
+    "definitions": [{
+      "takeName": "Take 001",
+      "name": "Idle",
+      "firstFrame": 0.0,
+      "lastFrame": 60.0,
+      "wrapMode": "Default",
+      "loop": false,
+      "loopTime": true,
+      "loopPose": true,
+      "mirror": false,
+      "lockRootRotation": true,
+      "keepOriginalOrientation": true,
+      "rotationOffset": 0.0,
+      "lockRootHeightY": true,
+      "keepOriginalPositionY": true,
+      "heightFromFeet": false,
+      "heightOffset": 0.0,
+      "lockRootPositionXZ": true,
+      "keepOriginalPositionXZ": true,
+      "cycleOffset": 0.0,
+      "hasAdditiveReferencePose": false,
+      "additiveReferencePoseFrame": 0.0,
+      "maskType": "CreateFromThisModel",
+      "maskSource": null,
+      "maskNeedsUpdating": false,
+      "events": []
+    }]
+  },
+  "unsupportedInitialSettings": ["rig.humanDescription", "clips.curves"]
+}
+```
+
+`materialRemaps` is the Material subset of `GetExternalObjectMap()`. A missing target
+is returned as null so clients can identify and remove stale remaps. `humanDescription`
+is deliberately not writable through arbitrary serialized properties; its unsupported
+status is explicit in every settings snapshot.
+When `clipAnimations` is empty, `clips.definitions` is populated from
+`defaultClipAnimations` and `derivedFromDefaults` is true. This separates “no stored
+override array” from “no animation take.” Clip curves are unsupported in schema version 1.
+
+---
+
+## POST /api/assets/model-importer/{guid}/preflight
+
+Validates the PATCH contract and reports `valid`, `reimportRequired`, `changedFields`,
+and normalized `before` and `after` settings without mutation or import.
+
+```json
+{
+  "schemaVersion": 1,
+  "model": { "globalScale": 1.0, "isReadable": true },
+  "normals": { "import": "Calculate" },
+  "tangents": { "import": "CalculateMikk" }
+}
+```
+
+`schemaVersion` is required and must be integer `1`. At least one non-empty settings
+group is required. Groups are partial patches; omitted fields preserve current values.
+Unknown or duplicate fields and wrong JSON types are rejected. Enum fields accept the
+names GET returns, case-insensitively.
+
+| Group | Writable fields |
+|-------|-----------------|
+| `model` | `globalScale` (`> 0`, `<= 100000`), `useFileScale`, `useFileUnits`, `bakeAxisConversion`, `preserveHierarchy`, `isReadable` |
+| `mesh` | `compression`, `indexFormat`, `keepQuads`, `weldVertices`, `skinWeights`, `maxBonesPerVertex` (`1..255`), `minBoneWeight` (`0..1`), `optimizePolygons`, `optimizeVertices` |
+| `geometry` | `addCollider`, `importBlendShapes`, `importCameras`, `importLights`, `importVisibility`, `importConstraints`, `swapUvChannels`, `generateSecondaryUv`, `secondaryUvMarginMethod`, `secondaryUvAngleDistortion` (`1..75`), `secondaryUvAreaDistortion` (`1..75`), `secondaryUvHardAngle` (`0..180`), `secondaryUvPackMargin` (`1..64`) |
+| `normals` | `import`, `blendShapeImport`, `calculationMode`, `smoothingSource`, `smoothingAngle` (`0..180`) |
+| `tangents` | `import` |
+| `materials` | `importMode`, `location`, `naming`, `search` |
+| `materialRemaps` | Array of `{source: {type: "UnityEngine.Material", name}, target}`; `target: null` removes the source remap |
+| `rig` | `animationType`, `avatarSetup`, `sourceAvatar`, `autoGenerateAvatarMappingIfUnspecified`, `humanoidOversampling`, `optimizeGameObjects`, `extraExposedTransformPaths` |
+| `clips` | Full ordered replacement array; each entry requires `takeName`, unique `name`, `firstFrame`, and `lastFrame` |
+
+`useFileUnits` and tangent import are checked against source capabilities. Tangents
+must be `None` when normals are `None`.
+
+Material and Avatar targets use `{guid, localIdentifier}`. `localIdentifier` may be
+omitted only when the referenced asset contains exactly one object of the required
+type. Missing, wrong-type, and ambiguous targets reject the complete request before
+any setting or remap changes. Repeating a remap source in one request is also rejected.
+
+Material naming/search fields require material import and are incompatible with
+`location: InPrefab`; adding or replacing remaps requires an import mode other than `None`.
+Removing a stale remap remains allowed. `CopyFromOther`
+requires a valid compatible source Avatar. `None` and `Legacy` rigs require `NoAvatar`;
+humanoid oversampling is Human-only, automatic mapping additionally requires
+`CreateFromThisModel`, and exposed transform paths require optimization. Incompatible
+fields are rejected rather than ignored.
+
+### Imported clip definitions
+
+`clips` replaces `ModelImporter.clipAnimations` as one ordered array. Sending `[]`
+removes the stored array, so the next read is default-derived. Each definition starts
+from the same stored `(takeName, name)` definition when one exists, or otherwise from
+the named default take. Omitted optional fields retain that baseline.
+
+Optional fields are `wrapMode`, `loop`, `loopTime`, `loopPose`, `mirror`,
+`lockRootRotation`, `keepOriginalOrientation`, `rotationOffset`, `lockRootHeightY`,
+`keepOriginalPositionY`, `heightFromFeet`, `heightOffset`, `lockRootPositionXZ`,
+`keepOriginalPositionXZ`, `cycleOffset`, `hasAdditiveReferencePose`,
+`additiveReferencePoseFrame`, `maskType`, `maskSource`, and `events`.
+
+The take must exist in `defaultClipAnimations`, and the finite frame range must be
+ordered and stay inside that take. Clip names are unique across the replacement.
+`loopPose` requires `loopTime`; an additive reference frame requires the additive mode
+and must lie in the clip range; mirror is Human-only.
+`maskType: CopyFromOther` requires an `AvatarMask` `maskSource`, while other mask types
+require null. Mask and event object references use the same GUID/local-identifier rules
+as Material and Avatar references.
+
+`events` is an ordered full replacement per definition. Every event requires finite,
+non-negative `time` and non-empty `functionName`; optional fields are `stringParameter`,
+`floatParameter`, `intParameter`, `objectReferenceParameter`, and `messageOptions`
+(`DontRequireReceiver` or `RequireReceiver`). Unknown nested fields reject the whole
+array before mutation.
+
+---
+
+## PATCH /api/assets/model-importer/{guid}
+
+Applies the preflight contract and calls `SaveAndReimport()` at most once. An unchanged
+patch returns `reimported: false`. A changed response includes complete settings and
+sub-assets under `before` and `after`, `subAssetDelta`, `diagnostics`, and `rollback`.
+If reimport throws, UnionAir attempts to restore the original settings and returns the
+structured rollback result with `500`.
+
+| Status | Cause |
+|--------|-------|
+| 400 | Invalid schema, field, type, range, enum, combination, capability, or non-model asset |
+| 403 | Asset Write category is disabled |
+| 404 | No asset found for the GUID |
+| 409 | Play mode, conflicting activity, loaded-scene conflict, or non-editable importer |
+| 500 | Reimport failed or the importer disappeared after reimport |
+
+---

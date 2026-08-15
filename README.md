@@ -156,7 +156,7 @@ Unity Editor's permissions. Treat the project and every local API client as trus
 |-------|-------|----------|
 | **Read** | Scene hierarchy, loaded scenes, GameObjects, assets, cameras, logs, search, compilation results | Always enabled |
 | **Scene Write** | Create/open/unload scenes, create/update/delete GameObjects and components | Disabled by default |
-| **Asset Write** | Prefabs, materials, asset files, AssetDatabase refresh, compilation requests | Disabled by default |
+| **Asset Write** | Prefabs, materials, asset files, typed AudioImporter/ModelImporter settings, AssetDatabase refresh, compilation requests | Disabled by default |
 | **Play Mode** | Enter/exit/pause/step play mode, Input System actions, and Canvas UI interaction | Disabled by default |
 | **Editor Actions** | Selection, object ping, asset open, and Unity Editor menu item execution | Disabled by default |
 | **Test Runner** | Discover, execute, monitor, cancel, and download results for EditMode and PlayMode tests | Disabled by default; available when Unity Test Framework 1.4.0+ is installed |

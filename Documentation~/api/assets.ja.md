@@ -1108,3 +1108,204 @@ unchanged request は `reimported: false` と空の diagnostics 配列を返し�
 | 500 | normalization の書き込み、reimport が失敗、または reimport 後に importer が消失 |
 
 ---
+
+## GET /api/assets/model-importer/{guid}
+
+アセットの `ModelImporter` 基本設定と永続的なインポート済みサブアセットを、
+バージョン付きの正規化形式で返します。この Read エンドポイントはアセット更新中に
+利用できません。
+
+```json
+{
+  "schemaVersion": 1,
+  "guid": "a1b2c3...",
+  "assetPath": "Assets/Models/robot.fbx",
+  "capabilities": {
+    "unityVersion": "6000.0.80f1",
+    "useFileUnits": true,
+    "tangentImport": true,
+    "bakeIk": true,
+    "settings": {
+      "model.useFileUnits": true,
+      "tangents.import": true,
+      "clips.definitions": true,
+      "clips.avatarMask": true,
+      "clips.events": true,
+      "clips.curves": false,
+      "rig.humanDescription": false
+    },
+    "unavailableSettings": ["rig.humanDescription", "clips.curves"]
+  },
+  "settings": {
+    "model": { "globalScale": 1.0, "fileScale": 1.0, "useFileScale": true, "useFileUnits": true, "bakeAxisConversion": false, "preserveHierarchy": false, "isReadable": false },
+    "mesh": { "compression": "Off", "indexFormat": "Auto", "keepQuads": false, "weldVertices": true, "skinWeights": "Standard", "maxBonesPerVertex": 4, "minBoneWeight": 0.001, "optimizePolygons": true, "optimizeVertices": true },
+    "geometry": { "addCollider": false, "importBlendShapes": true, "importCameras": true, "importLights": true, "importVisibility": true, "importConstraints": true, "swapUvChannels": false, "generateSecondaryUv": false, "secondaryUvMarginMethod": "Manual", "secondaryUvAngleDistortion": 8.0, "secondaryUvAreaDistortion": 15.0, "secondaryUvHardAngle": 88.0, "secondaryUvPackMargin": 4.0 },
+    "normals": { "import": "Import", "blendShapeImport": "Calculate", "calculationMode": "AreaAndAngleWeighted", "smoothingSource": "PreferSmoothingGroups", "smoothingAngle": 60.0 },
+    "tangents": { "import": "CalculateMikk" }
+  },
+  "subAssets": [{ "guid": "a1b2c3...", "localIdentifier": "4300000", "name": "Body", "type": "UnityEngine.Mesh" }]
+}
+```
+
+`fileScale` は読み取り専用です。`subAssets` には `AssetDatabase.IsSubAsset` が
+true のインポート済み `Mesh`、`Material`、`Avatar`、`AnimationClip` が入り、
+プレビューオブジェクトは除外されます。64 bit 精度を失わないよう
+`localIdentifier` は10進文字列です。永続的な識別には `(guid, localIdentifier)`
+を使用します。
+
+同じ `settings` オブジェクトには次の設定も含まれます。
+
+```json
+{
+  "materials": {
+    "importMode": "ImportViaMaterialDescription",
+    "location": "InPrefab",
+    "naming": "BasedOnMaterialName",
+    "search": "RecursiveUp"
+  },
+  "materialRemaps": [{
+    "source": { "type": "UnityEngine.Material", "name": "Body" },
+    "target": { "guid": "def456...", "localIdentifier": "2100000", "name": "RobotBody", "type": "UnityEngine.Material" }
+  }],
+  "rig": {
+    "animationType": "Human",
+    "avatarSetup": "CopyFromOther",
+    "sourceAvatar": { "guid": "987abc...", "localIdentifier": "9000000", "name": "RobotAvatar", "type": "UnityEngine.Avatar" },
+    "autoGenerateAvatarMappingIfUnspecified": false,
+    "humanoidOversampling": "X2",
+    "optimizeGameObjects": true,
+    "extraExposedTransformPaths": ["Root/WeaponSocket"]
+  },
+  "clips": {
+    "derivedFromDefaults": false,
+    "definitions": [{
+      "takeName": "Take 001",
+      "name": "Idle",
+      "firstFrame": 0.0,
+      "lastFrame": 60.0,
+      "wrapMode": "Default",
+      "loop": false,
+      "loopTime": true,
+      "loopPose": true,
+      "mirror": false,
+      "lockRootRotation": true,
+      "keepOriginalOrientation": true,
+      "rotationOffset": 0.0,
+      "lockRootHeightY": true,
+      "keepOriginalPositionY": true,
+      "heightFromFeet": false,
+      "heightOffset": 0.0,
+      "lockRootPositionXZ": true,
+      "keepOriginalPositionXZ": true,
+      "cycleOffset": 0.0,
+      "hasAdditiveReferencePose": false,
+      "additiveReferencePoseFrame": 0.0,
+      "maskType": "CreateFromThisModel",
+      "maskSource": null,
+      "maskNeedsUpdating": false,
+      "events": []
+    }]
+  },
+  "unsupportedInitialSettings": ["rig.humanDescription", "clips.curves"]
+}
+```
+
+`materialRemaps` は `GetExternalObjectMap()` の Material 項目です。参照先が欠落した target は
+null として返すため、client は stale remap を検出して削除できます。`humanDescription` は
+任意の serialized property として公開せず、未対応であることをすべての設定 snapshot に明示します。
+`clipAnimations` が空の場合、`clips.definitions` は `defaultClipAnimations` から作られ、
+`derivedFromDefaults` は true です。これにより「保存済み override 配列がない」と
+「animation take がない」を区別できます。schema version 1 では clip curve は未対応です。
+
+---
+
+## POST /api/assets/model-importer/{guid}/preflight
+
+PATCH の契約を検証し、変更やインポートをせずに `valid`、`reimportRequired`、
+`changedFields`、正規化された `before` と `after` の設定を返します。
+
+```json
+{
+  "schemaVersion": 1,
+  "model": { "globalScale": 1.0, "isReadable": true },
+  "normals": { "import": "Calculate" },
+  "tangents": { "import": "CalculateMikk" }
+}
+```
+
+`schemaVersion` は必須で整数 `1` です。空でない設定グループが1つ以上必要です。
+各グループは部分更新で、省略フィールドは現在値を維持します。未知または重複した
+フィールドと不正な JSON 型は拒否されます。enum は GET が返す名前を大文字小文字を
+区別せず受け付けます。
+
+| Group | 書き込み可能なフィールド |
+|-------|---------------------------|
+| `model` | `globalScale` (`> 0`、`<= 100000`)、`useFileScale`、`useFileUnits`、`bakeAxisConversion`、`preserveHierarchy`、`isReadable` |
+| `mesh` | `compression`、`indexFormat`、`keepQuads`、`weldVertices`、`skinWeights`、`maxBonesPerVertex` (`1..255`)、`minBoneWeight` (`0..1`)、`optimizePolygons`、`optimizeVertices` |
+| `geometry` | `addCollider`、`importBlendShapes`、`importCameras`、`importLights`、`importVisibility`、`importConstraints`、`swapUvChannels`、`generateSecondaryUv`、`secondaryUvMarginMethod`、`secondaryUvAngleDistortion` (`1..75`)、`secondaryUvAreaDistortion` (`1..75`)、`secondaryUvHardAngle` (`0..180`)、`secondaryUvPackMargin` (`1..64`) |
+| `normals` | `import`、`blendShapeImport`、`calculationMode`、`smoothingSource`、`smoothingAngle` (`0..180`) |
+| `tangents` | `import` |
+| `materials` | `importMode`、`location`、`naming`、`search` |
+| `materialRemaps` | `{source: {type: "UnityEngine.Material", name}, target}` の配列。`target: null` はその source remap を削除 |
+| `rig` | `animationType`、`avatarSetup`、`sourceAvatar`、`autoGenerateAvatarMappingIfUnspecified`、`humanoidOversampling`、`optimizeGameObjects`、`extraExposedTransformPaths` |
+| `clips` | 順序付き配列の全置換。各 entry に `takeName`、一意な `name`、`firstFrame`、`lastFrame` が必須 |
+
+`useFileUnits` と tangent import はソースの capability に対しても検証されます。
+normal が `None` の場合、tangent も `None` でなければなりません。
+
+Material と Avatar の target は `{guid, localIdentifier}` で指定します。参照先に必要な型の
+オブジェクトが1つだけの場合に限り `localIdentifier` を省略できます。欠落、型違い、曖昧な
+target は、設定や remap を変更する前にリクエスト全体を拒否します。同じ remap source を
+1リクエスト内で繰り返すこともできません。
+
+Material の naming/search は material import が必要で、`location: InPrefab` とは互換性が
+ありません。remap の追加・置換には `None` 以外の import mode が必要ですが、古い remap の
+削除は可能です。`CopyFromOther` には有効で
+互換性のある source Avatar が必要です。`None` と `Legacy` rig には `NoAvatar` が必要です。
+humanoid oversampling は Human 専用で、自動 mapping にはさらに `CreateFromThisModel` が必要、
+exposed transform path には optimization が必要です。互換性のないフィールドは無視せず拒否します。
+
+### Imported clip definition
+
+`clips` は `ModelImporter.clipAnimations` を順序付き配列として一括置換します。`[]` を
+送ると保存済み配列が削除され、次の読み取りは default-derived になります。同じ
+`(takeName, name)` の保存済み definition があれば各 entry の基準にし、なければ指定した
+default take を基準にします。省略した任意フィールドはその基準値を維持します。
+
+任意フィールドは `wrapMode`、`loop`、`loopTime`、`loopPose`、`mirror`、
+`lockRootRotation`、`keepOriginalOrientation`、`rotationOffset`、`lockRootHeightY`、
+`keepOriginalPositionY`、`heightFromFeet`、`heightOffset`、`lockRootPositionXZ`、
+`keepOriginalPositionXZ`、`cycleOffset`、`hasAdditiveReferencePose`、
+`additiveReferencePoseFrame`、`maskType`、`maskSource`、`events` です。
+
+take は `defaultClipAnimations` に存在する必要があり、有限の frame range は順序が正しく、
+その take 内でなければなりません。置換配列内の clip name は一意です。`loopPose` には
+`loopTime` が必要です。additive reference frame は additive mode が必要で
+clip range 内、mirror は Human 専用です。`maskType: CopyFromOther` には `AvatarMask` の
+`maskSource` が必要で、それ以外の mask type では null が必要です。Mask と event object の
+参照には Material/Avatar と同じ GUID/local identifier 規則を使います。
+
+`events` は definition ごとの順序付き全置換です。各 event には有限で非負の `time` と空でない
+`functionName` が必須です。任意フィールドは `stringParameter`、`floatParameter`、
+`intParameter`、`objectReferenceParameter`、`messageOptions` (`DontRequireReceiver` または
+`RequireReceiver`) です。未知の nested field は変更前に配列全体を拒否します。
+
+---
+
+## PATCH /api/assets/model-importer/{guid}
+
+preflight の契約を適用し、`SaveAndReimport()` を最大1回呼びます。変更がなければ
+再インポートせず `reimported: false` を返します。変更時のレスポンスには完全な
+設定とサブアセットを持つ `before` と `after`、`subAssetDelta`、`diagnostics`、
+`rollback` が含まれます。再インポートが例外になった場合、元の設定の復元を試み、
+構造化された rollback 結果とともに `500` を返します。
+
+| ステータス | 原因 |
+|-------------|------|
+| 400 | 不正な schema、フィールド、型、範囲、enum、組み合わせ、capability、または Model 以外のアセット |
+| 403 | Asset Write カテゴリが無効 |
+| 404 | 指定 GUID のアセットがない |
+| 409 | Play mode、競合 activity、ロード済み Scene の競合、または編集不能な Importer |
+| 500 | 再インポート失敗、または再インポート後に Importer が見つからない |
+
+---
