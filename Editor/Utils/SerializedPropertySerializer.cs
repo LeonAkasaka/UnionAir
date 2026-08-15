@@ -17,6 +17,45 @@ namespace LeonAkasaka.UnionAir.Editor
             "assetGuid", "assetPath", "assetType"
         };
 
+        /// <summary>
+        /// Applies the value of <paramref name="jsonKey"/> to <paramref name="prop"/>.
+        /// </summary>
+        /// <remarks>
+        /// The two write paths differ in one place only: the component endpoint resolves scene
+        /// objects for an <c>ObjectReference</c> and the ScriptableObject endpoint does not. Array
+        /// elements go through the same difference, so the array writer takes its caller's function
+        /// rather than picking one.
+        /// </remarks>
+        internal delegate bool ApplyProperty(
+            SerializedProperty prop, string json, string jsonKey, out string error, out int statusCode);
+
+        /// <summary>What an array-addressing key in <c>properties</c> names.</summary>
+        internal enum ArrayAddress
+        {
+            /// <summary>Not an array address.</summary>
+            None,
+            /// <summary>One element: <c>m_Materials.Array.data[0]</c>.</summary>
+            Element,
+            /// <summary>The length: <c>m_Materials.Array.size</c>.</summary>
+            Size
+        }
+
+        private const string ArraySegment    = ".Array.";
+        private const string ArraySizeSuffix = ".Array.size";
+        private const string ArrayDataMarker = ".Array.data[";
+
+        /// <summary>
+        /// The longest array a request may ask for.
+        /// </summary>
+        /// <remarks>
+        /// Not a claim about what Unity supports, and not a length any real project reaches. It is
+        /// here because <c>Array.size</c> is the one write whose cost is unbounded by the request
+        /// that carries it: a whole-array write pays for every element in the body, while a
+        /// forty-byte request can name two billion. Unity allocates what it is told, so without a
+        /// bound a mistyped length takes the Editor down and any unsaved scene with it.
+        /// </remarks>
+        internal const int MaxArrayLength = 1000000;
+
         // ── Read direction ────────────────────────────────────────────────────
 
         /// <summary>
@@ -150,8 +189,14 @@ namespace LeonAkasaka.UnionAir.Editor
             error = null;
             statusCode = 400;
 
-            error = DescribeUnwritableArray(prop, jsonKey);
-            if (error != null) return false;
+            // An array reaches its own writer, chosen by the key rather than by the property, so
+            // one arriving here is a caller that skipped that dispatch rather than a request to
+            // refuse. Saying which beats falling through to "serialized type Generic".
+            if (IsWritableAsArray(prop))
+            {
+                error = $"Property {jsonKey} is an array and is not written one value at a time.";
+                return false;
+            }
 
             try
             {
@@ -335,30 +380,274 @@ namespace LeonAkasaka.UnionAir.Editor
             => $"Property {jsonKey} expects {shape}.";
 
         /// <summary>
-        /// Returns why <paramref name="prop"/> cannot be written because it is an array or part of
-        /// one, or null when it is neither.
+        /// Whether <paramref name="prop"/> is an array this endpoint addresses as one.
         /// </summary>
         /// <remarks>
-        /// A whole array is refused by <c>isArray</c>, but the component walk descends into
-        /// children, so <c>m_Materials.Array.data[0]</c> arrives here as an ordinary object
-        /// reference and used to be written one element at a time -- against an endpoint whose
-        /// contract says arrays are not writable. The element path is Unity's own canonical
-        /// spelling, and the array's size arrives as its own <c>ArraySize</c> property.
+        /// Unity represents a string as a char array internally, so <c>isArray</c> is true for a
+        /// string field. Those are written by the String case and are not arrays to any caller.
         /// </remarks>
-        internal static string DescribeUnwritableArray(SerializedProperty prop, string jsonKey)
+        internal static bool IsWritableAsArray(SerializedProperty prop)
+            => prop.isArray && prop.propertyType != SerializedPropertyType.String;
+
+        /// <summary>
+        /// Whether <paramref name="key"/> reaches into an array in any form, addressable or not.
+        /// </summary>
+        internal static bool NamesArrayInternals(string key)
+            => !string.IsNullOrEmpty(key) && key.IndexOf(ArraySegment, StringComparison.Ordinal) >= 0;
+
+        /// <summary>
+        /// Parses <paramref name="key"/> as one of the two array addresses this endpoint accepts,
+        /// reporting the array it reaches into and, for an element, which one.
+        /// </summary>
+        /// <remarks>
+        /// Both spellings are Unity's own: they are what <c>SerializedProperty.propertyPath</c>
+        /// returns for an element and for the length. Exactly these two are accepted, so a key
+        /// reaching past an element -- <c>m_Items.Array.data[0].hp</c> -- fails to parse and is
+        /// refused by the caller rather than being resolved by whichever walk happens to reach it.
+        /// A nested array beneath an element fails the same way, because its elements are Generic
+        /// and unwritable regardless.
+        /// </remarks>
+        internal static bool TryParseArrayAddress(
+            string key, out string arrayPath, out ArrayAddress address, out int index)
         {
-            // Unity represents string as a char array internally, so prop.isArray is true for
-            // string fields — those are written by the String case and must not land here.
-            if (prop.isArray && prop.propertyType != SerializedPropertyType.String)
-                return $"Property {jsonKey} is an array. Arrays and nested generic properties " +
-                       "cannot be written through this endpoint.";
+            arrayPath = null;
+            address = ArrayAddress.None;
+            index = -1;
+            if (string.IsNullOrEmpty(key)) return false;
 
-            if (prop.propertyType == SerializedPropertyType.ArraySize ||
-                prop.propertyPath.IndexOf(".Array.data[", StringComparison.Ordinal) >= 0)
-                return $"Property {jsonKey} is part of an array. Arrays and nested generic " +
-                       "properties cannot be written through this endpoint.";
+            if (key.EndsWith(ArraySizeSuffix, StringComparison.Ordinal))
+            {
+                var prefix = key.Substring(0, key.Length - ArraySizeSuffix.Length);
+                if (prefix.Length == 0 || NamesArrayInternals(prefix)) return false;
+                arrayPath = prefix;
+                address = ArrayAddress.Size;
+                return true;
+            }
 
-            return null;
+            if (key[key.Length - 1] != ']') return false;
+
+            var marker = key.IndexOf(ArrayDataMarker, StringComparison.Ordinal);
+            if (marker <= 0) return false;
+
+            var digitsStart = marker + ArrayDataMarker.Length;
+            var digitsLength = key.Length - 1 - digitsStart;
+            if (digitsLength <= 0) return false;
+            for (int i = digitsStart; i < key.Length - 1; i++)
+                if (key[i] < '0' || key[i] > '9') return false;
+            if (!int.TryParse(key.Substring(digitsStart, digitsLength), out index)) return false;
+
+            arrayPath = key.Substring(0, marker);
+            address = ArrayAddress.Element;
+            return true;
+        }
+
+        /// <summary>
+        /// Returns why the elements of <paramref name="arrayProp"/> cannot be written, or null when
+        /// they can.
+        /// </summary>
+        /// <remarks>
+        /// An element the read direction serializes as <c>null</c> is one a caller has never seen,
+        /// so a write that replaces or drops it destroys content on the caller's behalf. That rules
+        /// out a whole-array write and a shrinking resize; growing alone would be safe, but a
+        /// contract permitting one direction of a resize and not the other is worse to describe
+        /// than one that refuses the array.
+        ///
+        /// An empty array has an element type all the same, and answering "writable" because there
+        /// is nothing to look at makes writability depend on the array's current length. A caller
+        /// clearing an empty list would be told <c>200</c> and the same request against a list with
+        /// one element <c>400</c> -- the state-dependent success this endpoint exists to not give.
+        /// So an empty array is grown by one to be read and put back, which no caller can observe:
+        /// nothing here is committed until <c>ApplyModifiedProperties</c>, and the length is
+        /// restored before this returns.
+        /// </remarks>
+        internal static string DescribeUnwritableElements(SerializedProperty arrayProp, string jsonKey)
+        {
+            var probing = arrayProp.arraySize == 0;
+            if (probing) arrayProp.arraySize = 1;
+
+            var element = arrayProp.GetArrayElementAtIndex(0);
+            var isGeneric = element.propertyType == SerializedPropertyType.Generic;
+            var elementType = element.type;
+
+            if (probing) arrayProp.arraySize = 0;
+
+            if (!isGeneric) return null;
+
+            return $"Property {jsonKey} is an array of {elementType} elements, whose serialized " +
+                   "type this endpoint cannot write. Only arrays of a type it writes can be " +
+                   "addressed.";
+        }
+
+        /// <summary>
+        /// Replaces every element of <paramref name="arrayProp"/> with the JSON array at
+        /// <paramref name="jsonKey"/>, resizing it to that array's length.
+        /// </summary>
+        /// <remarks>
+        /// A replacement rather than a merge, because Unity keeps no identity per element and
+        /// rewrites the array wholesale; the same reasoning the AnimationClip event array follows.
+        ///
+        /// Each element is handed to <paramref name="applyElement"/> as a one-field object keyed by
+        /// the element's own address. Every typed reader selects a value by key from an object, so
+        /// this reuses them exactly as a top-level property would, and an element that cannot be
+        /// applied is named by the address a caller can address it with rather than by the array's.
+        /// </remarks>
+        internal static bool TryWriteArray(
+            SerializedProperty arrayProp,
+            string json,
+            string jsonKey,
+            ApplyProperty applyElement,
+            out string error,
+            out int statusCode)
+        {
+            statusCode = 400;
+
+            var raw = RequestBodyReader.GetRawValue(json, jsonKey);
+            if (raw == null)
+            {
+                error = $"Property {jsonKey} is not a well-formed JSON value.";
+                return false;
+            }
+            raw = raw.Trim();
+            if (raw.Length == 0 || raw[0] != '[')
+            {
+                error = Expected(jsonKey, "a JSON array");
+                return false;
+            }
+
+            if (!RequestBodyReader.TryGetArrayElements(
+                    json, jsonKey, out var elements, out _, out var arrayError))
+            {
+                error = $"Property {jsonKey} is not a well-formed JSON array: {arrayError}";
+                return false;
+            }
+
+            if (!TryBoundLength(elements.Count, jsonKey, out error)) return false;
+
+            // Asked of the array rather than of what it currently holds, so an empty one is judged
+            // by its element type like any other and nothing is dropped before the refusal.
+            error = DescribeUnwritableElements(arrayProp, jsonKey);
+            if (error != null) return false;
+
+            arrayProp.arraySize = elements.Count;
+
+            for (int i = 0; i < elements.Count; i++)
+            {
+                var elementKey = $"{jsonKey}{ArrayDataMarker}{i}]";
+                var elementJson = "{\"" + RestResponse.EscapeJson(elementKey) + "\":" + elements[i] + "}";
+                if (!applyElement(
+                        arrayProp.GetArrayElementAtIndex(i), elementJson, elementKey,
+                        out error, out statusCode))
+                    return false;
+            }
+
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Applies every key in <paramref name="requestedKeys"/> that writes an array, appending
+        /// each to <paramref name="updated"/>. Keys naming anything else are left alone.
+        /// </summary>
+        /// <remarks>
+        /// Separate from the property walk both callers run, because writing an array changes its
+        /// length and a walk in progress is no place to do that -- and because an element address
+        /// has to be resolved from its array rather than from wherever the walk reaches. Every key
+        /// here was already checked against that walk, so a lookup that fails is a bug rather than
+        /// a request to reject, and says so.
+        /// </remarks>
+        internal static bool TryApplyArrayKeys(
+            SerializedObject so,
+            string propertiesJson,
+            IEnumerable<string> requestedKeys,
+            ApplyProperty applyElement,
+            List<string> updated,
+            out string error,
+            out int statusCode)
+        {
+            error = null;
+            statusCode = 400;
+
+            foreach (var key in requestedKeys)
+            {
+                bool written;
+                if (TryParseArrayAddress(key, out var arrayPath, out var address, out var index))
+                {
+                    var arrayProp = so.FindProperty(arrayPath);
+                    if (arrayProp == null || !IsWritableAsArray(arrayProp))
+                    {
+                        error = $"Property {key} could not be resolved against the array '{arrayPath}'.";
+                        statusCode = 500;
+                        return false;
+                    }
+
+                    written = TryWriteArrayAddress(
+                        arrayProp, address, index, propertiesJson, key,
+                        applyElement, out error, out statusCode);
+                }
+                else
+                {
+                    var arrayProp = so.FindProperty(key);
+                    if (arrayProp == null || !IsWritableAsArray(arrayProp)) continue;
+
+                    written = TryWriteArray(
+                        arrayProp, propertiesJson, key, applyElement, out error, out statusCode);
+                }
+
+                if (!written) return false;
+                updated.Add(key);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Resolves an array address against <paramref name="arrayProp"/> and writes it.
+        /// </summary>
+        internal static bool TryWriteArrayAddress(
+            SerializedProperty arrayProp,
+            ArrayAddress address,
+            int index,
+            string json,
+            string jsonKey,
+            ApplyProperty applyElement,
+            out string error,
+            out int statusCode)
+        {
+            statusCode = 400;
+
+            error = DescribeUnwritableElements(arrayProp, jsonKey);
+            if (error != null) return false;
+
+            if (address == ArrayAddress.Size)
+            {
+                if (!RequestBodyReader.TryGetIntValue(json, jsonKey, out var size, out var present) ||
+                    !present)
+                {
+                    error = Expected(jsonKey, "a JSON integer");
+                    return false;
+                }
+                if (size < 0)
+                {
+                    error = $"Property {jsonKey} expects a length of zero or more, not {size}.";
+                    return false;
+                }
+                if (!TryBoundLength(size, jsonKey, out error)) return false;
+
+                arrayProp.arraySize = size;
+                return true;
+            }
+
+            // Range-checked here rather than left to a lookup, which would report an index past the
+            // end as a property that does not exist and say nothing about the length.
+            if (index >= arrayProp.arraySize)
+            {
+                error = $"Property {jsonKey} is out of range: the array holds " +
+                        $"{arrayProp.arraySize} element(s).";
+                return false;
+            }
+
+            return applyElement(
+                arrayProp.GetArrayElementAtIndex(index), json, jsonKey, out error, out statusCode);
         }
 
         private static bool TryValidateCompositeObject(
@@ -395,28 +684,39 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// Returns the first of <paramref name="requestedKeys"/> that names no serialized property
-        /// on <paramref name="so"/>, or null when every key names one.
+        /// Returns the first of <paramref name="requestedKeys"/> this object cannot write, or null
+        /// when every key is addressable. <paramref name="reason"/> carries the explanation when
+        /// the key is unwritable for a reason other than naming nothing.
         /// </summary>
         /// <remarks>
         /// The write loop can only report keys it reached. A key that matches nothing is never
         /// reached at all, so it has to be found by walking the properties once against the keys
         /// the request sent. <paramref name="descendIntoChildren"/> mirrors the caller's own walk,
-        /// because a key is addressable exactly when that walk would visit the property.
+        /// because a plain key is addressable exactly when that walk would visit the property.
         ///
         /// Matching is on <c>propertyPath</c> alone, which is what both write loops select by. A
         /// child's bare <c>name</c> must not count: <c>x</c> is the name of the child of every
         /// vector property, and accepting it here while the loop looks for <c>m_LocalPosition.x</c>
         /// would let <c>{"x": 5}</c> through the gate and then apply to nothing -- answering 200
         /// for a write that did not happen, which is the whole failure this check exists to end.
+        ///
+        /// An array address is judged by the array it reaches into rather than by itself. The walk
+        /// follows foldout state, so whether it visits an element depends on Editor UI that has
+        /// nothing to do with the request -- and on the ScriptableObject endpoint, which does not
+        /// descend, it never visits one at all. Addressing the array instead makes both endpoints
+        /// answer the same way for the same key.
         /// </remarks>
-        internal static string FindUnmatchedKey(
+        internal static string FindUnwritableKey(
             SerializedObject so,
             string propertiesJson,
             bool descendIntoChildren,
-            IEnumerable<string> requestedKeys)
+            IEnumerable<string> requestedKeys,
+            out string reason)
         {
+            reason = null;
+
             var matched = new HashSet<string>(StringComparer.Ordinal);
+            var arrays = new HashSet<string>(StringComparer.Ordinal);
             var iter = so.GetIterator();
             var enterChildren = true;
             while (iter.NextVisible(enterChildren))
@@ -424,12 +724,98 @@ namespace LeonAkasaka.UnionAir.Editor
                 enterChildren = descendIntoChildren;
                 if (RequestBodyReader.HasTopLevelField(propertiesJson, iter.propertyPath))
                     matched.Add(iter.propertyPath);
+
+                // Every array the walk reaches, not only the ones sent as keys: an element address
+                // names its array without the array itself appearing in the request. Its internals
+                // are addressed through it rather than walked, so there is nothing below to visit.
+                if (!IsWritableAsArray(iter)) continue;
+                arrays.Add(iter.propertyPath);
+                enterChildren = false;
             }
 
+            // Per array, the key that sets its length and the first key that writes one element.
+            // Two elements of one array are a pair of independent writes; a length beside them is
+            // not, because it decides how many elements there are to write to.
+            var lengthKeyOf  = new Dictionary<string, string>(StringComparer.Ordinal);
+            var elementKeyOf = new Dictionary<string, string>(StringComparer.Ordinal);
+
             foreach (var key in requestedKeys)
-                if (!matched.Contains(key)) return key;
+            {
+                string reachedArray;
+                bool setsLength;
+
+                if (TryParseArrayAddress(key, out var arrayPath, out var address, out _))
+                {
+                    if (!arrays.Contains(arrayPath))
+                    {
+                        // The array is the part a caller can check, so name it rather than the
+                        // element -- whether it is absent or simply not an array.
+                        reason = $"No array named '{arrayPath}' on {so.targetObject.GetType().FullName}, " +
+                                 $"which '{key}' addresses part of.";
+                        return key;
+                    }
+                    reachedArray = arrayPath;
+                    setsLength = address == ArrayAddress.Size;
+                }
+                else if (!matched.Contains(key))
+                {
+                    if (NamesArrayInternals(key))
+                        reason = $"Key '{key}' reaches inside an array. Only the array itself, " +
+                                 "one element as 'name.Array.data[i]', and its length as " +
+                                 "'name.Array.size' can be written.";
+                    return key;
+                }
+                else if (arrays.Contains(key))
+                {
+                    reachedArray = key;
+                    setsLength = true; // a whole-array write resizes to the length it carries
+                }
+                else
+                {
+                    continue;
+                }
+
+                if (lengthKeyOf.TryGetValue(reachedArray, out var earlierLength))
+                {
+                    reason = ConflictingArrayKeys(earlierLength, key, reachedArray);
+                    return key;
+                }
+
+                if (setsLength)
+                {
+                    if (elementKeyOf.TryGetValue(reachedArray, out var earlierElement))
+                    {
+                        reason = ConflictingArrayKeys(earlierElement, key, reachedArray);
+                        return key;
+                    }
+                    lengthKeyOf.Add(reachedArray, key);
+                }
+                else if (!elementKeyOf.ContainsKey(reachedArray))
+                {
+                    elementKeyOf.Add(reachedArray, key);
+                }
+            }
+
             return null;
         }
+
+        private static bool TryBoundLength(int length, string jsonKey, out string error)
+        {
+            if (length <= MaxArrayLength)
+            {
+                error = null;
+                return true;
+            }
+
+            error = $"Property {jsonKey} asks for {length} elements, past the limit of " +
+                    $"{MaxArrayLength} this endpoint writes.";
+            return false;
+        }
+
+        private static string ConflictingArrayKeys(string first, string second, string arrayPath)
+            => $"Keys '{first}' and '{second}' both write the array '{arrayPath}', and one of them " +
+               "sets its length. Send either a length or the elements to write, because which of " +
+               "them applies first is not something this endpoint decides for a caller.";
 
         // ── ObjectReference resolution ────────────────────────────────────────
 

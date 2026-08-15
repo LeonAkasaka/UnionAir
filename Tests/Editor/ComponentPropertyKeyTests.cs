@@ -11,9 +11,12 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
     /// <remarks>
     /// Two defects meet here. A key used to be matched by a substring search over the whole body,
     /// so a name appearing inside another property's value selected a field the client never asked
-    /// for. And a key that selected nothing was passed over in silence, so a typo, a number sent as
-    /// a string, and an array all answered 200 with an empty <c>updated</c> — a write that did not
-    /// happen, reported as success. The requests below are measured ones.
+    /// for. And a key that selected nothing was passed over in silence, so a typo and a number sent
+    /// as a string answered 200 with an empty <c>updated</c> — a write that did not happen,
+    /// reported as success. The requests below are measured ones.
+    ///
+    /// The array keys are here for a third reason: an array is addressed in three ways and none of
+    /// them is reached by the walk the other keys use, so what selects them is the part to cover.
     /// </remarks>
     internal sealed class ComponentPropertyKeyTests
     {
@@ -149,37 +152,152 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.IsTrue(_renderer.receiveShadows);
         }
 
-        [Test]
-        public void AnArrayPropertyIsRejected()
-        {
-            var response = Patch("{\"properties\":{\"m_Materials\":[]}}");
+        // ── The three array addresses ────────────────────────────────────────
 
-            Assert.AreEqual(400, response.StatusCode, response.Body);
-            StringAssert.Contains("array", response.Body);
+        [Test]
+        public void AWholeArrayIsReplaced()
+        {
+            var response = Patch("{\"properties\":{\"m_Materials\":[null,null]}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            StringAssert.Contains("\"m_Materials\"", response.Body);
+            Assert.AreEqual(2, _renderer.sharedMaterials.Length);
+            Assert.IsNull(_renderer.sharedMaterial);
         }
 
         [Test]
-        public void AnArrayElementIsRejected()
+        public void AnEmptyJsonArrayClearsTheArray()
         {
-            // The walk descends into children, so this arrives as an ordinary object reference and
-            // was written one element at a time -- past the guard that refuses the array itself.
+            var response = Patch("{\"properties\":{\"m_Materials\":[]}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(0, _renderer.sharedMaterials.Length);
+        }
+
+        [Test]
+        public void AnArrayElementIsWrittenInPlace()
+        {
             var response = Patch("{\"properties\":{\"m_Materials.Array.data[0]\":null}}");
 
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            StringAssert.Contains("m_Materials.Array.data[0]", response.Body);
+            Assert.AreEqual(1, _renderer.sharedMaterials.Length, "an element write must not resize");
+            Assert.IsNull(_renderer.sharedMaterial);
+        }
+
+        [Test]
+        public void AnArraySizeResizes()
+        {
+            var response = Patch("{\"properties\":{\"m_Materials.Array.size\":2}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(2, _renderer.sharedMaterials.Length);
+        }
+
+        [Test]
+        public void ATwoElementWriteAddressesEachIndexIndependently()
+        {
+            // Two elements of one array are two independent writes; only a length beside them is
+            // a conflict, so this must not be caught by the check that refuses that pairing.
+            var response = Patch(
+                "{\"properties\":{\"m_Materials.Array.size\":2}}");
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+
+            response = Patch(
+                "{\"properties\":{\"m_Materials.Array.data[0]\":null," +
+                "\"m_Materials.Array.data[1]\":null}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(2, _renderer.sharedMaterials.Length);
+        }
+
+        [Test]
+        public void ANegativeArraySizeIsRejected()
+        {
+            var response = Patch("{\"properties\":{\"m_Materials.Array.size\":-1}}");
+
             Assert.AreEqual(400, response.StatusCode, response.Body);
-            StringAssert.Contains("array", response.Body);
+            Assert.AreEqual(1, _renderer.sharedMaterials.Length);
+        }
+
+        [Test]
+        public void AnArraySizePastTheLimitIsRejectedBeforeUnityAllocatesIt()
+        {
+            // The one write whose cost is not bounded by the request carrying it: a few bytes name
+            // a length Unity would try to allocate, and the Editor goes down with it.
+            var response = Patch("{\"properties\":{\"m_Materials.Array.size\":2000000000}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains(
+                SerializedPropertySerializer.MaxArrayLength.ToString(), response.Body);
+            Assert.AreEqual(1, _renderer.sharedMaterials.Length);
+        }
+
+        [Test]
+        public void AnElementIndexPastTheEndIsRejectedWithTheLength()
+        {
+            var response = Patch("{\"properties\":{\"m_Materials.Array.data[3]\":null}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("1 element", response.Body);
             Assert.AreSame(_material, _renderer.sharedMaterial);
         }
 
         [Test]
-        public void AnArraySizeIsRejected()
+        public void AnArrayValueOfTheWrongShapeIsRejected()
         {
-            // Refused for being part of an array rather than for its serialized type, which is
-            // what the catch-all used to say and what said nothing about arrays.
-            var response = Patch("{\"properties\":{\"m_Materials.Array.size\":2}}");
+            var response = Patch("{\"properties\":{\"m_Materials\":5}}");
 
             Assert.AreEqual(400, response.StatusCode, response.Body);
-            StringAssert.Contains("array", response.Body);
+            StringAssert.Contains("JSON array", response.Body);
+            Assert.AreSame(_material, _renderer.sharedMaterial);
+        }
+
+        [Test]
+        public void AnElementOfTheWrongShapeIsNamedByItsOwnAddress()
+        {
+            // The array key is what the client sent; the element address is what it has to fix.
+            var response = Patch("{\"properties\":{\"m_Materials\":[null,5]}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("m_Materials.Array.data[1]", response.Body);
+            Assert.AreSame(_material, _renderer.sharedMaterial);
+            Assert.AreEqual(1, _renderer.sharedMaterials.Length, "the resize must not survive either");
+        }
+
+        [Test]
+        public void ALengthAndAnElementForOneArrayAreRejected()
+        {
+            var response = Patch(
+                "{\"properties\":{\"m_Materials.Array.size\":2," +
+                "\"m_Materials.Array.data[0]\":null}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("m_Materials", response.Body);
             Assert.AreEqual(1, _renderer.sharedMaterials.Length);
+            Assert.AreSame(_material, _renderer.sharedMaterial);
+        }
+
+        [Test]
+        public void AKeyReachingPastAnElementIsRejected()
+        {
+            // The walk follows foldout state, so a key like this was reachable or not depending on
+            // Editor UI. Refused by name instead, whatever the walk would have done.
+            var response = Patch("{\"properties\":{\"m_Materials.Array.data[0].name\":\"x\"}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("inside an array", response.Body);
+            Assert.AreSame(_material, _renderer.sharedMaterial);
+        }
+
+        [Test]
+        public void AnElementAddressOnSomethingThatIsNotAnArrayIsRejected()
+        {
+            var response = Patch("{\"properties\":{\"m_ReceiveShadows.Array.data[0]\":true}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("m_ReceiveShadows", response.Body);
+            Assert.IsTrue(_renderer.receiveShadows);
         }
 
         [Test]
@@ -217,12 +335,13 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         [Test]
         public void ARejectedRequestWritesNothingItAlreadyAccepted()
         {
-            // m_ReceiveShadows is visited before m_Materials, so it is applied to the
-            // SerializedObject before the array is refused. Nothing may reach the component.
-            var response = Patch("{\"properties\":{\"m_ReceiveShadows\":false,\"m_Materials\":[]}}");
+            // The walk applies m_ReceiveShadows to the SerializedObject, and the array pass that
+            // runs after it refuses the element. Neither may reach the component.
+            var response = Patch("{\"properties\":{\"m_ReceiveShadows\":false,\"m_Materials\":[5]}}");
 
             Assert.AreEqual(400, response.StatusCode, response.Body);
             Assert.IsTrue(_renderer.receiveShadows, "a refused request must not half-apply");
+            Assert.AreSame(_material, _renderer.sharedMaterial);
         }
 
         [Test]

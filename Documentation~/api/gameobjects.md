@@ -586,7 +586,38 @@ Each key in `properties` is a `SerializedProperty.propertyPath`. Top-level field
 
 Every key must be unique and name a property this endpoint can write, and only keys at the top level of `properties` are read — a name appearing inside another property's value is part of that value, not a request to write it. A duplicate key, a key that names nothing, one that names something unwritable, or one carrying a value of the wrong shape answers `400` and says which key and why, rather than being passed over. `updated` therefore always lists every key the request sent, and a `200` means the whole request was applied. An empty `properties` object is accepted and updates nothing.
 
-Arrays, nested generic types, and `m_Script` are among the properties this endpoint cannot write. Sending one is an error, not a no-op. That covers an array's parts as well as the array itself: `m_Materials.Array.data[0]` and `m_Materials.Array.size` are refused for the same reason `m_Materials` is.
+Nested generic types and `m_Script` are among the properties this endpoint cannot write. Sending one is an error, not a no-op.
+
+An array is written in one of three ways, all of them `SerializedProperty.propertyPath` spellings Unity itself produces:
+
+| Key | Effect |
+|------|------|
+| `m_Materials` | Replaces the array, resizing it to the length of the JSON array |
+| `m_Materials.Array.data[0]` | Writes one element, leaving the length alone |
+| `m_Materials.Array.size` | Resizes only |
+
+```json
+{
+  "properties": {
+    "m_Materials": [
+      { "assetPath": "Assets/Materials/Brick.mat", "assetType": "UnityEngine.Material" },
+      null
+    ]
+  }
+}
+```
+
+An element value takes the same shape a top-level property of that serialized type takes, so `null`, a scalar, `{r,g,b,a}`, `{x,y,…}`, and every object reference form below all work inside an array. An element that cannot be applied is reported by its own address rather than by the array's, so `{"m_Materials": [null, 5]}` names `m_Materials.Array.data[1]`.
+
+Replacing an array is a replacement and not a merge: Unity keeps no identity per element, so the JSON array's length becomes the array's length. An element address never resizes, and an index past the end answers `400` naming the current length.
+
+Growing an array fills the new slots the way Unity does, by copying the last element rather than clearing them. A length above 1,000,000 answers `400`. That bound is not a statement about what Unity supports: `Array.size` is the one write whose cost is not paid for in the request body, and without it a mistyped length asks the Editor to allocate whatever was sent.
+
+One request must not both set an array's length and write its elements. Two element addresses are two independent writes and are accepted; a length beside them — whether spelled `m_Materials` or `m_Materials.Array.size` — answers `400`, because which of them applies first is not a question this endpoint answers on a caller's behalf.
+
+An array whose elements are a serialized type this endpoint cannot write, such as a `List<T>` of a serializable struct, is refused through all three addresses. The read serializes such an element as `null`, so replacing or dropping one would destroy content a caller has never seen. Growing it is refused with the rest, rather than leaving a resize that works in one direction only.
+
+A key that reaches inside an array in any other form is refused by name. `m_Materials.Array.data[0].name` is an element sub-path, and writing a field inside an element is not supported.
 
 Color and vector objects are partial patches: omitted members retain their current values. At least one supported member must be present, every supplied member must be a JSON number, and unknown or duplicate members are rejected.
 
@@ -629,7 +660,10 @@ Object reference objects accept only the members shown in the supported shapes a
 | 400 | An object reference payload is malformed, contains an unknown or duplicate member, or requests a type that cannot be resolved |
 | 400 | A key in `properties` names no serialized property on the component |
 | 400 | A key in `properties`, or a member of a color, vector, or object reference value, is duplicated |
-| 400 | A key names a property this endpoint cannot write: an array, a nested generic type, `m_Script`, or a serialized type with no write support |
+| 400 | A key names a property this endpoint cannot write: a nested generic type, `m_Script`, an array of elements it cannot write, or a serialized type with no write support |
+| 400 | A key reaches inside an array in a form other than `name.Array.data[i]` or `name.Array.size` |
+| 400 | An element index is past the end of its array, or an `Array.size` is negative |
+| 400 | One request both sets an array's length and writes its elements |
 | 400 | A value does not match the shape its property takes — a number sent as a string, a vector sent as a scalar |
 | 400 | The value of a key is not well-formed JSON |
 | 404 | The GameObject, component, or asset does not exist |

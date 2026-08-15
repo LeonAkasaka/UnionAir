@@ -133,15 +133,116 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual(1f, _asset.cooldown);
         }
 
+        // ── The three array addresses ────────────────────────────────────────
+
         [Test]
-        public void AnArrayPropertyIsRejected()
+        public void AWholeArrayIsReplaced()
         {
-            // Documented as silently skipped until now, which meant a caller sending an array
-            // could not tell the write apart from one that worked.
-            var response = Patch("{\"properties\":{\"tags\":[\"a\"]}}");
+            var response = Patch("{\"properties\":{\"tags\":[\"fire\",\"aoe\"]}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            StringAssert.Contains("\"tags\"", response.Body);
+            CollectionAssert.AreEqual(new[] { "fire", "aoe" }, _asset.tags);
+        }
+
+        [Test]
+        public void AnArrayElementIsWrittenInPlace()
+        {
+            // This endpoint walks top-level properties only, so it never reached an element path
+            // and reported one as naming nothing. The address resolves through the array instead.
+            Patch("{\"properties\":{\"tags\":[\"fire\",\"aoe\"]}}");
+
+            var response = Patch("{\"properties\":{\"tags.Array.data[1]\":\"single\"}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            CollectionAssert.AreEqual(new[] { "fire", "single" }, _asset.tags);
+        }
+
+        [Test]
+        public void AnArraySizeResizes()
+        {
+            var response = Patch("{\"properties\":{\"tags.Array.size\":3}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(3, _asset.tags.Length);
+        }
+
+        [Test]
+        public void AnObjectReferenceElementResolvesAnAsset()
+        {
+            var response = Patch(
+                "{\"properties\":{\"references\":[{\"assetPath\":\"" + AssetPath + "\"}]}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(1, _asset.references.Length);
+            Assert.AreSame(_asset, _asset.references[0]);
+        }
+
+        [Test]
+        public void AnArrayOfUnwritableElementsIsRejectedForWhatItHolds()
+        {
+            var response = Patch("{\"properties\":{\"entries\":[]}}");
 
             Assert.AreEqual(400, response.StatusCode, response.Body);
-            StringAssert.Contains("array", response.Body);
+            StringAssert.Contains("entries", response.Body);
+            StringAssert.Contains("cannot write", response.Body);
+            Assert.AreEqual(1, _asset.entries.Length, "clearing must not have reached the asset");
+        }
+
+        [Test]
+        public void AnArrayOfUnwritableElementsIsRejectedForWhatAResizeWouldGiveIt()
+        {
+            // Empty, so there is nothing to inspect without asking the array for its element type.
+            var response = Patch("{\"properties\":{\"spares\":[{\"hp\":1}]}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("spares", response.Body);
+            StringAssert.Contains("cannot write", response.Body);
+            Assert.AreEqual(0, _asset.spares.Length);
+        }
+
+        [TestCase("{\"spares\":[]}",           TestName = "clearing an empty one")]
+        [TestCase("{\"spares.Array.size\":0}", TestName = "resizing an empty one to empty")]
+        [TestCase("{\"spares.Array.size\":2}", TestName = "growing an empty one")]
+        public void AnUnwritableElementTypeIsRefusedWhateverTheArrayCurrentlyHolds(string properties)
+        {
+            // Judging writability by what an array holds made it depend on the array's length: a
+            // request that left an empty one empty wrote nothing and answered 200, so a caller
+            // clearing an empty list was told the field was writable and found out otherwise the
+            // moment the list had an element in it.
+            var response = Patch("{\"properties\":" + properties + "}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("spares", response.Body);
+            StringAssert.Contains("cannot write", response.Body);
+            Assert.AreEqual(0, _asset.spares.Length);
+        }
+
+        [Test]
+        public void AnElementAddressOnAnUnwritableArrayNamesTheElementTypeRatherThanTheRange()
+        {
+            // Refused before the index is looked at, so the message is about the array's elements
+            // rather than about an empty array having no index 0.
+            var response = Patch("{\"properties\":{\"spares.Array.data[0]\":{\"hp\":1}}}");
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("cannot write", response.Body);
+        }
+
+        [Test]
+        public void AnEmptyWritableArrayIsUnchangedByTheElementTypeCheck()
+        {
+            // The check grows an empty array by one to read its element type. Nothing may survive
+            // that, on the array it inspected or on the request that follows.
+            var response = Patch("{\"properties\":{\"tags\":[]}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(0, _asset.tags.Length);
+
+            response = Patch("{\"properties\":{\"references\":[]}}");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            Assert.AreEqual(0, _asset.references.Length);
         }
 
         [Test]
@@ -190,7 +291,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             var transientCountBefore = CountTransientFixtures();
             var body = "{\"typeName\":\"" + typeof(UnionAirPropertyKeyFixture).FullName +
                        "\",\"assetPath\":\"" + CreatedAssetPath +
-                       "\",\"properties\":{\"tags\":[\"a\"]}}";
+                       "\",\"properties\":{\"entries\":[{\"hp\":1}]}}";
             var request = new FakeRequest("POST", "/api/assets/scriptableobjects")
                 .WithJsonBody(body);
             var response = new FakeResponse();

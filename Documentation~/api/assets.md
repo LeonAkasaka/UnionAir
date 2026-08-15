@@ -648,7 +648,7 @@ Returns a ScriptableObject asset together with all readable serialized propertie
     "speed": 3.5,
     "displayName": "Goblin",
     "primaryWeapon": { "assetGuid": "def456...", "assetPath": "Assets/Weapons/Sword.asset", "assetType": "MyGame.WeaponData" },
-    "tags": null
+    "tags": ["fire", "aoe"]
   }
 }
 ```
@@ -669,7 +669,8 @@ Returns a ScriptableObject asset together with all readable serialized propertie
 | Bounds | `{"center":{"x":…,"y":…,"z":…},"extents":{"x":…,"y":…,"z":…}}` |
 | ObjectReference (asset) | `{"assetGuid":…,"assetPath":…,"assetType":…}` |
 | ObjectReference (null) | `null` |
-| Arrays, nested generic types | `null` (ScriptableObject GET does not serialize arrays; use GET /api/gameobjects for array-valued component properties) |
+| Array | JSON array whose elements follow the same rules |
+| Nested generic types | `null` |
 
 ### Errors
 
@@ -734,7 +735,9 @@ When `properties` is present, it follows the same all-or-nothing validation as P
 
 Updates serialized properties on an existing ScriptableObject asset.
 
-Every key in `properties` must be unique and name a property this endpoint can write, and only keys at the top level are read — a name appearing inside another property's value is part of that value, not a request to write it. A duplicate key, a key that names nothing, one that names something unwritable, or one carrying a value of the wrong shape answers `400` and says which key and why. `updated` therefore always lists every key the request sent. Arrays, nested generic types, and `m_Script` cannot be written; sending one is an error rather than a no-op. An empty `properties` object is accepted and updates nothing.
+Every key in `properties` must be unique and name a property this endpoint can write, and only keys at the top level are read — a name appearing inside another property's value is part of that value, not a request to write it. A duplicate key, a key that names nothing, one that names something unwritable, or one carrying a value of the wrong shape answers `400` and says which key and why. `updated` therefore always lists every key the request sent. Nested generic types and `m_Script` cannot be written; sending one is an error rather than a no-op. An empty `properties` object is accepted and updates nothing.
+
+An array is written whole as a JSON array (`"tags": ["fire", "aoe"]`), one element at a time as `tags.Array.data[0]`, or resized as `tags.Array.size`. The rules are the same ones [PATCH /api/gameobjects/components](gameobjects.md#patch-apigameobjectscomponents) documents in full: a whole-array write is a replacement rather than a merge, an element address never resizes, one request must not both set a length and write elements, an array whose elements are a serialized type this endpoint cannot write is refused through all three addresses, a key reaching inside an array in any other form is refused by name, and a length above 1,000,000 is refused. An element object reference resolves assets only, as every object reference on this endpoint does.
 
 Color and vector objects are partial patches: omitted members retain their current values. At least one supported member must be present, every supplied member must be a JSON number, and unknown or duplicate members are rejected.
 
@@ -784,7 +787,10 @@ For ObjectReference fields, supply an object with `assetGuid` or `assetPath` and
 | 400 | `guid` is missing, asset is not a ScriptableObject, `properties` is missing, a property value is malformed, or a composite value contains an unknown member |
 | 400 | A key in `properties` names no serialized property on the asset |
 | 400 | A key in `properties`, or a member of a color, vector, or object reference value, is duplicated |
-| 400 | A key names a property this endpoint cannot write: an array, a nested generic type, `m_Script`, or a serialized type with no write support |
+| 400 | A key names a property this endpoint cannot write: a nested generic type, `m_Script`, an array of elements it cannot write, or a serialized type with no write support |
+| 400 | A key reaches inside an array in a form other than `name.Array.data[i]` or `name.Array.size` |
+| 400 | An element index is past the end of its array, or an `Array.size` is negative |
+| 400 | One request both sets an array's length and writes its elements |
 | 400 | A value does not match the shape its property takes |
 | 404 | No asset found for the given GUID |
 | 403 | Asset Write category is disabled |

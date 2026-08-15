@@ -255,13 +255,14 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             var typeName = instance.GetType().FullName;
-            var unmatched = SerializedPropertySerializer.FindUnmatchedKey(
-                so, propertiesJson, false, requestedKeys);
-            if (unmatched != null)
+            var unwritable = SerializedPropertySerializer.FindUnwritableKey(
+                so, propertiesJson, false, requestedKeys, out var reason);
+            if (unwritable != null)
             {
                 RestResponse.SendError(
                     response,
-                    $"No serialized property named '{unmatched}' on {typeName}. " +
+                    reason ??
+                    $"No serialized property named '{unwritable}' on {typeName}. " +
                     "Send the names GET /api/assets/scriptableobjects/{guid} reports for this asset.",
                     400);
                 return;
@@ -273,6 +274,11 @@ namespace LeonAkasaka.UnionAir.Editor
             while (iter.NextVisible(enterChildren))
             {
                 enterChildren = false; // visit top-level properties only; do not descend into children
+
+                // Arrays and their elements are written by the pass below, which addresses an
+                // element through its array rather than through this walk -- which never reaches
+                // one, since it does not descend.
+                if (SerializedPropertySerializer.IsWritableAsArray(iter)) continue;
 
                 // Try both the simple name and full propertyPath as JSON keys, top-level only:
                 // a key nested inside another property's value is not a key this request sent.
@@ -303,6 +309,15 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
 
                 RestResponse.SendError(response, error, statusCode);
+                return;
+            }
+
+            if (!SerializedPropertySerializer.TryApplyArrayKeys(
+                    so, propertiesJson, requestedKeys,
+                    SerializedPropertySerializer.ApplyPropertyFromJson, updated,
+                    out var arrayError, out var arrayStatusCode))
+            {
+                RestResponse.SendError(response, arrayError, arrayStatusCode);
                 return;
             }
 
