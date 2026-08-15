@@ -398,10 +398,12 @@ namespace LeonAkasaka.UnionAir.Editor
 
                 // Measured before the write rather than derived from the name afterwards:
                 // only SetCurve knows what a property name resolves to.
-                var produced = ProducedBindings(relativePath, bindingType, property, curve);
+                var produced = ProducedBindings(
+                    relativePath, bindingType, property, curve, out var storedNothing);
 
                 clip.SetCurve(relativePath, bindingType, property, curve);
-                writes.Add(new CurveWrite(relativePath, bindingType, typeName, property, produced, false));
+                writes.Add(new CurveWrite(
+                    relativePath, bindingType, typeName, property, produced, false, storedNothing));
             }
 
             // Object reference curves
@@ -449,7 +451,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 var binding = EditorCurveBinding.PPtrCurve(relativePath, bindingType, property);
                 AnimationUtility.SetObjectReferenceCurve(clip, binding, keyList.ToArray());
                 writes.Add(new CurveWrite(
-                    relativePath, bindingType, typeName, property, new[] { property }, true));
+                    relativePath, bindingType, typeName, property, new[] { property }, true, false));
             }
 
             if (writes.Count > 0)
@@ -463,7 +465,23 @@ namespace LeonAkasaka.UnionAir.Editor
             // SetCurve returned -- the same rule DELETE applies to its removals.
             var floatAfter = AnimationUtility.GetCurveBindings(clip);
             var pptrAfter = AnimationUtility.GetObjectReferenceCurveBindings(clip);
+            var warnings = new List<string>();
             foreach (var write in writes) write.Confirm(floatAfter, pptrAfter, errors);
+
+            // The rotation check reads the clip once every entry has been written, so a
+            // quaternion assembled from four entries -- in this request or across several --
+            // is judged on what the clip ends up holding rather than on what one entry named.
+            var checkedGroups = new List<string>();
+            foreach (var write in writes)
+            {
+                if (!write.IsRotationGroup) continue;
+
+                var group = BindingKey(write.RelativePath, write.Type, RotationGroupName);
+                if (checkedGroups.Contains(group)) continue;
+                checkedGroups.Add(group);
+
+                WarnIfRotationIsNotUnit(clip, floatAfter, write, warnings);
+            }
 
             // Flat lists across every entry, deduplicated by binding rather than by name:
             // "m_LocalPosition.y" written on two paths is two bindings and appears twice.
@@ -494,9 +512,16 @@ namespace LeonAkasaka.UnionAir.Editor
             AppendWrites(sb, writes, true);
             sb.Append("],\"errors\":[");
             AppendStrings(sb, errors);
+            sb.Append("],\"warnings\":[");
+            AppendStrings(sb, warnings);
             sb.Append("]}");
-            RestResponse.Send(response, sb.ToString(),
-                errors.Count > 0 && addedFloat.Count == 0 && addedRef.Count == 0 ? 400 : 200);
+
+            // 400 when no entry stored what it was asked to, rather than when the clip gained
+            // no binding. A group write whose suffix named nothing creates the group and so
+            // adds bindings, and answering 200 for it is the failure this endpoint had.
+            var anyStored = false;
+            foreach (var write in writes) if (!write.Failed) { anyStored = true; break; }
+            RestResponse.Send(response, sb.ToString(), errors.Count > 0 && !anyStored ? 400 : 200);
         }
 
         /// <summary>
@@ -506,7 +531,7 @@ namespace LeonAkasaka.UnionAir.Editor
         {
             internal CurveWrite(
                 string relativePath, Type type, string typeName,
-                string requested, string[] produced, bool isObjectReference)
+                string requested, string[] produced, bool isObjectReference, bool storedNothing)
             {
                 RelativePath = relativePath;
                 Type = type;
@@ -514,6 +539,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 Requested = requested;
                 Produced = produced;
                 IsObjectReference = isObjectReference;
+                StoredNothing = storedNothing;
                 Confirmed = new List<string>();
             }
 
@@ -526,7 +552,23 @@ namespace LeonAkasaka.UnionAir.Editor
             internal string Requested { get; private set; }
             internal string[] Produced { get; private set; }
             internal bool IsObjectReference { get; private set; }
+
+            /// <summary>
+            /// The entry's keys reached no binding: every binding it produced came out empty.
+            /// Measured on the probe rather than on the clip -- see <see cref="ProducedBindings"/>.
+            /// </summary>
+            internal bool StoredNothing { get; private set; }
+
             internal List<string> Confirmed { get; private set; }
+
+            /// <summary>The entry did not store what it was asked to, whatever the clip gained.</summary>
+            internal bool Failed { get; private set; }
+
+            /// <summary>The entry produced exactly the four components of a Transform quaternion.</summary>
+            internal bool IsRotationGroup
+            {
+                get { return !IsObjectReference && IsRotationComponentSet(Produced); }
+            }
 
             /// <summary>
             /// Keeps the bindings the clip actually holds, and reports the rest as errors.
@@ -536,9 +578,24 @@ namespace LeonAkasaka.UnionAir.Editor
             {
                 if (Produced.Length == 0)
                 {
+                    Failed = true;
                     errors.Add(
                         $"Curve '{Requested}' on '{RelativePath}' ({TypeName}) produced no binding.");
                     return;
+                }
+
+                // A group write selects the group by the prefix and the component by the
+                // suffix. A suffix naming no component of the group leaves the keys nowhere
+                // to land, and the group is created -- or left -- carrying none of them.
+                // Unity logs "Can't assign curve because X is not a valid Transform property"
+                // to the Editor console when this happens, which no API client can read.
+                if (StoredNothing)
+                {
+                    Failed = true;
+                    errors.Add(
+                        $"Curve '{Requested}' on '{RelativePath}' ({TypeName}) stored none of its keys: " +
+                        $"the {DescribeGroup()} group carries them on one of its components, and " +
+                        $"'{Requested}' names none of them. Send one of {string.Join(", ", Produced)}.");
                 }
 
                 foreach (var name in Produced)
@@ -547,9 +604,24 @@ namespace LeonAkasaka.UnionAir.Editor
                         ? TryFindBinding(pptrAfter, RelativePath, Type, name, out _)
                         : TryFindBinding(floatAfter, RelativePath, Type, name, out _);
 
-                    if (present) Confirmed.Add(name);
-                    else errors.Add($"Failed to write '{name}' on '{RelativePath}' ({TypeName}).");
+                    if (present)
+                    {
+                        Confirmed.Add(name);
+                    }
+                    else
+                    {
+                        Failed = true;
+                        errors.Add($"Failed to write '{name}' on '{RelativePath}' ({TypeName}).");
+                    }
                 }
+            }
+
+            /// <summary>The group's name, taken from a produced binding rather than from the request.</summary>
+            private string DescribeGroup()
+            {
+                var first = Produced[0];
+                var dot = first.LastIndexOf('.');
+                return dot > 0 ? first.Substring(0, dot) : first;
             }
         }
 
@@ -568,9 +640,20 @@ namespace LeonAkasaka.UnionAir.Editor
         /// A throwaway clip rather than a before-and-after diff of the real one, because a
         /// request that replaces an existing curve creates no binding and a diff would then
         /// report that nothing was written.
+        ///
+        /// <paramref name="storedNothing"/> answers whether the entry's keys reached any
+        /// binding at all. It has to be read here rather than off the saved clip: when the
+        /// group already carries curves, a write whose suffix names no component of it is a
+        /// complete no-op, and the keys that were already there would pass a check made
+        /// afterwards while the keys the request sent were still dropped. On the probe the
+        /// entry is the only write, so an empty group is unambiguous. A real component write
+        /// never looks like this -- its siblings receive a constant curve carrying keys, not
+        /// an empty one -- and `keys` is rejected when empty, so an entry that supplied
+        /// nothing cannot reach here either.
         /// </summary>
         private static string[] ProducedBindings(
-            string relativePath, Type type, string property, AnimationCurve curve)
+            string relativePath, Type type, string property, AnimationCurve curve,
+            out bool storedNothing)
         {
             var probe = new AnimationClip();
             try
@@ -580,13 +663,147 @@ namespace LeonAkasaka.UnionAir.Editor
                 // Every binding on the probe belongs to this entry: it is the only write.
                 var bindings = AnimationUtility.GetCurveBindings(probe);
                 var names = new string[bindings.Length];
-                for (int i = 0; i < bindings.Length; i++) names[i] = bindings[i].propertyName;
+                var anyKeys = false;
+                for (int i = 0; i < bindings.Length; i++)
+                {
+                    names[i] = bindings[i].propertyName;
+
+                    var stored = AnimationUtility.GetEditorCurve(probe, bindings[i]);
+                    if (stored != null && stored.length > 0) anyKeys = true;
+                }
+
+                storedNothing = bindings.Length > 0 && !anyKeys;
                 return names;
             }
             finally
             {
                 UnityEngine.Object.DestroyImmediate(probe);
             }
+        }
+
+        /// <summary>The serialized name of Transform's quaternion rotation group.</summary>
+        private const string RotationGroupName = "m_LocalRotation";
+
+        private static readonly string[] RotationComponents =
+        {
+            RotationGroupName + ".x", RotationGroupName + ".y",
+            RotationGroupName + ".z", RotationGroupName + ".w",
+        };
+
+        /// <summary>
+        /// How far a quaternion's length may sit from 1 before the write is called into
+        /// question. Loose enough that a client sending rounded components -- 0.7071 for a
+        /// quarter turn -- is not reported, and far tighter than the failure it exists to
+        /// catch, which leaves the length at 0.7071 or at 0.
+        /// </summary>
+        private const float RotationUnitTolerance = 1e-3f;
+
+        /// <summary>
+        /// Whether a set of produced bindings is exactly the four components of a Transform
+        /// quaternion.
+        ///
+        /// Keyed on what the entry produced rather than on the name it sent, which settles
+        /// both spellings and the type at once: `localRotation` and `m_LocalRotation` reach
+        /// the same four bindings, and `m_LocalRotation.y` on a Light is stored verbatim as
+        /// one binding and is not a rotation at all.
+        /// </summary>
+        private static bool IsRotationComponentSet(string[] produced)
+        {
+            if (produced == null || produced.Length != RotationComponents.Length) return false;
+
+            foreach (var component in RotationComponents)
+            {
+                var found = false;
+                foreach (var name in produced) if (name == component) { found = true; break; }
+                if (!found) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Reports a rotation group whose quaternion is not unit length where it is keyed.
+        ///
+        /// <see cref="AnimationClip.SetCurve"/> fills the components a request did not name
+        /// with <c>0</c>, and the quaternion identity is <c>w = 1</c> -- so a single entry on
+        /// one component leaves <c>(0, y, 0, 0)</c>, which normalizes to a half turn whatever
+        /// <c>y</c> holds. The write succeeds, the curve is applied, and the rotation is wrong
+        /// by an amount nothing in the response would otherwise show.
+        ///
+        /// Only at the key times, which <see cref="KeyTimes"/> takes across all four curves. A
+        /// correctly authored quaternion is not unit length between its keys either -- Unity
+        /// interpolates the four components and normalizes on apply, so a check anywhere else
+        /// would report every rotation curve ever written.
+        ///
+        /// This is a warning rather than an error because the write did store something, and
+        /// because a caller may complete the quaternion over several requests: a later write
+        /// to another component replaces that component and leaves the ones already carrying
+        /// curves alone (measured). Such a caller trips this on every request but the last,
+        /// and on each of those the clip really is holding a rotation that plays back wrong.
+        /// </summary>
+        private static void WarnIfRotationIsNotUnit(
+            AnimationClip clip, EditorCurveBinding[] floatAfter, CurveWrite write, List<string> warnings)
+        {
+            var curves = new AnimationCurve[RotationComponents.Length];
+            for (int i = 0; i < RotationComponents.Length; i++)
+            {
+                if (!TryFindBinding(
+                        floatAfter, write.RelativePath, write.Type, RotationComponents[i], out var binding))
+                    return;
+
+                curves[i] = AnimationUtility.GetEditorCurve(clip, binding);
+                if (curves[i] == null) return;
+            }
+
+            foreach (var time in KeyTimes(curves))
+            {
+                var x = curves[0].Evaluate(time);
+                var y = curves[1].Evaluate(time);
+                var z = curves[2].Evaluate(time);
+                var w = curves[3].Evaluate(time);
+
+                var length = Mathf.Sqrt(x * x + y * y + z * z + w * w);
+                if (Mathf.Abs(length - 1f) <= RotationUnitTolerance) continue;
+
+                var where = string.IsNullOrEmpty(write.RelativePath) ? "the root" : $"'{write.RelativePath}'";
+                warnings.Add(
+                    $"Rotation on {where} is not a unit quaternion at t={RestResponse.FormatFloat(time)}: " +
+                    $"{RotationGroupName}.x/.y/.z/.w = ({RestResponse.FormatFloat(x)}, {RestResponse.FormatFloat(y)}, " +
+                    $"{RestResponse.FormatFloat(z)}, {RestResponse.FormatFloat(w)}), length " +
+                    $"{RestResponse.FormatFloat(length)}. SetCurve fills the components a request does not name " +
+                    $"with 0, and the quaternion identity is w=1, so one entry leaves a half turn whatever value " +
+                    $"it carries. Write rotation as 'localEulerAngles.*', or send all four components.");
+                return;
+            }
+        }
+
+        /// <summary>
+        /// Every distinct time any of the curves is keyed at, in order.
+        ///
+        /// Measured on 6000.0.80f1, a group write resamples the whole group onto the union of
+        /// its key times -- writing one component in its own request gives the other three a
+        /// key wherever that component has one -- so any single curve's times are already the
+        /// group's times, and this returns what iterating one of them would. It is built as a
+        /// union anyway: that resampling is undocumented Unity behaviour measured on one
+        /// version, and a version that does not do it would leave the check reading times
+        /// that only describe part of the group. The union does not depend on it.
+        /// </summary>
+        private static List<float> KeyTimes(AnimationCurve[] curves)
+        {
+            var times = new List<float>();
+            foreach (var curve in curves)
+            {
+                foreach (var key in curve.keys)
+                {
+                    var seen = false;
+                    foreach (var time in times)
+                        if (Mathf.Approximately(time, key.time)) { seen = true; break; }
+
+                    if (!seen) times.Add(key.time);
+                }
+            }
+
+            times.Sort();
+            return times;
         }
 
         /// <summary>
