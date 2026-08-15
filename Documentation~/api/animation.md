@@ -432,11 +432,11 @@ Object reference curves are addressed exactly and are never expanded.
 
 > The property name is **not** checked against what the type can animate. `SetCurve` accepts any name, so a misspelling becomes a binding that animates nothing and is reported as written. There is no reliable check to apply: `localEulerAnglesRaw`, blend shape, and material bindings all sit outside the animatable set `AnimationUtility.GetAnimatableBindings` reports for their type, so a check against it would reject working curves.
 
-### Two entries that answer 200 and do not do what they say
+### Two ways a group write goes wrong, and what the endpoint says about them
 
-Both are consequences of the group write, both are silent, and neither is currently detected. Measured on 6000.0.80f1.
+Both are consequences of the group write. Both used to answer `200` with an empty `errors` array; both are now reported. Measured on 6000.0.80f1.
 
-**A component suffix that is missing or not part of the group loses your keys.** The suffix selects which component carries the curve; the group is selected by the prefix alone. When the suffix names no component of that group, the keys have nowhere to land and the group is created empty:
+**A component suffix that is missing or not part of the group loses your keys — `400`.** The suffix selects which component carries the curve; the group is selected by the prefix alone. When the suffix names no component of that group, the keys have nowhere to land and the group is created empty:
 
 ```
 property = m_LocalPosition.y  ->  x [(0,0),(1,0)]   y [(0,7),(1,9)]   z [(0,0),(1,0)]
@@ -444,9 +444,9 @@ property = m_LocalPosition    ->  x []              y []              z []
 property = m_LocalPosition.w  ->  x []              y []              z []
 ```
 
-The response lists three bindings and no error, and the clip animates nothing. Send the exact component.
+The entry is reported in `errors`, naming the components it could have been sent as. It is judged on what the entry alone would store, not on what the clip ends up holding — when the group already carries curves this write is a **complete no-op**, the keys already there survive, and the keys you sent are dropped just the same. Send the exact component.
 
-**Rotation written as a quaternion needs all four components in the request.** A single entry on `localRotation.y` creates all four bindings, but fills `w` with `0`, and a quaternion `(0, y, 0, 0)` normalizes to a half turn whatever `y` holds:
+**Rotation written as a quaternion needs all four components — a `warnings` entry.** A single entry on `localRotation.y` creates all four bindings, but fills `w` with `0`, and a quaternion `(0, y, 0, 0)` normalizes to a half turn whatever `y` holds:
 
 | Request | Result at t=1 |
 |---------|---------------|
@@ -455,6 +455,12 @@ The response lists three bindings and no error, and the clip animates nothing. S
 | one entry, `localEulerAngles.y` → `90` | 90° |
 
 Euler is the one that works from a single entry, because there the unwritten components default to `0`, which is the identity. Use `localEulerAngles.*` unless you are writing all four quaternion components deliberately.
+
+The endpoint evaluates the four curves of an `m_LocalRotation` group the request touched, at the times they are keyed, and warns when the quaternion is not unit length there. This catches more than the missing `w`: a group write resamples every component onto the union of the group's key times, so a component keyed at `0` and `2` receives an *interpolated* value at `1`. Against a `y` of `0.7071` that is a `w` of `0.5`, a length of `0.866`, and a rotation of 109.5° where 90° was meant.
+
+Only at the key times, because a correctly authored quaternion is not unit length *between* them either — Unity interpolates the four components and normalizes on apply.
+
+**Why a warning and not an error.** The write stored a curve, and a caller may legitimately fill the quaternion in over several requests: a later write to another component replaces that component and leaves the ones already carrying curves alone. Such a caller is warned on every request but the last, which is accurate — until the last one lands, the clip really does hold a rotation that plays back wrong. A completed quaternion produces no warning, whether it arrived in one request or four.
 
 ### Response
 
@@ -474,7 +480,8 @@ Euler is the one that works from a single entry, because there the unwritten com
   "objectReferenceCurves": [
     { "relativePath": "", "type": "Image", "requested": "m_Sprite", "bindings": ["m_Sprite"] }
   ],
-  "errors": []
+  "errors": [],
+  "warnings": []
 }
 ```
 
@@ -483,17 +490,24 @@ Euler is the one that works from a single entry, because there the unwritten com
 | `added` | Every binding the clip holds because of this request, under the serialized names `GET` reports and `DELETE .../curves` accepts |
 | `addedFloat` / `addedObjectReference` | The same list split by curve kind |
 | `curves[]` / `objectReferenceCurves[]` | One entry per entry in the request: `requested` is the name that was sent, `bindings` the names it produced |
-| `errors` | Entries that were rejected, and bindings the write was expected to produce that the clip does not hold |
+| `errors` | Entries that were rejected, entries that stored none of their keys, and bindings the write was expected to produce that the clip does not hold |
+| `warnings` | The write landed, and the result is probably not what was meant. Today this is the non-unit rotation above |
+
+Both arrays are always present, empty when there is nothing to report.
 
 `added` reports what exists after the call rather than what was asked for, so a name taken from a write can be handed straight to `DELETE .../curves`. A binding is listed once per curve: the same property name on two paths is two bindings and appears twice.
+
+An entry that stored none of its keys still lists the bindings it created under `added` and `bindings`, because they are on the clip and `DELETE .../curves` accepts them. What says the write did not do its job is the `errors` entry.
 
 ### Errors
 
 | Status | Cause |
 |--------|-------|
-| 400 | Required curve fields missing, unknown type, or no valid curves provided |
+| 400 | Required curve fields missing, unknown type, or no entry stored what it was asked to |
 | 404 | No asset found for the given GUID |
 | 403 | Asset Write category is disabled |
+
+The status turns on whether **any** entry stored its keys, not on whether the clip gained a binding: a group write whose suffix named nothing creates the group, so counting bindings would answer `200` for the request that started this. A request mixing a good entry with a bad one answers `200` and reports the bad one in `errors`, unchanged.
 
 ---
 
