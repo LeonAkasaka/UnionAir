@@ -124,6 +124,9 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             // m_AABB is the local bounds and is a different value.
             AssertVector(renderer.bounds.center, Vector(body, "\"bounds\":{\"center\":"));
             AssertVector(new Vector3(4f, 0f, 0f), Vector(body, "\"bounds\":{\"center\":"));
+
+            // Half the quad, which is what makes the fixture worth being an actual quad.
+            AssertVector(new Vector3(0.5f, 0.5f, 0f), Vector(body, "\"extents\":"));
         }
 
         [Test]
@@ -146,12 +149,16 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 
         private static Mesh UnitQuad()
         {
+            // A one-unit square centred on its own origin, so the expected bounds are readable
+            // without working them out: extents of (0.5, 0.5, 0) and a centre wherever the object
+            // is put.
             var mesh = new Mesh { name = "UnionAirWorldFixture" };
             mesh.vertices = new[]
             {
-                new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, -0.5f, 0f), new Vector3(0f, 0.5f, 0f)
+                new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, -0.5f, 0f),
+                new Vector3(0.5f, 0.5f, 0f), new Vector3(-0.5f, 0.5f, 0f)
             };
-            mesh.triangles = new[] { 0, 1, 2 };
+            mesh.triangles = new[] { 0, 1, 2, 0, 2, 3 };
             mesh.RecalculateBounds();
             return mesh;
         }
