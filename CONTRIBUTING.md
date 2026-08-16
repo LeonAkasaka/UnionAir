@@ -40,7 +40,9 @@ EditMode tests for the Unity-independent helpers live in `Tests/Editor`. They ar
 
 Then run them from **Window > General > Test Runner** (EditMode), or through UnionAir itself with `POST /api/test-runs`.
 
-Coverage is deliberately limited to logic that can be exercised without driving the Editor — compiler-message parsing, path normalization, and log cursor arithmetic. Everything that depends on real compilation, domain reloads, or the HTTP server still has to be verified by hand.
+Coverage is not limited to Unity-independent logic. Much of the suite drives the real handlers against assets it creates and deletes within the test — a generated `.wav` through the AudioImporter endpoints, materials, controllers and clips through theirs — and asserts against what Unity actually stored rather than against the response alone. A test that needs a fixture builds it and removes it in a `finally`, so the suite leaves no assets behind.
+
+What has no automated coverage is the layer underneath: real compilation, domain reloads, Play mode, and the HTTP server itself. Those are verified by hand — see [Known Constraints](#known-constraints).
 
 ## Verifying a change across the version range
 
@@ -49,7 +51,7 @@ There is **no CI**. The declared floor is only real if someone compiles against 
 `package.json`'s `unity` field is metadata: Unity will happily build a package that calls APIs newer than the declared minimum. Reading the field proves nothing.
 
 1. **Compile at both ends.** Add the package as a local dependency to a project on 2022.3 and to one on the newest Unity 6 you have, and check the Console for `error CS` **and** `warning CS` — a deprecation warning at the top of the range is how the next breaking change announces itself.
-2. **Check what the floor drops.** On 2022.3 and 2023.1 the Test Runner assembly is skipped, because `com.unity.test-framework` defaults to a version below 1.4.0 there. `GET /api/help` must still answer, without the `/api/tests` and `/api/test-runs` routes and without an error. Add `"com.unity.test-framework": "1.4.6"` to the project and confirm they come back.
+2. **Install a Test Runner the API can drive**, if you want to run step 4 through UnionAir. The Test Runner assembly is compiled only with `com.unity.test-framework` 1.4.0 or later, which 2022.3 and 2023.1 do not default to, so add `"com.unity.test-framework": "1.4.6"` to those projects. Their default is not a case to verify: the absence is by design and is described in [Test Runner and Unity Test Framework](README.md#test-runner-and-unity-test-framework), and it cannot break the rest of the package, because the core assembly does not reference the Test Runner one — an assembly that is never compiled has nothing to fail.
 3. **Exercise the endpoint you changed** against a live Editor. Most of this package is only reachable that way — see [Known Constraints](#known-constraints).
 4. **Run the tests.** See [above](#tests).
 
