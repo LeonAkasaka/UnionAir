@@ -809,6 +809,23 @@ Executes a Unity Editor menu item using `EditorApplication.ExecuteMenuItem()`.
 }
 ```
 
+### `executed` reports the dispatch, not the effect
+
+`executed: true` is what `EditorApplication.ExecuteMenuItem()` answered: the item was found, was enabled, and was invoked. It is not a claim that the item did anything.
+
+A menu item whose command reads the focused `EditorWindow` has no window to read over REST, so it is dispatched and does nothing. Measured on 6000.0.80f1, each of these answered `200 {"executed": true}` and changed nothing — with a GameObject selected, with an asset selected, and with `POST /api/editor/selection` confirming the selection first:
+
+| Menu item | Result |
+|---|---|
+| `Edit/Duplicate` | no copy, of a scene object or of an asset |
+| `Edit/Delete` | the selected GameObject is still there |
+| `Edit/Select All` | the selection is unchanged |
+| `Assets/Create/Folder` | no folder is created |
+
+`Edit/Undo` is the contrast and does act: creating a GameObject through `POST /api/gameobjects/primitive` and then executing it removes the object. The dividing line is whether the command needs a focused window, not whether it is under `Edit/`.
+
+There is no second field to check, because UnionAir cannot know what an arbitrary menu item was supposed to do. Verify the effect with a read — `GET /api/assets`, `GET /api/scene/hierarchy`, `GET /api/editor/selection` — rather than treating `200` as proof. Where a typed endpoint exists for the operation, prefer it: it reports what it changed.
+
 ### Errors
 
 | Status | Cause |
