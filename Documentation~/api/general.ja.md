@@ -76,6 +76,7 @@
 | `endpoints[].playModePolicy` | string | `allowed`、`blocked`、または `explicitOptIn`。`blocked` のエンドポイントは Play モード中 `409` を返します。`explicitOptIn` のエンドポイントは Play モード中、Editor 設定と `allowWhilePlaying=true` の両方が必要です |
 | `endpoints[].testRunPolicy` | string | `allowed` または `blocked`。明示的に許可されない endpoint はテスト実行中 blocked |
 | `endpoints[].blockedDuring` | string[] | そのエンドポイントが拒否される Editor アクティビティの完全な一覧(優先順位順)。`playModePolicy` と `testRunPolicy` が強制するものも含みます。3 つのフィールドから再構成する代わりにこの配列を読んでください。[Editor アクティビティ](activities.ja.md) を参照 |
+| `endpoints[].pathParams` | string[] | `routeTemplate` に含まれる `{...}` プレースホルダの名前(波括弧を除く)。プレースホルダを持たないルートでは空配列 |
 | `endpoints[].requiredQuery` | string[] | 必須のクエリ文字列パラメータ |
 | `endpoints[].optionalQuery` | string[] | 任意のクエリ文字列パラメータ |
 | `endpoints[].requiredBody` | string[] | 必須の JSON ボディフィールド |
