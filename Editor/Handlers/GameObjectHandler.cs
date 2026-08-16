@@ -72,6 +72,8 @@ namespace LeonAkasaka.UnionAir.Editor
             if (enabled.HasValue)
                 sb.Append($"\"enabled\":{RestResponse.FormatBool(enabled.Value)},");
 
+            AppendBlendShapeNames(sb, component);
+
             sb.Append("\"properties\":{");
 
             try
@@ -99,6 +101,32 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             sb.Append("}}");
+        }
+
+        // Beside 'properties' rather than in it, for the reason 'enabled' is: a blend shape name is
+        // not a serialized property of the renderer at all. It belongs to the Mesh, so announcing it
+        // as a property would name a key PATCH /api/gameobjects/components has to refuse.
+        //
+        // Positional, in mesh order, so the same integer indexes this and m_BlendShapeWeights. The
+        // weights are not repeated here -- they are already reported as the property the write
+        // accepts -- and a name-keyed object is not an option, because two shapes on one mesh may
+        // share a name and one of them would disappear.
+        private static void AppendBlendShapeNames(StringBuilder sb, Component component)
+        {
+            var renderer = component as SkinnedMeshRenderer;
+            if (renderer == null) return;
+
+            sb.Append("\"blendShapeNames\":[");
+            var mesh = renderer.sharedMesh;
+            if (mesh != null)
+            {
+                for (int i = 0; i < mesh.blendShapeCount; i++)
+                {
+                    if (i > 0) sb.Append(",");
+                    sb.Append($"\"{RestResponse.EscapeJson(mesh.GetBlendShapeName(i))}\"");
+                }
+            }
+            sb.Append("],");
         }
 
         private static void AppendPropertyValue(StringBuilder sb, SerializedProperty prop)
