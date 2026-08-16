@@ -328,6 +328,81 @@ Creates a new material asset.
 
 ---
 
+## GET /api/assets/materials/{guid}
+
+Returns a material's shader, render queue, enabled keywords, and the current value of every property its shader declares.
+
+> Requires the Read category (enabled by default).
+
+### Path Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `guid` | GUID of the material asset |
+
+### Response
+
+```json
+{
+  "guid": "5ebb6c...",
+  "assetPath": "Assets/Materials/Hair.mat",
+  "shader": "Toon/Toon",
+  "renderQueue": 2000,
+  "keywords": ["_EMISSIVE_SIMPLE", "_IS_CLIPPING_OFF"],
+  "properties": [
+    { "name": "_BaseColor", "type": "Color", "value": { "r": 1, "g": 1, "b": 1, "a": 1 }, "flags": [] },
+    { "name": "_BumpScale", "type": "Range", "value": 1.0, "range": { "min": 0, "max": 1 }, "flags": [] },
+    {
+      "name": "_MainTex",
+      "type": "Texture",
+      "value": { "assetGuid": "cbb65e...", "assetPath": "Assets/Textures/hair.tga", "assetType": "UnityEngine.Texture2D" },
+      "flags": []
+    },
+    { "name": "_ToonMaterialVersion", "type": "Int", "value": 0, "flags": ["HideInInspector"] }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `shader` | The shader's name — the same string `POST /api/assets/materials` takes, so a material can be recreated |
+| `renderQueue` | `Material.renderQueue`. Reported, not writable |
+| `keywords` | Enabled shader keywords. Reported, not writable |
+| `properties[].name` | Shader property name, and a key `PATCH /api/assets/materials` accepts |
+| `properties[].type` | `Color`, `Float`, `Range`, `Int`, `Vector`, or `Texture` |
+| `properties[].value` | The current value, spelled the way the write reads it |
+| `properties[].range` | `{min, max}`, present only on a `Range` property |
+| `properties[].flags` | Unity's shader property flag names, such as `HideInInspector`, `Normal`, `Gamma`, `PerRendererData` |
+
+Properties are listed in the order the shader declares them, and every declared property appears, hidden ones included. A shader can declare a couple of hundred; `flags` is how a client tells the material's real surface from its plumbing.
+
+### The value is spelled the way the write reads it
+
+Every `value` can be sent back to [`PATCH /api/assets/materials`](#patch-apiassetsmaterials) without translation, so a read, a change to one value, and a write back is a round trip that holds.
+
+| Shader property type | Reported as |
+|---|---|
+| `Color` | `{"r":float,"g":float,"b":float,"a":float}` |
+| `Float`, `Range` | `float` |
+| `Int` | `int` |
+| `Vector` | `{"x":float,"y":float,"z":float,"w":float}` |
+| `Texture` | An [object reference](general.md#object-references), or `null` when nothing is assigned — which is also what the write takes to clear one |
+
+`properties` is an array here because `type`, `range` and `flags` have nowhere to live in a name-to-value map, and they are the part only Unity can answer: a `.mat` file carries the overrides Unity recorded, not the property set or its types. The write takes a map, and every `name` in this array is a key it accepts.
+
+`renderQueue` and `keywords` are the two fields that do not round trip. They are reported because they are usually why a material built from another one's property values still does not look the same; writing them is not part of this endpoint's counterpart.
+
+Texture scale and offset are not reported. They are not shader properties of their own, and the write has no vocabulary for them.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `guid` is empty, or the asset is not a material |
+| 404 | No asset exists for the GUID |
+
+---
+
 ## PATCH /api/assets/materials
 
 Updates material properties.
