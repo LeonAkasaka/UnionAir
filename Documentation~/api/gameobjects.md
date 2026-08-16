@@ -53,6 +53,10 @@ If `scenePath` is omitted, the active scene is used.
 
 `components[].enabled` is the checkbox in the component's Inspector header. It is omitted for a component that has none — a `Transform` or a `MeshFilter` shows no checkbox — so that a reader can tell "this cannot be disabled" from "this is disabled". It is not one of `properties`: Unity draws it outside the component body, and `properties` carries only what the body draws. Write it through the `enabled` field of `PATCH /api/gameobjects/components`.
 
+`components[].blendShapeNames` is the blend shapes of a `SkinnedMeshRenderer`'s mesh, named in mesh order. It is omitted for every other component type, present and empty for a renderer whose mesh has no blend shapes, and present and empty for one with no mesh at all — `m_Mesh` already distinguishes those two. Like `enabled` it sits beside `properties` rather than in it, because a shape name belongs to the `Mesh` and not to any serialized field of the renderer.
+
+The array is positional: index *i* names the shape that `properties.m_BlendShapeWeights[i]` drives, which is how a weight is written. Names are not unique — Unity permits two shapes on one mesh to carry the same name — so the index is the identity and the name is the description. The two arrays can also differ in length, and this is not an edge case: the names are read from the mesh the renderer points at now, the weights from what was serialized on the component, and Unity does not resize the serialized array the moment a mesh is assigned. Measured on 6000.0.80f1, assigning a three-shape mesh to a `SkinnedMeshRenderer` reports three names beside an empty `m_BlendShapeWeights`. Reimporting a mesh with fewer shapes leaves the array long for the same reason. Neither array is corrected to match the other; index defensively.
+
 `components[].properties` are properties obtained via `SerializedObject`.
 Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Color`, `Vector2/3/4`, `Rect`, `ObjectReference`. Arrays are serialized as JSON arrays whose elements follow the same type rules. Other types are `null`.
 
