@@ -40,7 +40,9 @@ EditMode tests for the Unity-independent helpers live in `Tests/Editor`. They ar
 
 Then run them from **Window > General > Test Runner** (EditMode), or through UnionAir itself with `POST /api/test-runs`.
 
-Coverage is deliberately limited to logic that can be exercised without driving the Editor — compiler-message parsing, path normalization, and log cursor arithmetic. Everything that depends on real compilation, domain reloads, or the HTTP server still has to be verified by hand.
+Coverage is not limited to Unity-independent logic. Much of the suite drives the real handlers against assets it creates and deletes within the test — a generated `.wav` through the AudioImporter endpoints, materials, controllers and clips through theirs — and asserts against what Unity actually stored rather than against the response alone. A test that needs a fixture builds it and removes it in a `finally`, so the suite leaves no assets behind.
+
+What has no automated coverage is the layer underneath: real compilation, domain reloads, Play mode, and the HTTP server itself. Those are verified by hand — see [Known Constraints](#known-constraints).
 
 ## Verifying a change across the version range
 
