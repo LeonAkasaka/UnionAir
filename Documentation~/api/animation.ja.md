@@ -177,7 +177,7 @@ Animation Inspector がカーブ一覧の上に表示するものすべてです
 | `importer` | インポータの型名、または `null` |
 | `writable` | この API が書き込むかどうか |
 
-`.fbx` の中のクリップは `ModelImporter` が生成し、その設定はインポータが所有します。そのクリップに `AnimationUtility.SetAnimationClipSettings` を呼んでも、次の再インポートで破棄されるメモリ上のオブジェクトを変更するだけです。したがって**すべての書き込みエンドポイントはインポート済みクリップを `409` で拒否します** — 従来は書き込みを受け付けて黙って失っていた `POST` / `DELETE .../curves` も含みます。インポート済みクリップを変更するにはインポータを変更する必要があり、それが [`GET|PATCH /api/assets/model-importer/{guid}`](assets.ja.md#get-apiassetsmodel-importerguid) です。クリップの定義は `settings.clips` の 1 エントリで、このエンドポイントが書き込みを拒否する設定 — loop、cycle offset、root motion の bake 設定、additive reference pose、events — はそのエントリのフィールドです。
+`.fbx` の中のクリップは `ModelImporter` が生成し、その設定はインポータが所有します。そのクリップに `AnimationUtility.SetAnimationClipSettings` を呼んでも、次の再インポートで破棄されるメモリ上のオブジェクトを変更するだけです。したがって**すべての書き込みエンドポイントはインポート済みクリップを `409` で拒否します** — 従来は書き込みを受け付けて黙って失っていた `POST` / `DELETE .../curves` も含みます。インポート済みクリップを変更するにはインポータを変更する必要があり、それが [`GET|PATCH /api/assets/model-importer/{guid}`](assets.ja.md#get-apiassetsmodel-importerguid) です。このエンドポイントが書き込みを拒否する設定 — loop、cycle offset、root motion の bake 設定、additive reference pose、events — は、あちらのクリップ定義 1 件のフィールドにあたります。ただし読み書きで綴りが異なります。読み取りは `settings.clips.definitions` の下に定義を返し、書き込みはトップレベルの `clips` 配列として受け取って、保存済みの定義一式を丸ごと置き換えます。
 
 所有者の判定は拡張子ではなく `AssetImporter.GetAtPath` が何をそのパスのインポータと答えるかで行います。`.anim` もインポートはされますが、そのインポータ(`NativeFormatImporter`)はクリップの設定を所有していません。
 
