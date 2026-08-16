@@ -134,6 +134,8 @@ Editorを指しています。
 
 オブジェクト参照は JSON オブジェクトで指定する必要があります。`"Canvas/Button"` のような裸の文字列は受け付けられず、`400 Bad Request` を返します。
 
+参照の各フィールド(`type`、`value`、`scenePath`、`assetGuid`、`assetPath`、`assetType`)は JSON 文字列であるか、省略と同じ意味になる `null` である必要があります。数値、真偽値、配列、オブジェクトを渡した場合、文字列に変換されることはなく、フィールド名を示す `400` を返します。`{"assetGuid": 5}` は GUID `"5"` ではなく、型が誤った値です。
+
 | Type | 値 |
 |------|-------|
 | `hierarchyPath` | `Canvas/Button` のような GameObject 階層パス。`type` 省略時の既定値 |

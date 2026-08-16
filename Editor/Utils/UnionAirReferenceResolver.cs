@@ -372,7 +372,9 @@ namespace LeonAkasaka.UnionAir.Editor
             error = null;
             statusCode = 400;
 
-            var requestedTypeName = RequestBodyReader.GetString(rawValue, "assetType");
+            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "assetType", label, out var requestedTypeName, out error, out statusCode))
+                return false;
             var requestedType = ObjectReferenceResolverUtils.ResolveOptionalReferenceType(
                 requestedTypeName,
                 label,
@@ -381,9 +383,15 @@ namespace LeonAkasaka.UnionAir.Editor
                 out statusCode);
             if (error != null) return false;
 
+            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "assetGuid", label, out var assetGuid, out error, out statusCode) ||
+                !ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "assetPath", label, out var assetPath, out error, out statusCode))
+                return false;
+
             return TryResolveAssetReference(
-                RequestBodyReader.GetString(rawValue, "assetGuid"),
-                RequestBodyReader.GetString(rawValue, "assetPath"),
+                assetGuid,
+                assetPath,
                 expectedType,
                 requestedType,
                 label,

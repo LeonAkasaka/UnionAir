@@ -863,6 +863,32 @@ namespace LeonAkasaka.UnionAir.Editor
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Parses one JSON string token whole, rejecting anything that is not a complete string.
+        /// </summary>
+        /// <remarks>
+        /// The complement of the key-based readers: they answer "what is at this key", this
+        /// answers "is this token a string", which is what a caller holding a raw value needs in
+        /// order to tell a wrong type from a malformed one without looking the key up twice.
+        /// </remarks>
+        internal static bool TryParseJsonString(string token, out string value)
+        {
+            value = null;
+            if (token == null) return false;
+
+            int position = 0;
+            SkipWhitespace(token, ref position);
+            if (!TryReadJsonString(token, ref position, out value)) return false;
+
+            SkipWhitespace(token, ref position);
+            if (position != token.Length)
+            {
+                value = null;
+                return false;
+            }
+            return true;
+        }
+
         private static bool TryReadJsonString(string json, ref int position, out string value)
         {
             value = null;
