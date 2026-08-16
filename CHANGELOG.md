@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-16
+
 ### Upgrade Notes
 
 - An object reference names one object inside a file with `localIdentifier`, and a write that cannot name the object it would resolve answers `400` instead of `200`. `assetGuid` and `assetPath` identify a file, and a file and a type together are not an identity: measured on 6000.0.80f1, a character model holds 23 meshes, every renderer on it read back the same `{assetGuid, assetPath, assetType}`, and `PATCH` against that reference answered `200` having bound whichever mesh `LoadAssetAtPath` returned -- `BLW_DEF`, chosen by nothing the client said. A read-modify-write on such a model could silently swap a mesh, and the read afterwards could not show it. Reads now report `localIdentifier`, the object's local file id as a decimal string, on **every** asset reference including single-object ones, so a response's shape never depends on what it points at; the spelling is the one `GET /api/assets/model-importer/{guid}` already used for the same concept. Writes take it as optional and resolve three ways: with it, that object; without it against a path holding one object of the required type, that object, which is most references and is unchanged; without it against a path holding more, `400` naming the candidate count. That third case is the breaking one, and no client can have depended on it deliberately -- it was never choosing. The same change closes the loud half of the same gap: a built-in resource -- the mesh on a primitive, in `Library/unity default resources` -- carries a GUID and a file id like anything else, so reading one and sending it straight back now resolves where it answered `404 Asset not found or incompatible`, and no separate spelling for built-ins was needed. `GET /api/assets/{guid}` gains `subAssets` so the identifier is discoverable; built-in containers are the exception and are not listed, so the way to obtain one of those is to read an existing reference to it. A client that sent a bare `{assetPath}` for a mesh inside a model must now send `localIdentifier` alongside it.
@@ -455,7 +457,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 <!-- 0.1.0 and 0.2.0 predate this repository being published and were never tagged,
      so they have no release page to link to. -->
-[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/LeonAkasaka/UnionAir/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.6.0
 [0.5.1]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.5.1
 [0.5.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.5.0
 [0.4.0]: https://github.com/LeonAkasaka/UnionAir/releases/tag/v0.4.0

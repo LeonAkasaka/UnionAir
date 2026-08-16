@@ -18,7 +18,7 @@
 {
   "name": "com.leonakasaka.unionair",
   "displayName": "UnionAir - Unity REST Bridge",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "baseUrl": "http://localhost:51234/api",
   "description": "UnionAir exposes Unity Editor state and selected Editor operations as a local REST API.",
   "categories": [
