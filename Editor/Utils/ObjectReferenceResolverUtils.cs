@@ -137,6 +137,17 @@ namespace LeonAkasaka.UnionAir.Editor
             value = AssetDatabase.LoadAssetAtPath(assetPath, loadType);
             candidates = value == null ? 0 : 1;
 
+            // A caller that asked for no particular type is asking for the asset at this path, and
+            // that has always meant the main asset -- which Unity answers deterministically. Every
+            // object in a file is assignable to UnityEngine.Object, so counting candidates against
+            // an unconstrained type would refuse every reference to a model file rather than only
+            // the ambiguous ones. Asked as "is this a proper subtype" rather than by comparing to
+            // one type, because an unconstrained request reaches here spelled more than one way.
+            var constrained = loadType != null
+                              && loadType != typeof(UnityEngine.Object)
+                              && typeof(UnityEngine.Object).IsAssignableFrom(loadType);
+            if (!constrained) return true;
+
             var representations = AssetDatabase.LoadAllAssetRepresentationsAtPath(assetPath);
             if (representations == null || representations.Length == 0) return true;
 

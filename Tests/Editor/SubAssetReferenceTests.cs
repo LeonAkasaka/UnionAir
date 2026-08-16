@@ -153,6 +153,25 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual(200, response.StatusCode, response.Body);
         }
 
+        [Test]
+        public void AnUnconstrainedReferenceStillResolvesToTheMainAsset()
+        {
+            // A caller that names no type is asking for the asset at this path, which has always
+            // meant the main asset. Every object in a file is assignable to UnityEngine.Object, so
+            // counting candidates against an unconstrained type refuses every reference to a model
+            // file -- measured, it broke POST /api/previews/render against an .fbx.
+            var resolved = UnionAirReferenceResolver.TryResolveAssetReference(
+                "{\"assetGuid\":\"" + _multiGuid + "\"}",
+                typeof(UnityEngine.Object),
+                "target",
+                out var value,
+                out var error,
+                out _);
+
+            Assert.IsTrue(resolved, error);
+            Assert.AreEqual(AssetDatabase.LoadMainAssetAtPath(MultiPath), value);
+        }
+
         // ── Helpers ──────────────────────────────────────────────────────────
 
         private static string LocalId(UnityEngine.Object obj)

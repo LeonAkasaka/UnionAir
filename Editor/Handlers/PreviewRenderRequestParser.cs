@@ -38,7 +38,7 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             if (!RequestBodyReader.TryValidateObjectFields(
                     result.Target,
-                    new[] { "type", "value", "scenePath", "assetGuid", "assetPath" },
+                    new[] { "type", "value", "scenePath", "assetGuid", "assetPath", "assetType", "localIdentifier" },
                     out error))
                 return false;
 
@@ -275,7 +275,7 @@ namespace LeonAkasaka.UnionAir.Editor
             if (animation.Clip != null &&
                 !RequestBodyReader.TryValidateObjectFields(
                     animation.Clip,
-                    new[] { "assetGuid", "assetPath" },
+                    new[] { "assetGuid", "assetPath", "assetType", "localIdentifier" },
                     out error))
                 return false;
 
