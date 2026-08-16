@@ -114,7 +114,8 @@ An asset:
 "m_Mesh": {
   "assetGuid": "a1b2...",
   "assetPath": "Assets/Meshes/Rock.fbx",
-  "assetType": "UnityEngine.Mesh"
+  "assetType": "UnityEngine.Mesh",
+  "localIdentifier": "4300028"
 }
 ```
 
@@ -134,7 +135,9 @@ Two things follow from using Unity's own identities rather than a description:
 - **There is no display name.** No field of the write carries one, so reporting it would mean the write either refusing the value again or accepting a key it ignores. `assetPath` names an asset; a scene object is named by resolving it.
 - **A scene object in a scene that has never been saved cannot be addressed.** Unity has no `GlobalObjectId` for it and answers the null id `GlobalObjectId_V1-0-0000...-0-0`, which resolves to nothing. This is a property of the identity, not of this endpoint: save the scene and the reference addresses normally.
 
-A reference to a **built-in Unity resource** — the mesh on a primitive, `Library/unity default resources` — reports its GUID and path like any asset, and sending it back answers `404`. Those objects are addressed by GUID *and* file ID, and the write vocabulary has no file ID. Reading them works; writing them is out of reach.
+`localIdentifier` names one object inside the file, which a GUID and a type cannot: a model file holds many meshes. It is reported for every asset reference and is optional on the write — see [naming one object inside a file](general.md#naming-one-object-inside-a-file) for the three ways a write resolves, including the `400` a multi-object path answers without it.
+
+A reference to a **built-in Unity resource** — the mesh on a primitive, `Library/unity default resources` — reports its GUID, path and `localIdentifier` like any asset, and sending it back resolves. Those objects are addressed by GUID *and* file id, which is what `localIdentifier` carries. They are not listed by `GET /api/assets/{guid}`, so the way to obtain one is to read an existing reference to it.
 
 ### Errors
 

@@ -16,7 +16,7 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         private static readonly string[] ObjectReferenceFields =
         {
-            "type", "value", "scenePath", "assetGuid", "assetPath", "assetType"
+            "type", "value", "scenePath", "assetGuid", "assetPath", "assetType", "localIdentifier"
         };
 
         public void Handle(UnionAirRequest request, UnionAirResponse response)
@@ -432,13 +432,15 @@ namespace LeonAkasaka.UnionAir.Editor
             var expectedType = ObjectReferenceResolverUtils.GetManagedObjectType(prop);
             if (!ObjectReferenceResolverUtils.TryReadAssetReferenceFields(
                     rawValue, $"property {jsonKey}",
-                    out var assetGuid, out var assetPath, out var requestedType, out error, out statusCode))
+                    out var assetGuid, out var assetPath, out var requestedType, out var localIdentifier,
+                    out error, out statusCode))
                 return false;
 
             if (!string.IsNullOrEmpty(assetGuid) || !string.IsNullOrEmpty(assetPath))
                 return ObjectReferenceResolverUtils.TryResolveAssetReference(
                     assetGuid,
                     assetPath,
+                    localIdentifier,
                     expectedType,
                     requestedType,
                     $"property {jsonKey}",

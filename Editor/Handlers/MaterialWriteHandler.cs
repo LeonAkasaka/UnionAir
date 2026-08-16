@@ -15,7 +15,7 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         private static readonly string[] TextureReferenceFields =
         {
-            "assetGuid", "assetPath", "assetType"
+            "assetGuid", "assetPath", "assetType", "localIdentifier"
         };
 
         private static readonly string[] ColorComponentFields = { "r", "g", "b", "a" };
@@ -346,12 +346,14 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (!ObjectReferenceResolverUtils.TryReadAssetReferenceFields(
                     rawValue, $"property '{key}'",
-                    out var assetGuid, out var assetPath, out var requestedType, out error, out statusCode))
+                    out var assetGuid, out var assetPath, out var requestedType, out var localIdentifier,
+                    out error, out statusCode))
                 return false;
 
             if (!ObjectReferenceResolverUtils.TryResolveAssetReference(
                     assetGuid,
                     assetPath,
+                    localIdentifier,
                     typeof(Texture),
                     requestedType,
                     $"property '{key}'",
