@@ -348,32 +348,45 @@ Updates material properties.
   "properties": {
     "_BaseColor": { "r": 1, "g": 0, "b": 0, "a": 1 },
     "_Metallic": 0.5,
-    "_BumpMap": "b1c2d3..."
+    "_BumpMap": { "assetGuid": "b1c2d3..." }
   }
 }
 ```
 
+Each key in `properties` is a shader property name. Names are the ones the shader declares and are case-sensitive.
+
 Types of values in `properties`:
 
-| Type | Format |
+| Shader property type | Format |
 |----|------|
 | Color | `{"r":float,"g":float,"b":float,"a":float}` |
-| Float | `float` |
+| Float, Range | `float` |
+| Int | `int` |
 | Vector | `{"x":float,"y":float,"z":float,"w":float}` |
-| Texture | GUID string |
+| Texture | An [object reference](general.md#object-references) naming an asset — `assetGuid`, `assetPath`, optional `assetType` — or `null` to clear it |
+
+`Color` and `Vector` values may omit components; an omitted component keeps the material's current value. An object carrying an unknown, duplicate or non-numeric component, or no component at all, answers `400`.
+
+### Every key is written, or none is
+
+A key that names no property on the material's shader, one whose value is the wrong shape for that property's type, and a duplicate key each answer `400` naming the key and the reason. The material is not touched: the request is resolved completely before the first value is applied, so a refusal leaves it exactly as it was.
+
+`updated` therefore always lists every key the request sent, and a `200` means the whole request was applied. It is not a filter to compare against the request.
+
+A texture is named the way `GET /api/gameobjects` reports one, so a texture read from a renderer's material can be sent back without translation. A bare GUID string is not an object reference and answers `400`.
 
 ### Response
 
 ```json
-{ "guid": "d4e5f6...", "updated": ["_BaseColor", "_Metallic"] }
+{ "updated": ["_BaseColor", "_Metallic"] }
 ```
 
 ### Errors
 
 | Status | Cause |
 |-----------|------|
-| 400 | `guid` is missing |
-| 404 | No matching material exists |
+| 400 | `guid` is missing, `properties` is missing or not a JSON object, or a key names no shader property, repeats another key, or carries a value of the wrong shape |
+| 404 | No matching material exists, or a texture value names an asset that does not exist |
 | 403 | Asset Write category is disabled |
 
 ---

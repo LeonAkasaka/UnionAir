@@ -13,6 +13,14 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </summary>
     internal class MaterialWriteHandler
     {
+        private static readonly string[] TextureReferenceFields =
+        {
+            "assetGuid", "assetPath", "assetType"
+        };
+
+        private static readonly string[] ColorComponentFields = { "r", "g", "b", "a" };
+        private static readonly string[] VectorComponentFields = { "x", "y", "z", "w" };
+
         public void Handle(UnionAirRequest request, UnionAirResponse response)
         {
             if (request.HttpMethod == "POST")
@@ -89,20 +97,43 @@ namespace LeonAkasaka.UnionAir.Editor
             var propsJson = RequestBodyReader.GetObject(body, "properties");
             if (string.IsNullOrEmpty(propsJson))
             {
-                RestResponse.SendError(response, "Missing required field: properties", 400);
+                RestResponse.SendError(
+                    response,
+                    RequestBodyReader.HasTopLevelField(body, "properties")
+                        ? "Field 'properties' must be a JSON object."
+                        : "Missing required field: properties",
+                    400);
                 return;
             }
 
-            var updated = ApplyMaterialProperties(mat, propsJson);
+            // Every key the request sent has to be accounted for, so the names are read before
+            // anything is written: a key that names no shader property is the client's typo, and
+            // answering 200 with it missing from "updated" is not an answer a client can act on.
+            if (!RequestBodyReader.TryGetTopLevelFieldNames(
+                    propsJson, out var requestedKeys, out var keyError))
+            {
+                RestResponse.SendError(response, $"Invalid 'properties': {keyError}", 400);
+                return;
+            }
+
+            if (!TryPlanMaterialWrites(mat, propsJson, requestedKeys, out var writes, out var error, out var statusCode))
+            {
+                RestResponse.SendError(response, error, statusCode);
+                return;
+            }
+
+            foreach (var write in writes) write(mat);
             EditorUtility.SetDirty(mat);
             AssetDatabase.SaveAssets();
 
+            // The plan refused the request outright if any key could not be written, so "updated"
+            // is the keys the request sent — a client can compare the two and find them equal.
             var sb = new StringBuilder();
             sb.Append("{\"updated\":[");
-            for (int i = 0; i < updated.Count; i++)
+            for (int i = 0; i < requestedKeys.Count; i++)
             {
                 if (i > 0) sb.Append(",");
-                sb.Append($"\"{RestResponse.EscapeJson(updated[i])}\"");
+                sb.Append($"\"{RestResponse.EscapeJson(requestedKeys[i])}\"");
             }
             sb.Append("]}");
             RestResponse.Send(response, sb.ToString());
@@ -110,76 +141,233 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // ── Helpers ──────────────────────────────────────────────────────────
 
-        private static List<string> ApplyMaterialProperties(Material mat, string propsJson)
+        /// <summary>
+        /// Resolves one write per requested key, or refuses the whole request.
+        /// </summary>
+        /// <remarks>
+        /// The request drives this walk, not the shader. Walking the shader's properties instead
+        /// can only report what it recognised, never what the client sent and this endpoint did
+        /// not understand, which is the half a client needs. Nothing is applied until every key
+        /// has resolved, so a refused request leaves the material as it was.
+        /// </remarks>
+        private static bool TryPlanMaterialWrites(
+            Material mat,
+            string propsJson,
+            List<string> requestedKeys,
+            out List<Action<Material>> writes,
+            out string error,
+            out int statusCode)
         {
-            var updated = new List<string>();
+            writes = new List<Action<Material>>();
+            error = null;
+            statusCode = 400;
 
-            // Iterate over shader properties to find matching names
-            int propCount = mat.shader.GetPropertyCount();
-            for (int i = 0; i < propCount; i++)
+            var shader = mat.shader;
+            if (shader == null)
             {
-                var propName = mat.shader.GetPropertyName(i);
-                if (propsJson.IndexOf($"\"{propName}\"", StringComparison.Ordinal) < 0) continue;
+                error = $"Material has no shader: {mat.name}";
+                return false;
+            }
 
-                var propType = mat.shader.GetPropertyType(i);
+            var declared = new Dictionary<string, UnityEngine.Rendering.ShaderPropertyType>(
+                StringComparer.Ordinal);
+            var propCount = shader.GetPropertyCount();
+            for (int i = 0; i < propCount; i++)
+                declared[shader.GetPropertyName(i)] = shader.GetPropertyType(i);
 
-                switch (propType)
+            foreach (var key in requestedKeys)
+            {
+                if (!declared.TryGetValue(key, out var propertyType))
+                {
+                    error = $"No property named '{key}' on shader '{shader.name}'. " +
+                            "Property names are the ones the shader declares, and are case-sensitive.";
+                    return false;
+                }
+
+                switch (propertyType)
                 {
                     case UnityEngine.Rendering.ShaderPropertyType.Color:
                     {
-                        var obj = RequestBodyReader.GetObject(propsJson, propName);
-                        if (obj != null)
+                        var obj = RequestBodyReader.GetObject(propsJson, key);
+                        if (obj == null)
                         {
-                            var r = RequestBodyReader.GetFloat(obj, "r") ?? mat.GetColor(propName).r;
-                            var g = RequestBodyReader.GetFloat(obj, "g") ?? mat.GetColor(propName).g;
-                            var b = RequestBodyReader.GetFloat(obj, "b") ?? mat.GetColor(propName).b;
-                            var a = RequestBodyReader.GetFloat(obj, "a") ?? mat.GetColor(propName).a;
-                            mat.SetColor(propName, new Color(r, g, b, a));
-                            updated.Add(propName);
+                            error = $"Property '{key}' is a Color and expects a JSON object with r, g, b and a.";
+                            return false;
                         }
+                        var current = mat.GetColor(key);
+                        if (!TryReadComponents(
+                                obj, key, "Color", ColorComponentFields,
+                                new[] { current.r, current.g, current.b, current.a },
+                                out var parts, out error))
+                            return false;
+                        var color = new Color(parts[0], parts[1], parts[2], parts[3]);
+                        writes.Add(m => m.SetColor(key, color));
                         break;
                     }
                     case UnityEngine.Rendering.ShaderPropertyType.Float:
                     case UnityEngine.Rendering.ShaderPropertyType.Range:
                     {
-                        var v = RequestBodyReader.GetFloat(propsJson, propName);
-                        if (v.HasValue) { mat.SetFloat(propName, v.Value); updated.Add(propName); }
+                        if (!RequestBodyReader.TryGetFloatValue(propsJson, key, out var value, out _))
+                        {
+                            error = $"Property '{key}' is a {propertyType} and expects a JSON number.";
+                            return false;
+                        }
+                        writes.Add(m => m.SetFloat(key, value));
+                        break;
+                    }
+                    case UnityEngine.Rendering.ShaderPropertyType.Int:
+                    {
+                        if (!RequestBodyReader.TryGetIntValue(propsJson, key, out var value, out _))
+                        {
+                            error = $"Property '{key}' is an Integer and expects a JSON integer.";
+                            return false;
+                        }
+                        writes.Add(m => m.SetInteger(key, value));
                         break;
                     }
                     case UnityEngine.Rendering.ShaderPropertyType.Vector:
                     {
-                        var obj = RequestBodyReader.GetObject(propsJson, propName);
-                        if (obj != null)
+                        var obj = RequestBodyReader.GetObject(propsJson, key);
+                        if (obj == null)
                         {
-                            var cur = mat.GetVector(propName);
-                            var x = RequestBodyReader.GetFloat(obj, "x") ?? cur.x;
-                            var y = RequestBodyReader.GetFloat(obj, "y") ?? cur.y;
-                            var z = RequestBodyReader.GetFloat(obj, "z") ?? cur.z;
-                            var w = RequestBodyReader.GetFloat(obj, "w") ?? cur.w;
-                            mat.SetVector(propName, new Vector4(x, y, z, w));
-                            updated.Add(propName);
+                            error = $"Property '{key}' is a Vector and expects a JSON object with x, y, z and w.";
+                            return false;
                         }
+                        var current = mat.GetVector(key);
+                        if (!TryReadComponents(
+                                obj, key, "Vector", VectorComponentFields,
+                                new[] { current.x, current.y, current.z, current.w },
+                                out var parts, out error))
+                            return false;
+                        var vector = new Vector4(parts[0], parts[1], parts[2], parts[3]);
+                        writes.Add(m => m.SetVector(key, vector));
                         break;
                     }
                     case UnityEngine.Rendering.ShaderPropertyType.Texture:
                     {
-                        var texObj = RequestBodyReader.GetObject(propsJson, propName);
-                        if (texObj != null)
-                        {
-                            var texGuid = RequestBodyReader.GetString(texObj, "guid");
-                            if (!string.IsNullOrEmpty(texGuid))
-                            {
-                                var texPath = AssetDatabase.GUIDToAssetPath(texGuid);
-                                var tex = AssetDatabase.LoadAssetAtPath<Texture>(texPath);
-                                if (tex != null) { mat.SetTexture(propName, tex); updated.Add(propName); }
-                            }
-                        }
+                        if (!TryResolveTexture(propsJson, key, out var texture, out error, out statusCode))
+                            return false;
+                        writes.Add(m => m.SetTexture(key, texture));
                         break;
+                    }
+                    default:
+                    {
+                        error = $"Property '{key}' has shader property type {propertyType}, " +
+                                "which this endpoint cannot write.";
+                        return false;
                     }
                 }
             }
 
-            return updated;
+            return true;
+        }
+
+        // An omitted component keeps the material's current value, which is what makes a partial
+        // colour useful. An unknown, duplicate or non-numeric one is refused instead, so a value
+        // the request carried cannot go missing between the key check and the write.
+        private static bool TryReadComponents(
+            string obj,
+            string key,
+            string typeName,
+            string[] fields,
+            float[] current,
+            out float[] values,
+            out string error)
+        {
+            values = null;
+
+            if (!RequestBodyReader.TryValidateObjectFields(obj, fields, out var objectError))
+            {
+                error = $"Invalid {typeName} property '{key}': {objectError}";
+                return false;
+            }
+
+            var read = new float[fields.Length];
+            var anyPresent = false;
+            for (int i = 0; i < fields.Length; i++)
+            {
+                if (!RequestBodyReader.TryGetFloatValue(obj, fields[i], out var value, out var present))
+                {
+                    error = $"Property '{key}' expects a JSON number for '{fields[i]}'.";
+                    return false;
+                }
+                read[i] = present ? value : current[i];
+                anyPresent |= present;
+            }
+
+            if (!anyPresent)
+            {
+                error = $"Property '{key}' is a {typeName} and expects at least one of " +
+                        $"{string.Join(", ", fields)}.";
+                return false;
+            }
+
+            values = read;
+            error = null;
+            return true;
+        }
+
+        // The object reference every other write accepts, so a texture reported by
+        // GET /api/gameobjects can be sent back without translation.
+        private static bool TryResolveTexture(
+            string propsJson, string key, out Texture texture, out string error, out int statusCode)
+        {
+            texture = null;
+            error = null;
+            statusCode = 400;
+
+            var rawValue = RequestBodyReader.GetRawValue(propsJson, key);
+            if (rawValue == null)
+            {
+                // The key was read from the top level, so no value here means the value is present
+                // and unreadable -- an unescaped backslash in a Windows path is the likely one --
+                // rather than the field being absent.
+                error = $"Property '{key}' is not a well-formed JSON value.";
+                return false;
+            }
+
+            rawValue = rawValue.Trim();
+            if (rawValue == "null") return true;
+
+            if (rawValue.Length == 0 || rawValue[0] != '{')
+            {
+                error = $"Property '{key}' is a Texture and expects null, or a JSON object naming an " +
+                        "asset with assetGuid or assetPath. A bare GUID string is not an object reference.";
+                return false;
+            }
+
+            if (!RequestBodyReader.TryValidateObjectFields(
+                    rawValue, TextureReferenceFields, out var objectError))
+            {
+                error = $"Invalid object reference property '{key}': {objectError}";
+                return false;
+            }
+
+            var requestedType = ObjectReferenceResolverUtils.ResolveOptionalReferenceType(
+                RequestBodyReader.GetString(rawValue, "assetType"),
+                $"property '{key}'",
+                "Unknown object reference type for {0}: {1}",
+                out error,
+                out statusCode);
+            if (error != null) return false;
+
+            if (!ObjectReferenceResolverUtils.TryResolveAssetReference(
+                    RequestBodyReader.GetString(rawValue, "assetGuid"),
+                    RequestBodyReader.GetString(rawValue, "assetPath"),
+                    typeof(Texture),
+                    requestedType,
+                    $"property '{key}'",
+                    "Object reference {0} requires assetGuid or assetPath.",
+                    "Asset not found for {0} with GUID: {1}",
+                    "Asset not found or incompatible for {0}: {1}",
+                    "Resolved object for {0} is not assignable to field type {1}.",
+                    out var value,
+                    out error,
+                    out statusCode))
+                return false;
+
+            texture = value as Texture;
+            return true;
         }
 
     }
