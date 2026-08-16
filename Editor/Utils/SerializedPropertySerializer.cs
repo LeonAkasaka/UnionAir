@@ -63,6 +63,19 @@ namespace LeonAkasaka.UnionAir.Editor
         /// ObjectReferences to scene objects (non-asset) are emitted as <c>null</c>.
         /// </summary>
         public static void SerializePropertyToJson(SerializedProperty prop, StringBuilder sb)
+            => SerializePropertyToJson(prop, sb, false);
+
+        /// <summary>
+        /// Appends the JSON representation of <paramref name="prop"/> to <paramref name="sb"/>.
+        /// </summary>
+        /// <param name="sceneObjectsResolvable">
+        /// Whether the endpoint reading this can resolve a scene object reference. A component
+        /// read can and reports one; an asset read cannot -- an asset cannot hold a scene
+        /// reference and the ScriptableObject write accepts only the asset fields -- so it emits
+        /// <c>null</c> rather than a spelling that endpoint would refuse.
+        /// </param>
+        public static void SerializePropertyToJson(
+            SerializedProperty prop, StringBuilder sb, bool sceneObjectsResolvable)
         {
             // Serialize arrays (Unity internally represents strings as char arrays, so exclude those)
             if (prop.isArray && prop.propertyType != SerializedPropertyType.String)
@@ -71,7 +84,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 for (int i = 0; i < prop.arraySize; i++)
                 {
                     if (i > 0) sb.Append(',');
-                    SerializePropertyToJson(prop.GetArrayElementAtIndex(i), sb);
+                    SerializePropertyToJson(prop.GetArrayElementAtIndex(i), sb, sceneObjectsResolvable);
                 }
                 sb.Append(']');
                 return;
@@ -143,11 +156,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     break;
                 }
                 case SerializedPropertyType.ObjectReference:
-                    // This endpoint's write has no scene vocabulary -- an asset cannot hold a
-                    // scene reference, and PATCH .../scriptableobjects accepts only the asset
-                    // fields -- so a scene object stays null here rather than being reported
-                    // in a spelling this endpoint would refuse.
-                    AppendObjectReferenceJson(sb, prop.objectReferenceValue, false);
+                    AppendObjectReferenceJson(sb, prop.objectReferenceValue, sceneObjectsResolvable);
                     break;
                 default:
                     // Generic (arrays, nested structs) and unsupported types → null

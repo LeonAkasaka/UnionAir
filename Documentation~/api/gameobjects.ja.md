@@ -105,7 +105,9 @@
 この配列は位置で対応します。インデックス *i* は `properties.m_BlendShapeWeights[i]` が動かすシェイプの名前であり、ウェイトの書き込みもこのインデックスで行います。名前は一意ではありません(Unity は同一メッシュ上の2つのシェイプに同じ名前を許します)。したがってインデックスが同一性であり、名前は説明です。また2つの配列は長さが異なることがあり、これは稀なケースではありません。名前はレンダラーが現在参照しているメッシュから読み取られ、ウェイトはコンポーネントにシリアライズされた内容から読み取られます。Unity はメッシュを割り当てた時点ではシリアライズされた配列をリサイズしません。6000.0.80f1 で計測したところ、シェイプを3つ持つメッシュを `SkinnedMeshRenderer` に割り当てた直後は、3つの名前と空の `m_BlendShapeWeights` が同時に報告されました。シェイプ数を減らしてメッシュを再インポートした場合も同じ理由で配列は長いままになります。どちらの配列も他方に合わせて補正されません。インデックスは防御的に扱ってください。
 
 `components[].properties` は `SerializedObject` 経由で取得したプロパティです。
-サポートされる `SerializedPropertyType`: `bool`、`int`、`float`、`string`、`Color`、`Vector2/3/4`、`Rect`、`ObjectReference`。配列は同じ型ルールに従う要素を持つ JSON 配列としてシリアライズされます。その他の型は `null` になります。
+サポートされる `SerializedPropertyType`: `bool`、`int`、`float`、`string`、`Color`、`Vector2/3/4`、`Quaternion`、`Rect`、`Bounds`、`ObjectReference`。配列は同じ型ルールに従う要素を持つ JSON 配列としてシリアライズされます。その他の型は `null` になります。`Generic` もそのひとつで、入れ子のシリアライズ可能な構造体がこれにあたります。したがって `Bounds` に見えるプロパティでも、Unity が子を持つ構造体として保持している場合は `null` のままです。
+
+`Quaternion` は `{"x","y","z","w"}`、`Bounds` は `{"center","extents"}` で、いずれも `GET /api/assets/scriptableobjects/{guid}` と同じ形です。両方の読み取りは1つのシリアライザを通るため、片方が報告して片方が落とす、という食い違いは起きません。どちらの型も書き込みはできません。`PATCH /api/gameobjects/components` はプロパティ名とシリアライズ型を示す `400` を返します。報告されることは、送り返せることを意味しません。
 
 ### オブジェクト参照は書き込みが読む綴りで返ります
 

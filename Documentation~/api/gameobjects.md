@@ -102,7 +102,9 @@ The field is omitted for a component that is not a `Renderer`. There is no aggre
 The array is positional: index *i* names the shape that `properties.m_BlendShapeWeights[i]` drives, which is how a weight is written. Names are not unique — Unity permits two shapes on one mesh to carry the same name — so the index is the identity and the name is the description. The two arrays can also differ in length, and this is not an edge case: the names are read from the mesh the renderer points at now, the weights from what was serialized on the component, and Unity does not resize the serialized array the moment a mesh is assigned. Measured on 6000.0.80f1, assigning a three-shape mesh to a `SkinnedMeshRenderer` reports three names beside an empty `m_BlendShapeWeights`. Reimporting a mesh with fewer shapes leaves the array long for the same reason. Neither array is corrected to match the other; index defensively.
 
 `components[].properties` are properties obtained via `SerializedObject`.
-Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Color`, `Vector2/3/4`, `Rect`, `ObjectReference`. Arrays are serialized as JSON arrays whose elements follow the same type rules. Other types are `null`.
+Supported `SerializedPropertyType` values: `bool`, `int`, `float`, `string`, `Color`, `Vector2/3/4`, `Quaternion`, `Rect`, `Bounds`, `ObjectReference`. Arrays are serialized as JSON arrays whose elements follow the same type rules. Other types are `null` — `Generic` among them, which is what a nested serializable struct is, so a property that looks like a `Bounds` may still read as `null` if Unity stores it as a struct with its own children.
+
+A `Quaternion` is `{"x","y","z","w"}` and a `Bounds` is `{"center","extents"}`, the same shapes `GET /api/assets/scriptableobjects/{guid}` uses; both reads go through one serializer, so a value cannot be reported by one and dropped by the other. Neither type is writable: `PATCH /api/gameobjects/components` answers `400` naming the property and its serialized type. Reporting a value is not a claim that it can be sent back.
 
 ### An object reference is spelled the way the write reads it
 
