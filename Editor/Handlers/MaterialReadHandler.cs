@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -21,6 +22,23 @@ namespace LeonAkasaka.UnionAir.Editor
     /// </remarks>
     internal class MaterialReadHandler
     {
+        // Built once rather than per property. Enum.GetValues allocates an array and iterating it
+        // boxes every element, and this runs for each of the couple of hundred properties a shader
+        // like a toon shader declares.
+        private static readonly KeyValuePair<ShaderPropertyFlags, string>[] FlagNames = BuildFlagNames();
+
+        private static KeyValuePair<ShaderPropertyFlags, string>[] BuildFlagNames()
+        {
+            var values = System.Enum.GetValues(typeof(ShaderPropertyFlags));
+            var names = new List<KeyValuePair<ShaderPropertyFlags, string>>(values.Length);
+            foreach (ShaderPropertyFlags flag in values)
+            {
+                if (flag == ShaderPropertyFlags.None) continue;
+                names.Add(new KeyValuePair<ShaderPropertyFlags, string>(flag, flag.ToString()));
+            }
+            return names.ToArray();
+        }
+
         public void Handle(UnionAirResponse response, string guid)
         {
             if (string.IsNullOrEmpty(guid))
@@ -111,12 +129,12 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append(",\"flags\":[");
             var flags = shader.GetPropertyFlags(index);
             var first = true;
-            foreach (ShaderPropertyFlags flag in System.Enum.GetValues(typeof(ShaderPropertyFlags)))
+            foreach (var known in FlagNames)
             {
-                if (flag == ShaderPropertyFlags.None || (flags & flag) != flag) continue;
+                if ((flags & known.Key) != known.Key) continue;
                 if (!first) sb.Append(",");
                 first = false;
-                sb.Append($"\"{flag}\"");
+                sb.Append($"\"{known.Value}\"");
             }
             sb.Append("]}");
         }
