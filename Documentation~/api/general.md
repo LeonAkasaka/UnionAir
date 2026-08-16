@@ -73,6 +73,7 @@ Each endpoint item includes the HTTP method, path, category, short summary, risk
 | `endpoints[].playModePolicy` | string | `allowed`, `blocked`, or `explicitOptIn`. `blocked` endpoints return `409` in Play mode. `explicitOptIn` endpoints require both the Editor setting and `allowWhilePlaying=true` in Play mode. |
 | `endpoints[].testRunPolicy` | string | `allowed` or `blocked`. Endpoints are blocked during a test run unless explicitly allowed. |
 | `endpoints[].blockedDuring` | string[] | Every Editor activity during which the endpoint is rejected, in priority order, including the ones enforced by `playModePolicy` and `testRunPolicy`. Read this instead of reconstructing the answer from three fields; see [Editor Activities](activities.md) |
+| `endpoints[].pathParams` | string[] | Names of the `{...}` placeholders in `routeTemplate`, without the braces. Empty for a route that carries none |
 | `endpoints[].requiredQuery` | string[] | Required query string parameters |
 | `endpoints[].optionalQuery` | string[] | Optional query string parameters |
 | `endpoints[].requiredBody` | string[] | Required JSON body fields |
