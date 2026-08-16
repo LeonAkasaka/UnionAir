@@ -892,24 +892,9 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             var expectedType = ObjectReferenceResolverUtils.GetManagedObjectType(prop);
-            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
-                    rawValue, "assetType", $"property {jsonKey}",
-                    out var requestedTypeName, out error, out statusCode))
-                return false;
-            var requestedType = ObjectReferenceResolverUtils.ResolveOptionalReferenceType(
-                requestedTypeName,
-                $"property {jsonKey}",
-                "Unknown object reference type for {0}: {1}",
-                out error,
-                out statusCode);
-            if (error != null) return false;
-
-            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
-                    rawValue, "assetGuid", $"property {jsonKey}",
-                    out var assetGuid, out error, out statusCode) ||
-                !ObjectReferenceResolverUtils.TryReadReferenceField(
-                    rawValue, "assetPath", $"property {jsonKey}",
-                    out var assetPath, out error, out statusCode))
+            if (!ObjectReferenceResolverUtils.TryReadAssetReferenceFields(
+                    rawValue, $"property {jsonKey}",
+                    out var assetGuid, out var assetPath, out var requestedType, out error, out statusCode))
                 return false;
 
             if (!string.IsNullOrEmpty(assetGuid) || !string.IsNullOrEmpty(assetPath))
