@@ -131,6 +131,8 @@ Reference shape:
 
 Object references must be JSON objects. A bare string such as `"Canvas/Button"` is not accepted and returns `400 Bad Request`.
 
+Every field of a reference — `type`, `value`, `scenePath`, `assetGuid`, `assetPath`, `assetType` — must be a JSON string, or `null`, which reads the same as omitting it. A field carrying a number, a boolean, an array, or an object answers `400` naming the field, rather than being coerced to text: `{"assetGuid": 5}` is a value of the wrong type, not the GUID `"5"`.
+
 | Type | Value |
 |------|-------|
 | `hierarchyPath` | GameObject hierarchy path, such as `Canvas/Button`. This is the default when `type` is omitted |

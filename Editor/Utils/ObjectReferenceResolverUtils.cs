@@ -120,6 +120,62 @@ namespace LeonAkasaka.UnionAir.Editor
             return true;
         }
 
+        /// <summary>
+        /// Reads one field of an object reference, refusing a value that is not a JSON string.
+        /// </summary>
+        /// <remarks>
+        /// Every field of a reference names something -- a GUID, a path, a type, a hierarchy
+        /// address -- and none of them is a number. <see cref="RequestBodyReader.GetString"/>
+        /// hands back the raw token when the value is not quoted, so <c>{"assetGuid": 5}</c>
+        /// arrived here as the GUID <c>"5"</c> and was answered <c>404 Asset not found</c>: a
+        /// status describing a missing asset, for a request whose fault is a value of the wrong
+        /// type. Read through here instead, and the answer names the field.
+        ///
+        /// An explicit <c>null</c> reads as absent rather than as an error, because that is what
+        /// it already meant: a reference carrying <c>"assetGuid": null</c> is one that did not
+        /// give a GUID, and the caller's own "requires assetGuid or assetPath" is the answer it
+        /// should get.
+        /// </remarks>
+        public static bool TryReadReferenceField(
+            string referenceJson,
+            string field,
+            string label,
+            out string value,
+            out string error,
+            out int statusCode)
+        {
+            value = null;
+            error = null;
+            statusCode = 400;
+
+            // GetRawValue answers null for a field that is absent and for one whose value is not
+            // well-formed JSON, and the second never arrives here: measured on 6000.0.80f1, a
+            // reference carrying an unescaped Windows path is refused by the surrounding
+            // 'properties' parse first, naming the key. Both read as absent, and the caller's
+            // "requires assetGuid or assetPath" is the answer either one should get.
+            var raw = RequestBodyReader.GetRawValue(referenceJson, field);
+            if (raw == null) return true;
+
+            raw = raw.Trim();
+            if (raw == "null") return true;
+
+            if (raw.Length == 0 || raw[0] != '"')
+            {
+                error = $"Field '{field}' of {label} must be a JSON string.";
+                return false;
+            }
+
+            // Defensive: the token came from GetRawValue, which parses before it returns, so a
+            // token opening with a quote is already known to be a complete string.
+            if (!RequestBodyReader.TryParseJsonString(raw, out value))
+            {
+                error = $"Field '{field}' of {label} is not a well-formed JSON string.";
+                return false;
+            }
+
+            return true;
+        }
+
         public static Type GetManagedObjectType(SerializedProperty prop)
         {
             var typeName = prop.type;

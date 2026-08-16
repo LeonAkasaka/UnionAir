@@ -343,17 +343,30 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
+            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "assetType", $"property '{key}'",
+                    out var requestedTypeName, out error, out statusCode))
+                return false;
+
             var requestedType = ObjectReferenceResolverUtils.ResolveOptionalReferenceType(
-                RequestBodyReader.GetString(rawValue, "assetType"),
+                requestedTypeName,
                 $"property '{key}'",
                 "Unknown object reference type for {0}: {1}",
                 out error,
                 out statusCode);
             if (error != null) return false;
 
+            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "assetGuid", $"property '{key}'",
+                    out var assetGuid, out error, out statusCode) ||
+                !ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "assetPath", $"property '{key}'",
+                    out var assetPath, out error, out statusCode))
+                return false;
+
             if (!ObjectReferenceResolverUtils.TryResolveAssetReference(
-                    RequestBodyReader.GetString(rawValue, "assetGuid"),
-                    RequestBodyReader.GetString(rawValue, "assetPath"),
+                    assetGuid,
+                    assetPath,
                     typeof(Texture),
                     requestedType,
                     $"property '{key}'",

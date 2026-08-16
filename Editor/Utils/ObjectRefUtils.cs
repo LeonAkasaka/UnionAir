@@ -82,14 +82,20 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            var value = RequestBodyReader.GetString(rawValue, "value");
+            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "value", fieldName, out var value, out error, out statusCode))
+                return false;
+
             if (string.IsNullOrEmpty(value))
             {
                 error = $"Missing required field: {fieldName}.value";
                 return false;
             }
 
-            var typeName = RequestBodyReader.GetString(rawValue, "type") ?? "hierarchyPath";
+            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "type", fieldName, out var typeName, out error, out statusCode))
+                return false;
+            typeName = typeName ?? "hierarchyPath";
             if (!TryParseType(typeName, out var type))
             {
                 error = $"Unknown {fieldName}.type: {typeName}";

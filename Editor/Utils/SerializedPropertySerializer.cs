@@ -892,7 +892,10 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             var expectedType = ObjectReferenceResolverUtils.GetManagedObjectType(prop);
-            var requestedTypeName = RequestBodyReader.GetString(rawValue, "assetType");
+            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "assetType", $"property {jsonKey}",
+                    out var requestedTypeName, out error, out statusCode))
+                return false;
             var requestedType = ObjectReferenceResolverUtils.ResolveOptionalReferenceType(
                 requestedTypeName,
                 $"property {jsonKey}",
@@ -901,8 +904,13 @@ namespace LeonAkasaka.UnionAir.Editor
                 out statusCode);
             if (error != null) return false;
 
-            var assetGuid = RequestBodyReader.GetString(rawValue, "assetGuid");
-            var assetPath = RequestBodyReader.GetString(rawValue, "assetPath");
+            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "assetGuid", $"property {jsonKey}",
+                    out var assetGuid, out error, out statusCode) ||
+                !ObjectReferenceResolverUtils.TryReadReferenceField(
+                    rawValue, "assetPath", $"property {jsonKey}",
+                    out var assetPath, out error, out statusCode))
+                return false;
 
             if (!string.IsNullOrEmpty(assetGuid) || !string.IsNullOrEmpty(assetPath))
                 return ObjectReferenceResolverUtils.TryResolveAssetReference(
