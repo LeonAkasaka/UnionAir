@@ -491,5 +491,23 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             StringAssert.Contains("\"added\":[\"m_Intensity\"]", response.Body);
             StringAssert.Contains("Unknown type: NoSuchType", response.Body);
         }
+
+        [Test]
+        public void TheImportedClipRefusalNamesTheEndpointThatDoesTheJob()
+        {
+            // The refusal has to send the caller somewhere, and where it sent them went stale
+            // inside a single release: it said the importer was not exposed, which stopped
+            // being true when GET|PATCH /api/assets/model-importer/{guid} landed a week later.
+            // Nothing held the message to the package's own surface, so nothing caught it.
+            var message = AnimationClipOwnership.RefusalMessage(
+                "Assets/Characters/Idle.fbx", nameof(ModelImporter));
+
+            StringAssert.Contains("Assets/Characters/Idle.fbx", message);
+            StringAssert.Contains("/api/assets/model-importer/", message);
+            StringAssert.Contains("settings.clips", message);
+            Assert.IsFalse(
+                message.Contains("does not expose"),
+                "the refusal must not deny a capability this package ships: " + message);
+        }
     }
 }
