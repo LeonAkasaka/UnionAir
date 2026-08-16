@@ -41,7 +41,9 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"position\":{{\"x\":{RestResponse.FormatFloat(p.x)},\"y\":{RestResponse.FormatFloat(p.y)},\"z\":{RestResponse.FormatFloat(p.z)}}},");
             sb.Append($"\"rotation\":{{\"x\":{RestResponse.FormatFloat(r.x)},\"y\":{RestResponse.FormatFloat(r.y)},\"z\":{RestResponse.FormatFloat(r.z)}}},");
             sb.Append($"\"scale\":{{\"x\":{RestResponse.FormatFloat(s.x)},\"y\":{RestResponse.FormatFloat(s.y)},\"z\":{RestResponse.FormatFloat(s.z)}}}");
-            sb.Append("},\"components\":[");
+            sb.Append("},");
+            AppendWorldTransform(sb, t);
+            sb.Append("\"components\":[");
 
             var components = go.GetComponents<Component>();
             for (int i = 0; i < components.Length; i++)
@@ -53,6 +55,52 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append("]}");
             RestResponse.Send(response, sb.ToString());
         }
+
+        // Beside 'transform' rather than replacing it: 'transform' is the local one the write
+        // accepts, and a query parameter that changes what an existing field means would make the
+        // response depend on how it was asked for.
+        //
+        // The basis vectors are the half that makes this usable. A world rotation as Euler angles
+        // is enough in principle and not in practice — a bone whose local +X points down in world
+        // space reads as (270.8, 90, 0), and recovering the direction from that means the client
+        // redoing Unity's quaternion-to-basis conversion. Reported as unit vectors, the answer to
+        // "which way is up for this bone" is one field.
+        private static void AppendWorldTransform(StringBuilder sb, Transform t)
+        {
+            var p = t.position;
+            var r = t.rotation.eulerAngles;
+
+            // Unity's own name, and the honest one: it is derived from the whole chain and cannot
+            // be written back, where 'scale' would invite a client to echo it into a PATCH.
+            var s = t.lossyScale;
+
+            sb.Append("\"worldTransform\":{");
+            sb.Append($"\"position\":{Vector3Json(p)},");
+            sb.Append($"\"rotation\":{Vector3Json(r)},");
+            sb.Append($"\"lossyScale\":{Vector3Json(s)},");
+            sb.Append($"\"right\":{Vector3Json(t.right)},");
+            sb.Append($"\"up\":{Vector3Json(t.up)},");
+            sb.Append($"\"forward\":{Vector3Json(t.forward)}");
+            sb.Append("},");
+        }
+
+        // Renderer.bounds is the world-space AABB Unity computes, and no serialized property
+        // carries it: m_AABB is the local bounds and a different value. Beside 'properties' for
+        // the reason 'enabled' and 'blendShapeNames' are.
+        private static void AppendRendererBounds(StringBuilder sb, Component component)
+        {
+            var renderer = component as Renderer;
+            if (renderer == null) return;
+
+            var bounds = renderer.bounds;
+            sb.Append("\"bounds\":{");
+            sb.Append($"\"center\":{Vector3Json(bounds.center)},");
+            sb.Append($"\"extents\":{Vector3Json(bounds.extents)}");
+            sb.Append("},");
+        }
+
+        private static string Vector3Json(Vector3 v)
+            => $"{{\"x\":{RestResponse.FormatFloat(v.x)},\"y\":{RestResponse.FormatFloat(v.y)},\"z\":{RestResponse.FormatFloat(v.z)}}}";
 
         private static void AppendComponent(StringBuilder sb, Component component)
         {
@@ -73,6 +121,7 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append($"\"enabled\":{RestResponse.FormatBool(enabled.Value)},");
 
             AppendBlendShapeNames(sb, component);
+            AppendRendererBounds(sb, component);
 
             sb.Append("\"properties\":{");
 

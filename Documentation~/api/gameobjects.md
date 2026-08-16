@@ -30,6 +30,7 @@ If `scenePath` is omitted, the active scene is used.
   "tag": "Untagged",
   "layer": 5,
   "transform": { ... },
+  "worldTransform": { ... },
   "components": [
     {
       "type": "UnityEngine.RectTransform",
@@ -50,6 +51,49 @@ If `scenePath` is omitted, the active scene is used.
   ]
 }
 ```
+
+### `worldTransform` answers where the object actually is
+
+`transform` is parent-relative — it is what `PATCH /api/gameobjects` writes, and for anything below the scene root it does not say where the object is in the world. `worldTransform` is reported beside it, always, and no request has to ask for it:
+
+```json
+"worldTransform": {
+  "position":   { "x": 0, "y": 1.2997, "z": -0.0147 },
+  "rotation":   { "x": 359.43, "y": 267.51, "z": 277.86 },
+  "lossyScale": { "x": 1, "y": 1, "z": 1 },
+  "right":   { "x": -0.016, "y": -0.991, "z": 0.136 },
+  "up":      { "x": -0.042, "y":  0.137, "z": 0.990 },
+  "forward": { "x": -0.999, "y":  0.010, "z": -0.043 }
+}
+```
+
+`lossyScale` carries Unity's name because it is Unity's value: the scale the whole parent chain produces, which cannot be written back. `PATCH /api/gameobjects` writes `transform.scale`, the local one.
+
+`right`, `up` and `forward` are the object's own axes as unit vectors in world space. They are reported because a rotation alone does not answer the question they answer. The example above is a humanoid head bone: its local `+X` points **down** in world space, which is what `right` says directly and what `(359.43, 267.51, 277.86)` says only after the reader redoes Unity's quaternion-to-basis conversion. Placing a child on a bone — a prop, an accessory — is a matter of knowing which local direction is up, and this is that answer.
+
+`GET /api/scene/hierarchy` does not report it. That response walks a whole scene and is capped at 500 objects; six vectors per node would be paid by every caller for a value wanted one object at a time.
+
+`PATCH /api/gameobjects` remains local-only. A child's transform is authored in local space, so knowing the parent's world frame is what the placement needs; a world-space write is a separate request shape and is not part of this.
+
+### `bounds` is the renderer's world-space box
+
+A `Renderer` component reports `bounds` beside `properties`:
+
+```json
+{
+  "type": "UnityEngine.SkinnedMeshRenderer",
+  "enabled": true,
+  "bounds": {
+    "center":  { "x": -0.028, "y": 1.378, "z": 0.052 },
+    "extents": { "x": 0.167, "y": 0.126, "z": 0.076 }
+  },
+  "properties": { "...": "..." }
+}
+```
+
+This is `Renderer.bounds`: the axis-aligned box in **world** space, so it moves when the object moves. `center` and `extents` are Unity's own two fields — size is `2 × extents`, and min/max are `center ∓ extents`. The serialized `m_AABB` in `properties` is the **local** bounds and is a different value.
+
+The field is omitted for a component that is not a `Renderer`. There is no aggregate box for a GameObject and its children; `POST /api/previews/render` computes one internally to frame its camera and does not report it.
 
 `components[].enabled` is the checkbox in the component's Inspector header. It is omitted for a component that has none — a `Transform` or a `MeshFilter` shows no checkbox — so that a reader can tell "this cannot be disabled" from "this is disabled". It is not one of `properties`: Unity draws it outside the component body, and `properties` carries only what the body draws. Write it through the `enabled` field of `PATCH /api/gameobjects/components`.
 
