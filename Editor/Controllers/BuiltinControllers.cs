@@ -518,8 +518,9 @@ namespace LeonAkasaka.UnionAir.Editor
 
         [UnionAirEndpoint("GET", "{guid}",
             Category = UnionAirEndpointCategories.Read,
-            Summary = "Returns asset details by GUID.",
-            PathParams = new string[] { "guid" })]
+            Summary = "Returns asset details by GUID: path, type, direct dependencies, labels, and the objects the file holds besides its main asset. 'subAssets' carries the localIdentifier an object reference sends to name one of them, and is omitted for a path holding only its main asset.",
+            PathParams = new string[] { "guid" },
+            ResponseExample = "{\"guid\":\"8f0565f2...\",\"path\":\"Assets/Models/unitychan.fbx\",\"type\":\"UnityEngine.GameObject\",\"dependencies\":[\"Assets/Models/Materials/body.mat\"],\"labels\":[],\"subAssets\":[{\"localIdentifier\":\"4300014\",\"name\":\"BLW_DEF\",\"type\":\"UnityEngine.Mesh\"}]}")]
         private void Detail(UnionAirRequestContext ctx)
             => new AssetHandler().Handle(ctx.Request, ctx.Response);
 
