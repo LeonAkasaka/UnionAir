@@ -14,7 +14,7 @@ namespace LeonAkasaka.UnionAir.Editor
     {
         private static readonly string[] AssetObjectReferenceFields =
         {
-            "assetGuid", "assetPath", "assetType"
+            "assetGuid", "assetPath", "assetType", "localIdentifier"
         };
 
         /// <summary>
@@ -194,7 +194,19 @@ namespace LeonAkasaka.UnionAir.Editor
                 var assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
                 sb.Append($"{{\"assetGuid\":\"{RestResponse.EscapeJson(assetGuid)}\",");
                 sb.Append($"\"assetPath\":\"{RestResponse.EscapeJson(assetPath)}\",");
-                sb.Append($"\"assetType\":\"{RestResponse.EscapeJson(obj.GetType().FullName)}\"}}");
+                sb.Append($"\"assetType\":\"{RestResponse.EscapeJson(obj.GetType().FullName)}\"");
+
+                // Reported for every reference and not only for a sub-asset, because deciding
+                // per target would make the response shape depend on what it points at. A file
+                // holding one object reports it too and is no worse for it; a file holding
+                // twenty-three meshes cannot be addressed without it.
+                //
+                // Decimal string so 64 bits survive JSON, which is the spelling
+                // GET /api/assets/model-importer/{guid} already uses for the same concept.
+                if (AssetDatabase.TryGetGUIDAndLocalFileIdentifier(obj, out _, out long localId))
+                    sb.Append($",\"localIdentifier\":\"{localId.ToString(System.Globalization.CultureInfo.InvariantCulture)}\"");
+
+                sb.Append("}");
                 return;
             }
 
@@ -894,13 +906,15 @@ namespace LeonAkasaka.UnionAir.Editor
             var expectedType = ObjectReferenceResolverUtils.GetManagedObjectType(prop);
             if (!ObjectReferenceResolverUtils.TryReadAssetReferenceFields(
                     rawValue, $"property {jsonKey}",
-                    out var assetGuid, out var assetPath, out var requestedType, out error, out statusCode))
+                    out var assetGuid, out var assetPath, out var requestedType, out var localIdentifier,
+                    out error, out statusCode))
                 return false;
 
             if (!string.IsNullOrEmpty(assetGuid) || !string.IsNullOrEmpty(assetPath))
                 return ObjectReferenceResolverUtils.TryResolveAssetReference(
                     assetGuid,
                     assetPath,
+                    localIdentifier,
                     expectedType,
                     requestedType,
                     $"property {jsonKey}",

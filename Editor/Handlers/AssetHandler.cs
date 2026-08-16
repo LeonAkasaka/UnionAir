@@ -65,6 +65,34 @@ namespace LeonAkasaka.UnionAir.Editor
             RestResponse.Send(response, sb.ToString());
         }
 
+        // Where a client reads the localIdentifier an object reference needs in order to name one
+        // object inside a file. Omitted entirely for a path holding only its main asset, which is
+        // most of them, so the field appearing at all is the signal that the path cannot be
+        // addressed by name alone.
+        private static void AppendSubAssets(StringBuilder sb, string assetPath)
+        {
+            var representations = AssetDatabase.LoadAllAssetRepresentationsAtPath(assetPath);
+            if (representations == null || representations.Length == 0) return;
+
+            sb.Append(",\"subAssets\":[");
+            var first = true;
+            foreach (var representation in representations)
+            {
+                if (representation == null) continue;
+                if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                        representation, out _, out long localId)) continue;
+
+                if (!first) sb.Append(",");
+                first = false;
+
+                var id = localId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                sb.Append($"{{\"localIdentifier\":\"{id}\",");
+                sb.Append($"\"name\":\"{RestResponse.EscapeJson(representation.name)}\",");
+                sb.Append($"\"type\":\"{RestResponse.EscapeJson(representation.GetType().FullName)}\"}}");
+            }
+            sb.Append("]");
+        }
+
         private static void HandleDetail(string guid, UnionAirResponse response)
         {
             if (string.IsNullOrEmpty(guid))
@@ -103,7 +131,10 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (i > 0) sb.Append(",");
                 sb.Append($"\"{RestResponse.EscapeJson(labels[i])}\"");
             }
-            sb.Append("]}");
+            sb.Append("]");
+
+            AppendSubAssets(sb, assetPath);
+            sb.Append("}");
 
             RestResponse.Send(response, sb.ToString());
         }

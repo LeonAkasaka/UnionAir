@@ -131,7 +131,38 @@ Reference shape:
 
 Object references must be JSON objects. A bare string such as `"Canvas/Button"` is not accepted and returns `400 Bad Request`.
 
-Every field of a reference — `type`, `value`, `scenePath`, `assetGuid`, `assetPath`, `assetType` — must be a JSON string, or `null`, which reads the same as omitting it. A field carrying a number, a boolean, an array, or an object answers `400` naming the field, rather than being coerced to text: `{"assetGuid": 5}` is a value of the wrong type, not the GUID `"5"`.
+### Naming one object inside a file
+
+An asset reference carries `localIdentifier`, the object's local file id as a decimal string:
+
+```json
+{
+  "assetGuid": "8f0565f2...",
+  "assetPath": "Assets/Models/unitychan.fbx",
+  "assetType": "UnityEngine.Mesh",
+  "localIdentifier": "4300028"
+}
+```
+
+`assetGuid` and `assetPath` identify a *file*. A model file holds many meshes, a sprite sheet many sprites, and `Library/unity default resources` holds every built-in object, so a file and a type together do not name one object. `localIdentifier` does, and reads report it for every asset reference — including references to single-object assets, so that the shape of a response never depends on what it points at.
+
+It is a string because a local file id is 64 bits and a JSON number is not.
+
+Writes take it as **optional**, and resolve in one of three ways:
+
+| The request | What happens |
+|---|---|
+| Carries `localIdentifier` | That object is resolved. This is what a client echoing a read sends |
+| No `localIdentifier`, and the path holds one object of the required type | Resolved. Most references are this — a material, a texture, a prefab |
+| No `localIdentifier`, and the path holds more than one | `400`, naming how many candidates the path holds |
+
+The third case previously answered `200` having bound whichever object Unity returned, with no way for the client to tell which one it got.
+
+[`GET /api/assets/{guid}`](assets.md#get-apiassetsguid) lists a file's `subAssets` with their identifiers. Built-in resources are the exception: they are reachable and writable by `localIdentifier`, but they are not sub-assets of a project asset and are not listed, so the way to obtain one is to read an existing reference to it.
+
+### Field types
+
+Every field of a reference — `type`, `value`, `scenePath`, `assetGuid`, `assetPath`, `assetType`, `localIdentifier` — must be a JSON string, or `null`, which reads the same as omitting it. A field carrying a number, a boolean, an array, or an object answers `400` naming the field, rather than being coerced to text: `{"assetGuid": 5}` is a value of the wrong type, not the GUID `"5"`.
 
 | Type | Value |
 |------|-------|

@@ -18,6 +18,25 @@ namespace LeonAkasaka.UnionAir.Editor
             out UnityEngine.Object value,
             out string error,
             out int statusCode)
+            => TryResolveAssetReference(
+                assetGuid, assetPath, null, expectedType, requestedType, label,
+                missingMessage, assetNotFoundWithGuidMessage, assetNotFoundOrIncompatibleMessage,
+                expectedTypeMismatchMessage, out value, out error, out statusCode);
+
+        public static bool TryResolveAssetReference(
+            string assetGuid,
+            string assetPath,
+            long? localIdentifier,
+            Type expectedType,
+            Type requestedType,
+            string label,
+            string missingMessage,
+            string assetNotFoundWithGuidMessage,
+            string assetNotFoundOrIncompatibleMessage,
+            string expectedTypeMismatchMessage,
+            out UnityEngine.Object value,
+            out string error,
+            out int statusCode)
         {
             value = null;
             error = null;
@@ -53,7 +72,28 @@ namespace LeonAkasaka.UnionAir.Editor
             }
 
             var loadType = requestedType ?? expectedType ?? typeof(UnityEngine.Object);
-            value = AssetDatabase.LoadAssetAtPath(assetPath, loadType);
+
+            if (localIdentifier.HasValue)
+            {
+                value = FindByLocalIdentifier(assetPath, localIdentifier.Value);
+                if (value == null)
+                {
+                    error = $"No object with localIdentifier {localIdentifier.Value} for {label} at: {assetPath}";
+                    statusCode = 404;
+                    return false;
+                }
+            }
+            else if (!TryResolveTheOnlyCandidate(assetPath, loadType, out value, out var candidates))
+            {
+                // A path holding more than one object of the required type cannot be addressed by
+                // path alone, and answering 200 having bound whichever one Unity returned is the
+                // silence this vocabulary was extended to remove: the client cannot tell which
+                // object it got, and the read afterwards is identical for every one of them.
+                error = $"{candidates} objects assignable to {loadType.Name} exist at {assetPath} for {label}. " +
+                        "Send localIdentifier to name one; GET /api/assets/{guid} lists them.";
+                return false;
+            }
+
             if (value == null)
             {
                 error = string.Format(assetNotFoundOrIncompatibleMessage, label, assetPath);
@@ -69,6 +109,62 @@ namespace LeonAkasaka.UnionAir.Editor
                 expectedTypeMismatchMessage,
                 out error,
                 out statusCode);
+        }
+
+        private static UnityEngine.Object FindByLocalIdentifier(string assetPath, long localIdentifier)
+        {
+            foreach (var candidate in AssetDatabase.LoadAllAssetsAtPath(assetPath))
+            {
+                if (candidate == null) continue;
+                if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(candidate, out _, out long id)) continue;
+                if (id == localIdentifier) return candidate;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Resolves a path that holds exactly one object of the required type, and reports how many
+        /// it holds when that is not the case.
+        /// </summary>
+        /// <remarks>
+        /// Sub-asset representations are asked for before the whole file is loaded, because most
+        /// references name a single-object asset -- a material, a texture, a prefab -- and that
+        /// answer is empty for all of them.
+        /// </remarks>
+        private static bool TryResolveTheOnlyCandidate(
+            string assetPath, Type loadType, out UnityEngine.Object value, out int candidates)
+        {
+            value = AssetDatabase.LoadAssetAtPath(assetPath, loadType);
+            candidates = value == null ? 0 : 1;
+
+            // A caller that asked for no particular type is asking for the asset at this path, and
+            // that has always meant the main asset -- which Unity answers deterministically. Every
+            // object in a file is assignable to UnityEngine.Object, so counting candidates against
+            // an unconstrained type would refuse every reference to a model file rather than only
+            // the ambiguous ones. Asked as "is this a proper subtype" rather than by comparing to
+            // one type, because an unconstrained request reaches here spelled more than one way.
+            var constrained = loadType != null
+                              && loadType != typeof(UnityEngine.Object)
+                              && typeof(UnityEngine.Object).IsAssignableFrom(loadType);
+            if (!constrained) return true;
+
+            var representations = AssetDatabase.LoadAllAssetRepresentationsAtPath(assetPath);
+            if (representations == null || representations.Length == 0) return true;
+
+            var main = AssetDatabase.LoadMainAssetAtPath(assetPath);
+            candidates = main != null && loadType.IsInstanceOfType(main) ? 1 : 0;
+
+            foreach (var representation in representations)
+            {
+                if (representation == null || !loadType.IsInstanceOfType(representation)) continue;
+                candidates++;
+                if (candidates == 1) value = representation;
+            }
+
+            if (candidates <= 1) return true;
+
+            value = null;
+            return false;
         }
 
         public static Type ResolveOptionalReferenceType(
@@ -194,10 +290,28 @@ namespace LeonAkasaka.UnionAir.Editor
             out Type requestedType,
             out string error,
             out int statusCode)
+            => TryReadAssetReferenceFields(
+                referenceJson, label, out assetGuid, out assetPath, out requestedType,
+                out _, out error, out statusCode);
+
+        /// <summary>
+        /// Reads the asset fields of an object reference, including the optional
+        /// <c>localIdentifier</c> that names one object inside a file.
+        /// </summary>
+        public static bool TryReadAssetReferenceFields(
+            string referenceJson,
+            string label,
+            out string assetGuid,
+            out string assetPath,
+            out Type requestedType,
+            out long? localIdentifier,
+            out string error,
+            out int statusCode)
         {
             assetGuid = null;
             assetPath = null;
             requestedType = null;
+            localIdentifier = null;
 
             if (!TryReadReferenceField(
                     referenceJson, "assetType", label, out var requestedTypeName, out error, out statusCode))
@@ -211,8 +325,28 @@ namespace LeonAkasaka.UnionAir.Editor
                 out statusCode);
             if (error != null) return false;
 
-            return TryReadReferenceField(referenceJson, "assetGuid", label, out assetGuid, out error, out statusCode)
-                && TryReadReferenceField(referenceJson, "assetPath", label, out assetPath, out error, out statusCode);
+            if (!TryReadReferenceField(referenceJson, "assetGuid", label, out assetGuid, out error, out statusCode)
+                || !TryReadReferenceField(referenceJson, "assetPath", label, out assetPath, out error, out statusCode)
+                || !TryReadReferenceField(referenceJson, "localIdentifier", label, out var localIdentifierText, out error, out statusCode))
+                return false;
+
+            if (string.IsNullOrEmpty(localIdentifierText)) return true;
+
+            // A decimal string, because 64 bits do not survive a JSON number intact. Read strictly:
+            // a value that is not one is the client's mistake and naming it beats resolving to
+            // something else.
+            if (!long.TryParse(
+                    localIdentifierText,
+                    System.Globalization.NumberStyles.AllowLeadingSign,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var parsed))
+            {
+                error = $"Field 'localIdentifier' of {label} must be a decimal integer in a JSON string: {localIdentifierText}";
+                return false;
+            }
+
+            localIdentifier = parsed;
+            return true;
         }
 
         public static Type GetManagedObjectType(SerializedProperty prop)

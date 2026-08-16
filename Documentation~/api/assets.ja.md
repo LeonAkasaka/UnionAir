@@ -71,6 +71,18 @@ GUID で指定したアセットの詳細情報を返します。
 | `type` | string | 完全修飾型名 |
 | `dependencies` | string[] | 直接依存するアセットのパス(`GetDependencies(recursive: false)`) |
 | `labels` | string[] | アセットラベル |
+| `subAssets` | object[] | メインアセット以外にそのファイルが含むオブジェクト。メインアセットのみのパスではフィールドごと省略されます |
+
+```json
+"subAssets": [
+  { "localIdentifier": "4300014", "name": "BLW_DEF", "type": "UnityEngine.Mesh" },
+  { "localIdentifier": "4300038", "name": "button",  "type": "UnityEngine.Mesh" }
+]
+```
+
+[オブジェクト参照](general.ja.md#ファイル内の1オブジェクトを指定する)が1つを指定する際に送るのが `localIdentifier` であり、クライアントはここから読み取ります。`name` は説明であって解決には使えません(2つのサブアセットが同じ名前を持つことがあります)。
+
+このフィールドが存在すること自体が、そのパスがパスと型だけでは指定できないという合図です。
 
 ### エラー
 

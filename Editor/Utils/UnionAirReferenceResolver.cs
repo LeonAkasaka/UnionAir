@@ -341,10 +341,29 @@ namespace LeonAkasaka.UnionAir.Editor
             out UnityEngine.Object value,
             out string error,
             out int statusCode)
+            => TryResolveAssetReference(
+                assetGuid, assetPath, null, expectedType, requestedType, label,
+                out value, out error, out statusCode);
+
+        /// <summary>
+        /// Resolves an asset object reference, optionally naming one object inside the file with
+        /// its local file identifier.
+        /// </summary>
+        public static bool TryResolveAssetReference(
+            string assetGuid,
+            string assetPath,
+            long? localIdentifier,
+            Type expectedType,
+            Type requestedType,
+            string label,
+            out UnityEngine.Object value,
+            out string error,
+            out int statusCode)
         {
             return ObjectReferenceResolverUtils.TryResolveAssetReference(
                 assetGuid,
                 assetPath,
+                localIdentifier,
                 expectedType,
                 requestedType,
                 label,
@@ -374,12 +393,14 @@ namespace LeonAkasaka.UnionAir.Editor
 
             if (!ObjectReferenceResolverUtils.TryReadAssetReferenceFields(
                     rawValue, label,
-                    out var assetGuid, out var assetPath, out var requestedType, out error, out statusCode))
+                    out var assetGuid, out var assetPath, out var requestedType, out var localIdentifier,
+                    out error, out statusCode))
                 return false;
 
             return TryResolveAssetReference(
                 assetGuid,
                 assetPath,
+                localIdentifier,
                 expectedType,
                 requestedType,
                 label,

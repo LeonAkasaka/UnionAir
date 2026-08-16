@@ -117,7 +117,8 @@
 "m_Mesh": {
   "assetGuid": "a1b2...",
   "assetPath": "Assets/Meshes/Rock.fbx",
-  "assetType": "UnityEngine.Mesh"
+  "assetType": "UnityEngine.Mesh",
+  "localIdentifier": "4300028"
 }
 ```
 
@@ -137,7 +138,9 @@
 - **表示名はありません。** 書き込みのどのフィールドも名前を運ばないため、これを載せると書き込みが再びその値を拒否するか、無視するキーを受け入れるかのどちらかになります。アセットは `assetPath` が名前を兼ね、シーンオブジェクトは解決して名前を得ます。
 - **一度も保存されていないシーンのオブジェクトは指定できません。** Unity がそのオブジェクトの `GlobalObjectId` を持たず、何も解決しない null id `GlobalObjectId_V1-0-0000...-0-0` を返すためです。これは識別子側の性質であってこのエンドポイントの都合ではありません。シーンを保存すれば通常どおり指定できます。
 
-**Unity 組み込みリソース**への参照(プリミティブのメッシュ、`Library/unity default resources`)は他のアセットと同様に GUID と path を返しますが、送り返すと `404` になります。これらは GUID **と** file ID の組で指定されるもので、書き込み語彙に file ID がないためです。読み取りは可能、書き込みは到達不能です。
+`localIdentifier` は、GUID と型では特定できない「ファイル内の1オブジェクト」を指定します(モデルファイルは多数のメッシュを含みます)。すべてのアセット参照で報告され、書き込みでは省略可能です。書き込みの3通りの解決方法と、候補が複数あるパスで `localIdentifier` を省略した場合に返る `400` については、[ファイル内の1オブジェクトを指定する](general.ja.md#ファイル内の1オブジェクトを指定する)を参照してください。
+
+**Unity 組み込みリソース**への参照(プリミティブのメッシュ、`Library/unity default resources`)も他のアセットと同様に GUID・path・`localIdentifier` を返し、送り返せば解決します。これらは GUID **と** file ID の組で指定されるもので、その file ID を運ぶのが `localIdentifier` です。`GET /api/assets/{guid}` では列挙されないため、取得するには既存の参照を読み取ってください。
 
 ### エラー
 

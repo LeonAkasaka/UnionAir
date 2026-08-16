@@ -68,6 +68,18 @@ Returns detailed information about an asset specified by GUID.
 | `type` | string | Fully qualified type name |
 | `dependencies` | string[] | Paths of directly dependent assets (`GetDependencies(recursive: false)`) |
 | `labels` | string[] | Asset labels |
+| `subAssets` | object[] | Objects the file holds besides its main asset. Omitted entirely for a path that holds only its main asset |
+
+```json
+"subAssets": [
+  { "localIdentifier": "4300014", "name": "BLW_DEF", "type": "UnityEngine.Mesh" },
+  { "localIdentifier": "4300038", "name": "button",  "type": "UnityEngine.Mesh" }
+]
+```
+
+`localIdentifier` is what an [object reference](general.md#naming-one-object-inside-a-file) sends to name one of them, so this is where a client reads it. `name` describes; it does not resolve, and two sub-assets may share one.
+
+The field appearing at all is the signal that the path cannot be addressed by path and type alone.
 
 ### Errors
 
