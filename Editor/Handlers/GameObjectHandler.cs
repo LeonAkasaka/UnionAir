@@ -141,7 +141,12 @@ namespace LeonAkasaka.UnionAir.Editor
                     firstProp = false;
 
                     sb.Append($"\"{RestResponse.EscapeJson(prop.name)}\":");
-                    AppendPropertyValue(sb, prop);
+
+                    // The shared reader rather than a copy of it. This endpoint carried its own,
+                    // whose switch had no case for Quaternion or Bounds, so the rotation of every
+                    // Transform read as null while the same value read from a ScriptableObject
+                    // did not. One reader cannot disagree with itself.
+                    SerializedPropertySerializer.SerializePropertyToJson(prop, sb, true);
                 }
             }
             catch
@@ -176,69 +181,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 }
             }
             sb.Append("],");
-        }
-
-        private static void AppendPropertyValue(StringBuilder sb, SerializedProperty prop)
-        {
-            if (prop.isArray && prop.propertyType != SerializedPropertyType.String)
-            {
-                sb.Append('[');
-                for (int i = 0; i < prop.arraySize; i++)
-                {
-                    if (i > 0) sb.Append(',');
-                    AppendPropertyValue(sb, prop.GetArrayElementAtIndex(i));
-                }
-                sb.Append(']');
-                return;
-            }
-
-            switch (prop.propertyType)
-            {
-                case SerializedPropertyType.Boolean:
-                    sb.Append(RestResponse.FormatBool(prop.boolValue));
-                    break;
-                case SerializedPropertyType.Integer:
-                case SerializedPropertyType.LayerMask:
-                case SerializedPropertyType.Enum:
-                    sb.Append(prop.intValue);
-                    break;
-                case SerializedPropertyType.Float:
-                    sb.Append(RestResponse.FormatFloat(prop.floatValue));
-                    break;
-                case SerializedPropertyType.String:
-                    sb.Append($"\"{RestResponse.EscapeJson(prop.stringValue)}\"");
-                    break;
-                case SerializedPropertyType.Color:
-                    var c = prop.colorValue;
-                    sb.Append($"{{\"r\":{RestResponse.FormatFloat(c.r)},\"g\":{RestResponse.FormatFloat(c.g)},\"b\":{RestResponse.FormatFloat(c.b)},\"a\":{RestResponse.FormatFloat(c.a)}}}");
-                    break;
-                case SerializedPropertyType.Vector2:
-                    var v2 = prop.vector2Value;
-                    sb.Append($"{{\"x\":{RestResponse.FormatFloat(v2.x)},\"y\":{RestResponse.FormatFloat(v2.y)}}}");
-                    break;
-                case SerializedPropertyType.Vector3:
-                    var v3 = prop.vector3Value;
-                    sb.Append($"{{\"x\":{RestResponse.FormatFloat(v3.x)},\"y\":{RestResponse.FormatFloat(v3.y)},\"z\":{RestResponse.FormatFloat(v3.z)}}}");
-                    break;
-                case SerializedPropertyType.Vector4:
-                    var v4 = prop.vector4Value;
-                    sb.Append($"{{\"x\":{RestResponse.FormatFloat(v4.x)},\"y\":{RestResponse.FormatFloat(v4.y)},\"z\":{RestResponse.FormatFloat(v4.z)},\"w\":{RestResponse.FormatFloat(v4.w)}}}");
-                    break;
-                case SerializedPropertyType.Rect:
-                    var rect = prop.rectValue;
-                    sb.Append($"{{\"x\":{RestResponse.FormatFloat(rect.x)},\"y\":{RestResponse.FormatFloat(rect.y)},\"width\":{RestResponse.FormatFloat(rect.width)},\"height\":{RestResponse.FormatFloat(rect.height)}}}");
-                    break;
-                case SerializedPropertyType.ObjectReference:
-                    // Spelled the way PATCH /api/gameobjects/components reads it, so a value
-                    // taken from here can be sent back without translation. That endpoint
-                    // resolves scene objects, so they are reported rather than dropped.
-                    SerializedPropertySerializer.AppendObjectReferenceJson(
-                        sb, prop.objectReferenceValue, true);
-                    break;
-                default:
-                    sb.Append("null");
-                    break;
-            }
         }
 
     }
