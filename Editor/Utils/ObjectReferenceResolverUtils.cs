@@ -176,6 +176,45 @@ namespace LeonAkasaka.UnionAir.Editor
             return true;
         }
 
+        /// <summary>
+        /// Reads the three asset fields of an object reference and resolves the requested type.
+        /// </summary>
+        /// <remarks>
+        /// Every write that takes a reference needs exactly this sequence -- read
+        /// <c>assetType</c>, resolve it, then read <c>assetGuid</c> and <c>assetPath</c> -- and
+        /// four of them carried their own copy of it, including four copies of the same "unknown
+        /// type" message. One copy means one answer: a client cannot tell which endpoint it is
+        /// talking to from how a malformed reference is refused.
+        /// </remarks>
+        public static bool TryReadAssetReferenceFields(
+            string referenceJson,
+            string label,
+            out string assetGuid,
+            out string assetPath,
+            out Type requestedType,
+            out string error,
+            out int statusCode)
+        {
+            assetGuid = null;
+            assetPath = null;
+            requestedType = null;
+
+            if (!TryReadReferenceField(
+                    referenceJson, "assetType", label, out var requestedTypeName, out error, out statusCode))
+                return false;
+
+            requestedType = ResolveOptionalReferenceType(
+                requestedTypeName,
+                label,
+                "Unknown object reference type for {0}: {1}",
+                out error,
+                out statusCode);
+            if (error != null) return false;
+
+            return TryReadReferenceField(referenceJson, "assetGuid", label, out assetGuid, out error, out statusCode)
+                && TryReadReferenceField(referenceJson, "assetPath", label, out assetPath, out error, out statusCode);
+        }
+
         public static Type GetManagedObjectType(SerializedProperty prop)
         {
             var typeName = prop.type;

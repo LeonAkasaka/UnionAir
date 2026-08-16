@@ -169,20 +169,21 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            var declared = new Dictionary<string, UnityEngine.Rendering.ShaderPropertyType>(
-                StringComparer.Ordinal);
-            var propCount = shader.GetPropertyCount();
-            for (int i = 0; i < propCount; i++)
-                declared[shader.GetPropertyName(i)] = shader.GetPropertyType(i);
-
             foreach (var key in requestedKeys)
             {
-                if (!declared.TryGetValue(key, out var propertyType))
+                // Asked of the shader one key at a time rather than tabulated up front: a request
+                // usually carries a handful of keys and a shader can declare a couple of hundred
+                // properties, so the table was the larger of the two by an order of magnitude and
+                // was rebuilt for every request.
+                var index = shader.FindPropertyIndex(key);
+                if (index < 0)
                 {
                     error = $"No property named '{key}' on shader '{shader.name}'. " +
                             "Property names are the ones the shader declares, and are case-sensitive.";
                     return false;
                 }
+
+                var propertyType = shader.GetPropertyType(index);
 
                 switch (propertyType)
                 {
@@ -343,25 +344,9 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
-                    rawValue, "assetType", $"property '{key}'",
-                    out var requestedTypeName, out error, out statusCode))
-                return false;
-
-            var requestedType = ObjectReferenceResolverUtils.ResolveOptionalReferenceType(
-                requestedTypeName,
-                $"property '{key}'",
-                "Unknown object reference type for {0}: {1}",
-                out error,
-                out statusCode);
-            if (error != null) return false;
-
-            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
-                    rawValue, "assetGuid", $"property '{key}'",
-                    out var assetGuid, out error, out statusCode) ||
-                !ObjectReferenceResolverUtils.TryReadReferenceField(
-                    rawValue, "assetPath", $"property '{key}'",
-                    out var assetPath, out error, out statusCode))
+            if (!ObjectReferenceResolverUtils.TryReadAssetReferenceFields(
+                    rawValue, $"property '{key}'",
+                    out var assetGuid, out var assetPath, out var requestedType, out error, out statusCode))
                 return false;
 
             if (!ObjectReferenceResolverUtils.TryResolveAssetReference(

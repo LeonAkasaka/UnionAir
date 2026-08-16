@@ -112,7 +112,10 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"name\":\"{RestResponse.EscapeJson(name)}\",");
             sb.Append($"\"type\":\"{type}\",");
             sb.Append("\"value\":");
-            AppendValue(sb, mat, name, type);
+
+            // By id rather than by name: Material's string overloads hash the name on every call,
+            // and this runs once per declared property.
+            AppendValue(sb, mat, shader.GetPropertyNameId(index), type);
 
             // The Inspector slider's bound, which the write does not enforce, so a client choosing
             // a value has something to choose within.
@@ -141,34 +144,34 @@ namespace LeonAkasaka.UnionAir.Editor
 
         // The spellings PATCH /api/assets/materials accepts, so a value read here can be sent back
         // without translation.
-        private static void AppendValue(StringBuilder sb, Material mat, string name, ShaderPropertyType type)
+        private static void AppendValue(StringBuilder sb, Material mat, int nameId, ShaderPropertyType type)
         {
             switch (type)
             {
                 case ShaderPropertyType.Color:
                 {
-                    var c = mat.GetColor(name);
+                    var c = mat.GetColor(nameId);
                     sb.Append($"{{\"r\":{RestResponse.FormatFloat(c.r)},\"g\":{RestResponse.FormatFloat(c.g)},\"b\":{RestResponse.FormatFloat(c.b)},\"a\":{RestResponse.FormatFloat(c.a)}}}");
                     break;
                 }
                 case ShaderPropertyType.Vector:
                 {
-                    var v = mat.GetVector(name);
+                    var v = mat.GetVector(nameId);
                     sb.Append($"{{\"x\":{RestResponse.FormatFloat(v.x)},\"y\":{RestResponse.FormatFloat(v.y)},\"z\":{RestResponse.FormatFloat(v.z)},\"w\":{RestResponse.FormatFloat(v.w)}}}");
                     break;
                 }
                 case ShaderPropertyType.Float:
                 case ShaderPropertyType.Range:
-                    sb.Append(RestResponse.FormatFloat(mat.GetFloat(name)));
+                    sb.Append(RestResponse.FormatFloat(mat.GetFloat(nameId)));
                     break;
                 case ShaderPropertyType.Int:
-                    sb.Append(mat.GetInteger(name));
+                    sb.Append(mat.GetInteger(nameId));
                     break;
                 case ShaderPropertyType.Texture:
                     // null is what the write takes to clear a texture, so the empty case round
                     // trips as well as the assigned one.
                     SerializedPropertySerializer.AppendObjectReferenceJson(
-                        sb, mat.GetTexture(name), false);
+                        sb, mat.GetTexture(nameId), false);
                     break;
                 default:
                     sb.Append("null");

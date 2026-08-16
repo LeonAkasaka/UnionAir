@@ -38,9 +38,9 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"tag\":\"{RestResponse.EscapeJson(go.tag)}\",");
             sb.Append($"\"layer\":{go.layer},");
             sb.Append("\"transform\":{");
-            sb.Append($"\"position\":{{\"x\":{RestResponse.FormatFloat(p.x)},\"y\":{RestResponse.FormatFloat(p.y)},\"z\":{RestResponse.FormatFloat(p.z)}}},");
-            sb.Append($"\"rotation\":{{\"x\":{RestResponse.FormatFloat(r.x)},\"y\":{RestResponse.FormatFloat(r.y)},\"z\":{RestResponse.FormatFloat(r.z)}}},");
-            sb.Append($"\"scale\":{{\"x\":{RestResponse.FormatFloat(s.x)},\"y\":{RestResponse.FormatFloat(s.y)},\"z\":{RestResponse.FormatFloat(s.z)}}}");
+            sb.Append($"\"position\":{Vector3Json(p)},");
+            sb.Append($"\"rotation\":{Vector3Json(r)},");
+            sb.Append($"\"scale\":{Vector3Json(s)}");
             sb.Append("},");
             AppendWorldTransform(sb, t);
             sb.Append("\"components\":[");

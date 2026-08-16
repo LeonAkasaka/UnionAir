@@ -372,21 +372,9 @@ namespace LeonAkasaka.UnionAir.Editor
             error = null;
             statusCode = 400;
 
-            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
-                    rawValue, "assetType", label, out var requestedTypeName, out error, out statusCode))
-                return false;
-            var requestedType = ObjectReferenceResolverUtils.ResolveOptionalReferenceType(
-                requestedTypeName,
-                label,
-                "Unknown object reference type for {0}: {1}",
-                out error,
-                out statusCode);
-            if (error != null) return false;
-
-            if (!ObjectReferenceResolverUtils.TryReadReferenceField(
-                    rawValue, "assetGuid", label, out var assetGuid, out error, out statusCode) ||
-                !ObjectReferenceResolverUtils.TryReadReferenceField(
-                    rawValue, "assetPath", label, out var assetPath, out error, out statusCode))
+            if (!ObjectReferenceResolverUtils.TryReadAssetReferenceFields(
+                    rawValue, label,
+                    out var assetGuid, out var assetPath, out var requestedType, out error, out statusCode))
                 return false;
 
             return TryResolveAssetReference(
