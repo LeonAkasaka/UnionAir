@@ -141,15 +141,28 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.AreEqual("{\"x\":1,\"y\":2,\"width\":3,\"height\":4}", Serialize("area"));
         }
 
+        [Test]
+        public void TheSceneReferenceFlagDoesNotReachTheseTypes()
+        {
+            // The flag decides one case and one only -- ObjectReference -- so a Quaternion, a
+            // Bounds and a Rect have to read the same either way. Asserted rather than assumed,
+            // because the tests above read an asset-side fixture through the component-side flag:
+            // if the fixture ever gains a reference field, this is what stops that pairing from
+            // being read as a claim about it.
+            foreach (var propertyName in new[] { "rotation", "volume", "area" })
+                Assert.AreEqual(
+                    Serialize(propertyName, true), Serialize(propertyName, false), propertyName);
+        }
+
         // ── Helpers ──────────────────────────────────────────────────────────
 
-        private string Serialize(string propertyName)
+        private string Serialize(string propertyName, bool sceneObjectsResolvable = true)
         {
             var property = new SerializedObject(_fixture).FindProperty(propertyName);
             Assert.IsNotNull(property, propertyName + " missing from the fixture");
 
             var sb = new StringBuilder();
-            SerializedPropertySerializer.SerializePropertyToJson(property, sb, true);
+            SerializedPropertySerializer.SerializePropertyToJson(property, sb, sceneObjectsResolvable);
             return sb.ToString();
         }
 
