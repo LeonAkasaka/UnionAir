@@ -812,6 +812,23 @@ curl "${BASE_URL}editor/menu-items?root=Window&includeFolders=false"
 }
 ```
 
+### `executed` はディスパッチの報告であり、効果の報告ではありません
+
+`executed: true` は `EditorApplication.ExecuteMenuItem()` が返した値そのものです。メニュー項目が見つかり、有効であり、呼び出されたことを意味します。その項目が何かを行ったという主張ではありません。
+
+フォーカスされている `EditorWindow` を参照するコマンドのメニュー項目は、REST 経由では参照すべきウィンドウが存在しないため、ディスパッチされても何も起こりません。6000.0.80f1 で計測したところ、以下はいずれも `200 {"executed": true}` を返し、何も変更しませんでした(GameObject を選択した場合、アセットを選択した場合の両方で、`POST /api/editor/selection` により選択状態を確認したうえで実施)。
+
+| メニュー項目 | 結果 |
+|---|---|
+| `Edit/Duplicate` | シーンオブジェクト・アセットのいずれも複製されない |
+| `Edit/Delete` | 選択した GameObject が残ったまま |
+| `Edit/Select All` | 選択状態が変化しない |
+| `Assets/Create/Folder` | フォルダーが作成されない |
+
+対照的に `Edit/Undo` は動作します。`POST /api/gameobjects/primitive` で GameObject を作成してから実行すると、そのオブジェクトが削除されます。境界は「`Edit/` 配下かどうか」ではなく、「コマンドがフォーカスされたウィンドウを必要とするかどうか」です。
+
+確認用の第2のフィールドはありません。任意のメニュー項目が何をするはずだったかを UnionAir は知り得ないためです。`200` を根拠とせず、読み取り(`GET /api/assets`、`GET /api/scene/hierarchy`、`GET /api/editor/selection`)で効果を検証してください。その操作に対応する専用エンドポイントがある場合は、そちらを優先してください。専用エンドポイントは変更した内容を報告します。
+
 ### エラー
 
 | ステータス | 原因 |
