@@ -153,11 +153,6 @@ namespace LeonAkasaka.UnionAir.Editor
             // reference carrying an unescaped Windows path is refused by the surrounding
             // 'properties' parse first, naming the key. Both read as absent, and the caller's
             // "requires assetGuid or assetPath" is the answer either one should get.
-            // GetRawValue answers null for a field that is absent and for one whose value is not
-            // well-formed JSON, and the second never arrives here: measured on 6000.0.80f1, a
-            // reference carrying an unescaped Windows path is refused by the surrounding
-            // 'properties' parse first, naming the key. Both read as absent, and the caller's
-            // "requires assetGuid or assetPath" is the answer either one should get.
             var raw = RequestBodyReader.GetRawValue(referenceJson, field);
             if (raw == null) return true;
 
@@ -170,8 +165,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 return false;
             }
 
-            // Defensive: the token came from GetRawValue, which parses before it returns, so a
-            // token opening with a quote is a complete string.
             // Defensive: the token came from GetRawValue, which parses before it returns, so a
             // token opening with a quote is already known to be a complete string.
             if (!RequestBodyReader.TryParseJsonString(raw, out value))
