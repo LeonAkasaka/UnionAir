@@ -600,6 +600,14 @@ namespace LeonAkasaka.UnionAir.Editor
     [UnionAirController("assets/materials")]
     internal sealed class MaterialsController
     {
+        [UnionAirEndpoint("GET", "{guid}",
+            Category = UnionAirEndpointCategories.Read,
+            Summary = "Returns a material's shader, render queue, enabled keywords, and every declared shader property with its current value. Each value is spelled the way PATCH /api/assets/materials reads it, so a value can be sent straight back. 'flags' carries Unity's shader property flag names and 'range' the slider bounds of a Range property. renderQueue and keywords are reported and not writable.",
+            PathParams = new string[] { "guid" },
+            ResponseExample = "{\"guid\":\"5ebb6c...\",\"assetPath\":\"Assets/Materials/Hair.mat\",\"shader\":\"Toon/Toon\",\"renderQueue\":2000,\"keywords\":[\"_EMISSIVE_SIMPLE\"],\"properties\":[{\"name\":\"_BaseColor\",\"type\":\"Color\",\"value\":{\"r\":1,\"g\":1,\"b\":1,\"a\":1},\"flags\":[]},{\"name\":\"_MainTex\",\"type\":\"Texture\",\"value\":{\"assetGuid\":\"cbb65e...\",\"assetPath\":\"Assets/Textures/hair.tga\",\"assetType\":\"UnityEngine.Texture2D\"},\"flags\":[]}]}")]
+        private void Get(UnionAirRequestContext ctx)
+            => new MaterialReadHandler().Handle(ctx.Response, ctx.RouteValues["guid"]);
+
         [UnionAirEndpoint("POST", "",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,

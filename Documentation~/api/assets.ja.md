@@ -330,6 +330,81 @@ GUID で指定したアセットの詳細情報を返します。
 
 ---
 
+## GET /api/assets/materials/{guid}
+
+マテリアルのシェーダー、レンダーキュー、有効なキーワード、およびシェーダーが宣言する全プロパティの現在値を返します。
+
+> Read カテゴリが必要です(既定で有効)。
+
+### パスパラメータ
+
+| パラメータ | 説明 |
+|-----------|------|
+| `guid` | 対象マテリアルアセットの GUID |
+
+### レスポンス
+
+```json
+{
+  "guid": "5ebb6c...",
+  "assetPath": "Assets/Materials/Hair.mat",
+  "shader": "Toon/Toon",
+  "renderQueue": 2000,
+  "keywords": ["_EMISSIVE_SIMPLE", "_IS_CLIPPING_OFF"],
+  "properties": [
+    { "name": "_BaseColor", "type": "Color", "value": { "r": 1, "g": 1, "b": 1, "a": 1 }, "flags": [] },
+    { "name": "_BumpScale", "type": "Range", "value": 1.0, "range": { "min": 0, "max": 1 }, "flags": [] },
+    {
+      "name": "_MainTex",
+      "type": "Texture",
+      "value": { "assetGuid": "cbb65e...", "assetPath": "Assets/Textures/hair.tga", "assetType": "UnityEngine.Texture2D" },
+      "flags": []
+    },
+    { "name": "_ToonMaterialVersion", "type": "Int", "value": 0, "flags": ["HideInInspector"] }
+  ]
+}
+```
+
+| フィールド | 説明 |
+|-----------|------|
+| `shader` | シェーダー名。`POST /api/assets/materials` が受け取るのと同じ文字列なので、マテリアルを作り直せます |
+| `renderQueue` | `Material.renderQueue`。読み取り専用です |
+| `keywords` | 有効なシェーダーキーワード。読み取り専用です |
+| `properties[].name` | シェーダープロパティ名。`PATCH /api/assets/materials` が受け付けるキーです |
+| `properties[].type` | `Color`、`Float`、`Range`、`Int`、`Vector`、`Texture` のいずれか |
+| `properties[].value` | 現在値。書き込みが読む綴りで返ります |
+| `properties[].range` | `{min, max}`。`Range` プロパティにのみ存在します |
+| `properties[].flags` | Unity のシェーダープロパティフラグ名(`HideInInspector`、`Normal`、`Gamma`、`PerRendererData` など) |
+
+プロパティはシェーダーが宣言した順に並び、非表示のものも含めてすべて報告されます。シェーダーによっては200個以上を宣言します。マテリアルの実質的な表面と内部的な設定を見分けるための手がかりが `flags` です。
+
+### 値は書き込みが読む綴りで返ります
+
+`value` はいずれも変換なしにそのまま [`PATCH /api/assets/materials`](#patch-apiassetsmaterials) へ送り返せます。読み取り → 1つの値を変更 → 書き戻し、というラウンドトリップが成立します。
+
+| シェーダープロパティ型 | 報告形式 |
+|---|---|
+| `Color` | `{"r":float,"g":float,"b":float,"a":float}` |
+| `Float`、`Range` | `float` |
+| `Int` | `int` |
+| `Vector` | `{"x":float,"y":float,"z":float,"w":float}` |
+| `Texture` | [オブジェクト参照](general.ja.md#オブジェクト参照)、未割り当ての場合は `null`(書き込み側でテクスチャを解除する際に使う値と同じ) |
+
+ここで `properties` が配列なのは、`type`・`range`・`flags` を名前→値のマップに収める場所がないためです。そしてこれらは Unity にしか答えられない部分です(`.mat` ファイルが持つのは Unity が記録したオーバーライドであり、プロパティの集合や型ではありません)。書き込み側はマップを受け取り、この配列の `name` はいずれもそのキーになります。
+
+ラウンドトリップしないフィールドは `renderQueue` と `keywords` の2つです。他のマテリアルのプロパティ値から組み立てたマテリアルが同じ見た目にならない原因は、たいていこの2つであるため報告しています。これらの書き込みは、このエンドポイントの対となる書き込み API の対象外です。
+
+テクスチャのスケールとオフセットは報告しません。これらは独立したシェーダープロパティではなく、書き込み側にも対応する語彙がないためです。
+
+### エラー
+
+| ステータス | 原因 |
+|-----------|------|
+| 400 | `guid` が空、またはアセットがマテリアルでない |
+| 404 | GUID に対応するアセットが存在しない |
+
+---
+
 ## PATCH /api/assets/materials
 
 マテリアルのプロパティを更新します。
