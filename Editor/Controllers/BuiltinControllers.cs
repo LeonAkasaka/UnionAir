@@ -613,10 +613,10 @@ namespace LeonAkasaka.UnionAir.Editor
         [UnionAirEndpoint("PATCH", "",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,
-            Summary = "Updates material properties. 'properties' keys are shader property names (e.g. _Color, _Metallic). Color: {r,g,b,a}; Float/Range: number; Texture: {guid}; Vector: {x,y,z,w}.",
+            Summary = "Updates material properties. 'properties' keys are shader property names (e.g. _Color, _Metallic). Color: {r,g,b,a}; Float/Range: number; Int: integer; Vector: {x,y,z,w}; Texture: an object reference with assetGuid or assetPath, or null. A key naming no shader property answers 400.",
             RequiredQuery = new string[] { "guid" },
             RequiredBody = new string[] { "properties" },
-            RequestExample = "{\"properties\":{\"_Color\":{\"r\":1.0,\"g\":0.2,\"b\":0.2,\"a\":1.0},\"_Metallic\":0.0,\"_Glossiness\":0.5,\"_MainTex\":{\"guid\":\"a1b2c3d4e5f67890a1b2c3d4e5f67890\"}}}",
+            RequestExample = "{\"properties\":{\"_Color\":{\"r\":1.0,\"g\":0.2,\"b\":0.2,\"a\":1.0},\"_Metallic\":0.0,\"_Glossiness\":0.5,\"_MainTex\":{\"assetGuid\":\"a1b2c3d4e5f67890a1b2c3d4e5f67890\"}}}",
             ResponseExample = "{\"updated\":[\"_Color\",\"_Metallic\",\"_Glossiness\",\"_MainTex\"]}")]
         private void Update(UnionAirRequestContext ctx)
             => new MaterialWriteHandler().Handle(ctx.Request, ctx.Response);
