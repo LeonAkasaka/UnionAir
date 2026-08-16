@@ -491,5 +491,32 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             StringAssert.Contains("\"added\":[\"m_Intensity\"]", response.Body);
             StringAssert.Contains("Unknown type: NoSuchType", response.Body);
         }
+
+        [Test]
+        public void TheImportedClipRefusalNamesTheEndpointThatDoesTheJob()
+        {
+            // The refusal has to send the caller somewhere, and where it sent them went stale
+            // inside a single release: it said the importer was not exposed, which stopped
+            // being true when GET|PATCH /api/assets/model-importer/{guid} landed a week later.
+            // Nothing held the message to the package's own surface, so nothing caught it.
+            var message = AnimationClipOwnership.RefusalMessage(
+                "Assets/Characters/Idle.fbx", nameof(ModelImporter));
+
+            StringAssert.Contains("Assets/Characters/Idle.fbx", message);
+            StringAssert.Contains("/api/assets/model-importer/", message);
+            StringAssert.Contains("clips array", message);
+            Assert.IsFalse(
+                message.Contains("does not expose"),
+                "the refusal must not deny a capability this package ships: " + message);
+
+            // The message tells the caller to change something, so it has to name the field
+            // the PATCH body carries -- the top-level `clips` array. `settings.clips` is where
+            // the GET reports the definitions, and a caller who built a body around that path
+            // would be refused. The two directions genuinely differ, so naming the read one
+            // here is a specific wrong answer rather than an imprecise right one.
+            Assert.IsFalse(
+                message.Contains("settings.clips"),
+                "the refusal must name the write field, not the read path: " + message);
+        }
     }
 }
