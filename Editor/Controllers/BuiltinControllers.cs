@@ -631,6 +631,25 @@ namespace LeonAkasaka.UnionAir.Editor
             => new MaterialWriteHandler().Handle(ctx.Request, ctx.Response);
     }
 
+    [UnionAirController("assets/shaders")]
+    internal sealed class ShadersController
+    {
+        [UnionAirEndpoint("GET", "{guid}",
+            Category = UnionAirEndpointCategories.Read,
+            Summary = "Returns a shader's import state, cached compiler messages, its effective local keyword space, declared properties with their defaults, and the subshaders Unity compiled. 'hasError' and 'messages' answer whether Unity accepted the last import, which reading the .shader file cannot. Messages are the ones cached at import time, so reimport the asset before reading again. 'isSupported' is Unity's capability signal — whether the shader runs on the current GPU, fallbacks considered — and says nothing about whether the import succeeded. 'keywords' is the effective space and includes keywords from Fallback/UsePass dependencies and keywords Unity adds, not only the shader's own declarations. 'subshaders' is what Unity compiled, which is the Fallback's when the shader's own subshaders are unusable. Every structural field is null only when the ShaderLab parse failed before the shader's name was read, because nothing then came from the file.",
+            PathParams = new string[] { "guid" },
+            ResponseExample = "{\"guid\":\"5ebb6c...\",\"assetPath\":\"Assets/Shaders/Toon.shader\",\"name\":\"Toon/Toon\",\"isSupported\":true,\"hasError\":false,\"hasWarnings\":false,\"messages\":[],\"renderQueue\":2000,\"maximumLOD\":-1,\"subshaderCount\":1,\"passCount\":2,\"keywords\":[{\"name\":\"_ALPHATEST_ON\",\"isOverridable\":false,\"isDynamic\":false}],\"properties\":[{\"name\":\"_BaseColor\",\"type\":\"Color\",\"description\":\"Base Color\",\"defaultValue\":{\"r\":1,\"g\":1,\"b\":1,\"a\":1},\"flags\":[\"MainColor\"],\"attributes\":[]},{\"name\":\"_AlphaClip\",\"type\":\"Float\",\"description\":\"Alpha Clipping\",\"defaultValue\":0,\"flags\":[],\"attributes\":[\"Toggle(_ALPHATEST_ON)\"]},{\"name\":\"_MainTex\",\"type\":\"Texture\",\"description\":\"Base Map\",\"defaultValue\":\"white\",\"textureDimension\":\"Tex2D\",\"flags\":[\"MainTexture\"],\"attributes\":[]}],\"activeSubshaderIndex\":0,\"subshaders\":[{\"levelOfDetail\":300,\"passes\":[{\"name\":\"ForwardLit\",\"lightMode\":\"UniversalForward\",\"isGrabPass\":false}]}]}")]
+        private void Get(UnionAirRequestContext ctx)
+            => new ShaderReadHandler().HandleByGuid(ctx.Response, ctx.RouteValues["guid"]);
+
+        [UnionAirEndpoint("GET", "",
+            Category = UnionAirEndpointCategories.Read,
+            Summary = "Returns the same report for the shader with a given name — the string GET /api/assets/materials/{guid} reports and POST /api/assets/materials takes — so a shader can be inspected before a material is created from it. Answers 404 when no shader carries the name, which is also when creating a material from it would fail.",
+            RequiredQuery = new string[] { "name" })]
+        private void GetByName(UnionAirRequestContext ctx)
+            => new ShaderReadHandler().HandleByName(ctx.Request, ctx.Response);
+    }
+
     [UnionAirController("search")]
     internal sealed class SearchController
     {
