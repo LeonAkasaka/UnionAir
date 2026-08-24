@@ -27,6 +27,8 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         private const string ShaderPath = Dir + "/Read.shader";
         private const string BrokenShaderPath = Dir + "/Broken.shader";
         private const string PartlyBrokenShaderPath = Dir + "/PartlyBroken.shader";
+        private const string UnsupportedShaderPath = Dir + "/Unsupported.shader";
+        private const string FallbackShaderPath = Dir + "/UnsupportedWithFallback.shader";
         private const string TexturePath = Dir + "/Test.png";
 
         private const string ShaderName = "UnionAir/ReadTest";
@@ -117,6 +119,65 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             ENDCG
         }
     }
+}
+";
+
+        // Imports without a single error and still reports isSupported false, because its only
+        // pass is excluded for every renderer an editor runs on. This is the case that separates
+        // "can this shader be used here" from "did Unity read this file", and the reason the
+        // structure is not suppressed by isSupported.
+        private const string UnsupportedSource = @"Shader ""UnionAir/UnsupportedReadTest""
+{
+    Properties
+    {
+        _Color (""Tint"", Color) = (1, 0.5, 0.25, 1)
+    }
+    SubShader
+    {
+        Tags { ""RenderType"" = ""Opaque"" }
+        LOD 250
+        Pass
+        {
+            Name ""ExcludedPass""
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma exclude_renderers d3d11 d3d11_9x glcore gles3 vulkan metal xboxone ps4 switch
+            #include ""UnityCG.cginc""
+            float4 vert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+            fixed4 frag () : SV_Target { return fixed4(1, 1, 1, 1); }
+            ENDCG
+        }
+    }
+}
+";
+
+        // The same shader given a Fallback, which makes isSupported true while the subshaders
+        // reported become the fallback's rather than this file's.
+        private const string FallbackSource = @"Shader ""UnionAir/FallbackReadTest""
+{
+    Properties
+    {
+        _Color (""Tint"", Color) = (1, 0.5, 0.25, 1)
+    }
+    SubShader
+    {
+        Tags { ""RenderType"" = ""Opaque"" }
+        LOD 250
+        Pass
+        {
+            Name ""ExcludedPass""
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma exclude_renderers d3d11 d3d11_9x glcore gles3 vulkan metal xboxone ps4 switch
+            #include ""UnityCG.cginc""
+            float4 vert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+            fixed4 frag () : SV_Target { return fixed4(1, 1, 1, 1); }
+            ENDCG
+        }
+    }
+    Fallback ""Diffuse""
 }
 ";
 
@@ -231,11 +292,16 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
-        public void Read_ReportsTheKeywordsTheShaderDeclares()
+        public void Read_ReportsTheEffectiveKeywordSpaceAndNotOnlyTheDeclarations()
         {
             // A material only stores the keywords it has enabled, so the valid set is reachable
-            // only from the shader. The fixture declares one through multi_compile.
-            StringAssert.Contains("\"name\":\"UNIONAIR_TEST_ON\"", Read());
+            // only from the shader. What Unity exposes is the effective local keyword space, which
+            // is wider than the file: the fixture declares exactly one keyword through
+            // multi_compile and the space also carries keywords Unity adds by itself. A client
+            // must not read a name here as evidence that it appears in the source.
+            var body = Read();
+            StringAssert.Contains("\"name\":\"UNIONAIR_TEST_ON\"", body);
+            StringAssert.Contains("\"name\":\"STEREO_INSTANCING_ON\"", body);
         }
 
         [Test]
@@ -309,6 +375,56 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
                 response.Body.Contains("\"subshaders\":null"),
                 "the structure of a working shader was suppressed: " + response.Body);
             StringAssert.Contains("\"name\":\"GoodPass\"", response.Body);
+        }
+
+        [Test]
+        public void AShaderUnityCannotRunHereStillReportsWhatItDeclares()
+        {
+            // isSupported is Unity's capability signal -- whether the shader runs on this GPU, with
+            // fallbacks considered -- and not a statement about the import. This shader has no
+            // errors at all; suppressing its structure on isSupported would discard a correct
+            // declaration, which is what this endpoint exists to report.
+            LogAssert.ignoreFailingMessages = true;
+            Import(UnsupportedShaderPath, UnsupportedSource);
+
+            var response = ReadResponse(AssetDatabase.AssetPathToGUID(UnsupportedShaderPath));
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+
+            StringAssert.Contains("\"isSupported\":false", response.Body);
+            StringAssert.Contains("\"hasError\":false", response.Body);
+            StringAssert.Contains("\"name\":\"UnionAir/UnsupportedReadTest\"", response.Body);
+
+            Assert.IsFalse(
+                response.Body.Contains("\"properties\":null"),
+                "a shader with no errors had its declaration discarded: " + response.Body);
+            StringAssert.Contains("\"name\":\"_Color\"", response.Body);
+            StringAssert.Contains("\"defaultValue\":{\"r\":1,\"g\":0.5,\"b\":0.25,\"a\":1}", response.Body);
+        }
+
+        [Test]
+        public void SubshadersAreWhatUnityCompiled_WhichCanBeTheFallbacks()
+        {
+            // The other half of why isSupported cannot gate the structure: with a Fallback the
+            // shader reports isSupported true, and the subshaders reported are the fallback's.
+            // Measured on 6000.0.80f1, this shader reports the same two subshaders and four passes
+            // as Legacy Shaders/Diffuse, while its properties stay its own. The endpoint does not
+            // pretend to detect the substitution; the reference documents it.
+            LogAssert.ignoreFailingMessages = true;
+            Import(FallbackShaderPath, FallbackSource);
+
+            var response = ReadResponse(AssetDatabase.AssetPathToGUID(FallbackShaderPath));
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+
+            StringAssert.Contains("\"isSupported\":true", response.Body);
+            Assert.IsFalse(response.Body.Contains("\"subshaders\":null"), response.Body);
+
+            // The declaration survives even though the compiled structure did not.
+            StringAssert.Contains("\"name\":\"_Color\"", response.Body);
+
+            // The pass this file declares is gone, replaced by the fallback's.
+            Assert.IsFalse(
+                response.Body.Contains("\"name\":\"ExcludedPass\""),
+                "expected the fallback's passes, not this shader's: " + response.Body);
         }
 
         [Test]

@@ -94,9 +94,11 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"assetPath\":{RestResponse.FormatNullableString(NullIfEmpty(assetPath))},");
             sb.Append($"\"name\":{RestResponse.FormatNullableString(NullIfEmpty(shader.name))},");
 
-            // Whether the object Unity holds is the client's shader at all. False when the import
-            // failed and Unity substituted its error shader, and false when the shader imported but
-            // no subshader survives for this platform and pipeline.
+            // Unity's own capability signal: whether this shader can run on the current GPU, with
+            // fallbacks taken into account. It says nothing about whether the import succeeded and
+            // nothing about whose declaration the structure below describes — measured on
+            // 6000.0.80f1, a shader with no errors at all reports false when its only subshader is
+            // excluded for the current renderer, and the same shader with a Fallback reports true.
             sb.Append($"\"isSupported\":{RestResponse.FormatBool(shader.isSupported)},");
 
             // Before the structure, because when the structure is absent this is the answer.
@@ -108,29 +110,34 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// Everything that describes the shader itself rather than its import, or nulls when the
-        /// object Unity holds is not the client's shader.
+        /// Everything that describes the shader itself rather than its import, or nulls when Unity
+        /// read nothing from the file.
         /// </summary>
         /// <remarks>
-        /// Measured on 6000.0.80f1 against a shader with one property and one pass that Unity
-        /// rejected with a ShaderLab parse error: <c>name</c> read <c>""</c>, <c>properties</c> read
-        /// empty, <c>keywords</c> listed four stereo keywords the shader never declared, and
-        /// <c>passCount</c> read 3. Every one of those describes Unity's error shader. Reporting
-        /// them would be handing a client a shader it did not write and no way to tell — a client
-        /// building a material from <c>properties</c> would build one with no properties and never
-        /// learn why. They are reported as <c>null</c> together, under one rule, so that a client
-        /// checks <c>isSupported</c> once rather than learning which fields happen to lie.
+        /// The only case this suppresses is the one where there is nothing to report. Measured on
+        /// 6000.0.80f1 against a shader with one property and one pass that Unity rejected with a
+        /// ShaderLab parse error: <c>name</c> read <c>""</c>, <c>properties</c> read empty,
+        /// <c>keywords</c> listed four stereo keywords the shader never declared, and
+        /// <c>passCount</c> read 3 against the one pass in the file. The parse failed before the
+        /// name was read, so none of that came from the file, and a client building a material from
+        /// <c>properties</c> would build one with no properties and never learn why. An empty name
+        /// on a shader carrying an error is what that state looks like, and it is the whole test.
         ///
-        /// The rule is <c>isSupported</c> and deliberately not <c>hasError</c>. A shader can carry
-        /// errors and still be the shader Unity uses: measured against a shader whose first
-        /// subshader fails to compile and whose second does not, <c>hasError</c> is true while
-        /// <c>isSupported</c> is true and Unity selects the working subshader. Keying off
-        /// <c>hasError</c> would hide the structure of a shader that is working, which is the case a
-        /// client most needs described.
+        /// It is deliberately not <c>isSupported</c>, which is a capability signal and not a
+        /// provenance one. Measured on 6000.0.80f1: a shader with no errors whose only subshader is
+        /// excluded for the current renderer reports <c>isSupported</c> false while its properties
+        /// and passes are perfectly readable, so suppressing on it discards a correct declaration;
+        /// and the same shader given a <c>Fallback</c> reports <c>isSupported</c> true while its
+        /// subshaders become the fallback's, so a true value does not establish provenance either.
+        ///
+        /// It is also not <c>hasError</c>. A shader can carry errors and still be the shader Unity
+        /// draws with: measured against a shader whose first subshader fails to compile and whose
+        /// second does not, <c>hasError</c> is true, <c>isSupported</c> is true, and Unity selects
+        /// the working subshader.
         /// </remarks>
         private static void AppendStructure(StringBuilder sb, Shader shader)
         {
-            if (!shader.isSupported)
+            if (WasNotRead(shader))
             {
                 sb.Append("\"renderQueue\":null,\"maximumLOD\":null,\"subshaderCount\":null,");
                 sb.Append("\"passCount\":null,\"keywords\":null,\"properties\":null,");
@@ -179,12 +186,21 @@ namespace LeonAkasaka.UnionAir.Editor
         }
 
         /// <summary>
-        /// The shader's local keyword space — every keyword it declares, enabled or not.
+        /// The shader's effective local keyword space: every keyword valid on it, enabled or not.
         /// </summary>
         /// <remarks>
         /// <c>GET /api/assets/materials/{guid}</c> reports the keywords a material has enabled and
         /// cannot report the ones it could enable, because a material only stores the set that is
         /// on. The valid set belongs to the shader.
+        ///
+        /// "Effective" rather than "declared", and the distinction is not pedantic: the space also
+        /// carries keywords from dependencies reached through <c>Fallback</c> and <c>UsePass</c>,
+        /// and keywords Unity adds by itself. Measured on 6000.0.80f1, a shader whose source
+        /// declares exactly one keyword through <c>multi_compile</c> reports five — the four extra
+        /// being <c>STEREO_INSTANCING_ON</c>, <c>UNITY_SINGLE_PASS_STEREO</c>,
+        /// <c>STEREO_MULTIVIEW_ON</c> and <c>STEREO_CUBEMAP_RENDER_ON</c>, none of which appear in
+        /// the file. A client must not read this as the shader's own declarations, and the
+        /// reference says so.
         /// </remarks>
         private static void AppendKeywords(StringBuilder sb, Shader shader)
         {
@@ -306,8 +322,16 @@ namespace LeonAkasaka.UnionAir.Editor
         /// lists its subshaders, but which one survives the current render pipeline and platform is
         /// decided during import and appears nowhere on disk. It is reported for a shader carrying
         /// errors as readily as for a clean one, because a shader with a failing subshader and a
-        /// working one is still a shader Unity draws with — see <see cref="AppendStructure"/> for
-        /// the case where none of this describes the client's shader at all.
+        /// working one is still a shader Unity draws with.
+        ///
+        /// This is what Unity compiled, which is not always what the file declares. When a shader's
+        /// own subshaders are unusable and it names a <c>Fallback</c>, the fallback's subshaders are
+        /// what appear here: measured on 6000.0.80f1, a shader declaring one subshader with one pass
+        /// named <c>ExcludedPass</c>, excluded for the current renderer and falling back to
+        /// <c>Diffuse</c>, reports two subshaders and four passes — <c>FORWARD</c>, <c>FORWARD</c>,
+        /// <c>DEFERRED</c>, <c>Meta</c> — which is exactly what reading <c>Legacy Shaders/Diffuse</c>
+        /// reports. The reference says so rather than the endpoint pretending to detect it;
+        /// <c>properties</c> in that same response stayed the client's.
         /// </remarks>
         private static void AppendSubshaders(StringBuilder sb, Shader shader)
         {
@@ -340,6 +364,18 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             sb.Append("]");
         }
+
+        /// <summary>
+        /// Whether Unity got nothing out of the file: the ShaderLab parse failed before even the
+        /// shader's name was read, so every structural field describes an internal substitute.
+        /// </summary>
+        /// <remarks>
+        /// A shader that parses always has a name — ShaderLab requires one — so an empty name on a
+        /// shader carrying an error identifies this state and nothing else. The error is required
+        /// alongside it so that the check cannot be met by any shader Unity accepted.
+        /// </remarks>
+        private static bool WasNotRead(Shader shader)
+            => ShaderUtil.ShaderHasError(shader) && string.IsNullOrEmpty(shader.name);
 
         /// <summary>
         /// Reports "absent" as JSON null rather than as an empty string. Unity spells absence both

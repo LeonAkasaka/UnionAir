@@ -532,13 +532,13 @@ GUID で指定したアセットの詳細情報を返します。
 | フィールド | 説明 |
 |-----------|------|
 | `guid`, `assetPath` | シェーダーのインポート元アセット。Unity 内蔵シェーダーの場合は共有の内蔵リソースコンテナが返ります(`Standard` なら `Resources/unity_builtin_extra` と、全内蔵アセットが共有する GUID)。したがってその `guid` は識別子として使えず、送り返しても `400` になります。そうしたシェーダーには名前による検索で到達してください |
-| `name` | シェーダー名。`POST /api/assets/materials` が受け取り、`GET /api/assets/materials/{guid}` が報告するのと同じ文字列です。Unity が拒否したシェーダーは使える名前を持たないため `null` になります |
-| `isSupported` | Unity が保持しているオブジェクトがそもそもクライアントのシェーダーかどうか。インポートに失敗して Unity がエラーシェーダーに差し替えた場合も、インポートは通ったが現在のプラットフォーム/パイプラインで生き残るサブシェーダーがない場合も `false` です。構造的フィールドを報告するかどうかはこの値で決まります — [書いたシェーダーではない場合](#書いたシェーダーではない場合) を参照 |
+| `name` | シェーダー名。`POST /api/assets/materials` が受け取り、`GET /api/assets/materials/{guid}` が報告するのと同じ文字列です。ShaderLab のパースが名前を読む前に失敗した場合にのみ `null` になります |
+| `isSupported` | Unity の能力シグナル。現在の GPU でこのシェーダーが動作するか(フォールバックを含めて判定)を表します。インポートの成否を表すものでは**なく**、以下のフィールドが誰の宣言を記述しているかを表すものでも**ありません** — [`isSupported` が言えること・言えないこと](#issupported-が言えること言えないこと) を参照 |
 | `renderQueue` | シェーダーが宣言するキュー。マテリアル側で上書きできます |
 | `maximumLOD` | `Shader.maximumLOD`。キャップを設定していない場合は `-1` で、こちらが通常のケースです |
 | `hasError`, `hasWarnings` | 直近のインポートで Unity がエラー/警告を記録したかどうか。`hasError` は「そのシェーダーが使用不能」を意味**しません**。`isSupported` を参照してください |
 | `messages[]` | インポート時に Unity がキャッシュしたコンパイラメッセージ。[診断は直近のインポート由来](#診断は直近のインポート由来) を参照 |
-| `keywords[]` | シェーダーが宣言する全キーワード(有効・無効を問わない)。`isOverridable` と `isDynamic` を伴います |
+| `keywords[]` | シェーダーの**実効ローカルキーワード空間** — そのシェーダーで有効なキーワード全件(有効・無効を問わない)。`isOverridable` と `isDynamic` を伴います。ソースより広く、`Fallback` や `UsePass` の依存先から来るキーワードや、Unity が自動的に追加するキーワードも含みます。6000.0.80f1 で実測したところ、`multi_compile` でちょうど1件だけ宣言したシェーダーが5件を報告し、残り4件は `STEREO_INSTANCING_ON`、`UNITY_SINGLE_PASS_STEREO`、`STEREO_MULTIVIEW_ON`、`STEREO_CUBEMAP_RENDER_ON` でした。ここに名前があることは、それがファイルに書かれている根拠には**なりません** |
 | `properties[]` | 宣言された全プロパティ。宣言順で、非表示のものも含みます |
 | `properties[].type` | `Color`、`Float`、`Range`、`Int`、`Vector`、`Texture` のいずれか |
 | `properties[].description` | Inspector に表示されるラベル。宣言にない場合は `null` |
@@ -548,7 +548,7 @@ GUID で指定したアセットの詳細情報を返します。
 | `properties[].flags` | Unity のシェーダープロパティフラグ名。`GET /api/assets/materials/{guid}` が返すものと同じ集合です。Unity は一部の宣言属性をフラグに変換します。`[HideInInspector]`、`[MainTexture]`、`[MainColor]`、`[HDR]`、`[NoScaleOffset]` は `attributes` ではなくこちらに現れます |
 | `properties[].attributes` | Unity がフラグに変換しなかった宣言属性を、引数を含めてそのまま返します(`Toggle(_ALPHATEST_ON)`、`KeywordEnum(...)`、カスタムドローワー名など)。特に `Toggle` は、そのプロパティがどのキーワードを駆動するかを示す唯一の手がかりです(フラグには現れません) |
 | `activeSubshaderIndex` | 現在のプラットフォームとパイプラインに対して Unity が選択したサブシェーダー |
-| `subshaders[]` | コンパイル済みサブシェーダーとそのパス。パスの `name` は名前が付いていない場合 `null`、`lightMode` はパスの `LightMode` タグで、宣言がない場合は `null` |
+| `subshaders[]` | Unity が**コンパイルした**サブシェーダー。ファイルの宣言と一致するとは限りません — シェーダー自身のサブシェーダーが使用不能で `Fallback` を指定している場合、ここに現れるのはフォールバック先のものです。パスの `name` は名前が付いていない場合 `null`、`lightMode` はパスの `LightMode` タグで、宣言がない場合は `null` |
 
 ### ファイルからは分からないこと
 
@@ -572,13 +572,26 @@ GUID で指定したアセットの詳細情報を返します。
 | `line` | そのファイル内の行番号。メッセージが行を持たない場合は `0` |
 | `platform` | メッセージの発生元グラフィックス API。同じ編集が API によってエラーになったりならなかったりする理由です。API が関与しないメッセージでは `null` — ShaderLab のパースエラーは API に到達する前に発生し、Unity は未定義のプラットフォーム値を報告します |
 
-### 書いたシェーダーではない場合
+### Unity がファイルから何も読めなかった場合
 
-Unity が拒否したシェーダーは Unity のエラーシェーダーに差し替えられ、このエンドポイントが読むのはその差し替え後のオブジェクトです。6000.0.80f1 で、プロパティ1個・パス1個を宣言して ShaderLab パースエラーで失敗したシェーダーを実測したところ、構造的フィールドはすべてファイルではなく差し替え後を記述していました。`name` は `""`、`properties` は空、`keywords` にはシェーダーが宣言していない stereo 系キーワードが4件、`passCount` は `3` でした。いずれも正常な回答と区別がつかず、`properties` からマテリアルを組み立てるクライアントはプロパティのないマテリアルを作り、その理由を知ることもありません。
+構造的フィールドが `null` になるのは1つのケースだけです。ShaderLab のパースがシェーダー名を読む前に失敗し、レスポンスのどの値もファイル由来ではあり得ない場合です。6000.0.80f1 で、プロパティ1個・パス1個を宣言してその形で失敗したシェーダーを実測したところ、`name` は `""`、`properties` は空、`keywords` にはシェーダーが宣言していない stereo 系キーワードが4件、`passCount` はファイル上の1パスに対して `3` でした。いずれも正常な回答と区別がつかず、`properties` からマテリアルを組み立てるクライアントはプロパティのないマテリアルを作り、その理由を知ることもありません。
 
-そのため `isSupported` が `false` のときは、構造的フィールドをまとめて `null` にします — `renderQueue`、`maximumLOD`、`subshaderCount`、`passCount`、`keywords`、`properties`、`activeSubshaderIndex`、`subshaders`。代わりに `messages` が答えになります。`guid`、`assetPath`、`isSupported`、`hasError`、`hasWarnings`、`messages` は常に報告されます。規則を1つにしてあるので、クライアントは `isSupported` を1回確認すればよく、「どのフィールドが嘘をつくか」を覚える必要はありません。
+そのため、このときは `renderQueue`、`maximumLOD`、`subshaderCount`、`passCount`、`keywords`、`properties`、`activeSubshaderIndex`、`subshaders` をまとめて `null` にし、代わりに `messages` が答えになります。`guid`、`assetPath`、`isSupported`、`hasError`、`hasWarnings`、`messages` は常に報告されます。
 
-**その規則は `hasError` ではありません。** シェーダーはエラーを抱えたまま Unity が描画に使うシェーダーであり続けられます。6000.0.80f1 で、1つ目のサブシェーダーがコンパイルに失敗し2つ目が成功するシェーダーを実測すると、`hasError` は `true` で `isSupported` も `true` になり、Unity は成功したサブシェーダーを選択し、構造は通常どおり報告されます。「自分の編集はクリーンにコンパイルされたか」を知りたいクライアントは `hasError` を、「このシェーダーは使えるか」を知りたいクライアントは `isSupported` を読んでください。
+この条件は意図的に狭くしてあります。それ以外のシェーダー — コンパイルに失敗したものも、この環境では動作しないものも — は宣言内容を報告します。
+
+### `isSupported` が言えること・言えないこと
+
+`isSupported` は [Unity 自身の能力シグナル](https://docs.unity3d.com/ja/2022.3/ScriptReference/Shader-isSupported.html)で、フォールバックを含めて現在の GPU でそのシェーダーが動作するかを表します。それ以上の意味に読めない理由は、6000.0.80f1 での2つの実測が示しています。
+
+| シェーダー | `hasError` | `isSupported` | フィールドが記述しているもの |
+| --- | --- | --- | --- |
+| 正常だが、唯一のパスが現在のレンダラーで除外されている | `false` | **`false`** | 自身の宣言。`properties` も `name` も正しい |
+| 同じシェーダーに `Fallback "Diffuse"` を付けたもの | `false` | **`true`** | `properties` は自身のものだが、`subshaders` は `Legacy Shaders/Diffuse` のもの — サブシェーダー2件・パス4件で、そのシェーダーを直接読んだ結果と一致 |
+
+したがって `false` はインポート失敗を意味せず、`true` は `subshaders` が自分の書いたファイルのものである保証にもなりません。`isSupported` は「この環境でこのシェーダーが使えるか」、`hasError` は「自分の編集がクリーンにコンパイルされたか」として読み、どちらも出所の主張としては読まないでください。
+
+`hasError` も使用可否のシグナルではありません。1つ目のサブシェーダーがコンパイルに失敗し2つ目が成功するシェーダーを実測すると、`hasError` は `true` で `isSupported` も `true` になり、Unity は成功したサブシェーダーを選択します。
 
 ### エラー
 

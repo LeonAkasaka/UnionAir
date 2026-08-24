@@ -530,13 +530,13 @@ Returns a shader's import state, cached compiler messages, declared keywords, de
 | Field | Description |
 |-------|-------------|
 | `guid`, `assetPath` | The asset the shader was imported from. A shader Unity built into the editor reports the shared built-in resource container instead — `Standard` reports `Resources/unity_builtin_extra` and the GUID every built-in asset shares — so its `guid` is not an identity and reading it back answers `400`. The lookup by name is how such a shader is reached |
-| `name` | The shader's name — the string `POST /api/assets/materials` takes and `GET /api/assets/materials/{guid}` reports. `null` for a shader Unity rejected, which has no usable name |
-| `isSupported` | Whether the object Unity holds is the client's shader at all. `false` when the import failed and Unity substituted its error shader, and `false` when the shader imported but no subshader survives for this platform and pipeline. It decides whether the structural fields are reported — see [When the shader is not the one you wrote](#when-the-shader-is-not-the-one-you-wrote) |
+| `name` | The shader's name — the string `POST /api/assets/materials` takes and `GET /api/assets/materials/{guid}` reports. `null` only when the ShaderLab parse failed before the name was read |
+| `isSupported` | Unity's capability signal: whether this shader can run on the current GPU, with fallbacks taken into account. It is **not** a statement about the import and **not** a statement about whose declaration the fields below describe — see [What `isSupported` does and does not tell you](#what-issupported-does-and-does-not-tell-you) |
 | `renderQueue` | The queue declared by the shader, which a material can override |
 | `maximumLOD` | `Shader.maximumLOD`. `-1` when the shader sets no cap, which is the ordinary case |
 | `hasError`, `hasWarnings` | Whether Unity recorded errors or warnings for the last import. `hasError` does **not** mean the shader is unusable; see `isSupported` |
 | `messages[]` | The compiler messages Unity cached at import. See [Diagnostics come from the last import](#diagnostics-come-from-the-last-import) |
-| `keywords[]` | Every keyword the shader declares, enabled or not, with `isOverridable` and `isDynamic` |
+| `keywords[]` | The shader's **effective local keyword space** — every keyword valid on it, enabled or not, with `isOverridable` and `isDynamic`. Wider than the source: it also carries keywords reached through `Fallback` and `UsePass` dependencies, and keywords Unity adds by itself. Measured on 6000.0.80f1, a shader declaring exactly one keyword through `multi_compile` reports five, the other four being `STEREO_INSTANCING_ON`, `UNITY_SINGLE_PASS_STEREO`, `STEREO_MULTIVIEW_ON` and `STEREO_CUBEMAP_RENDER_ON`. A name appearing here is **not** evidence that it appears in the file |
 | `properties[]` | Every declared property, in declaration order, hidden ones included |
 | `properties[].type` | `Color`, `Float`, `Range`, `Int`, `Vector`, or `Texture` |
 | `properties[].description` | The Inspector label, or `null` when the declaration carries none |
@@ -546,7 +546,7 @@ Returns a shader's import state, cached compiler messages, declared keywords, de
 | `properties[].flags` | Unity's shader property flag names, the same set `GET /api/assets/materials/{guid}` reports. Unity turns some declaration attributes into flags: `[HideInInspector]`, `[MainTexture]`, `[MainColor]`, `[HDR]`, and `[NoScaleOffset]` all arrive here rather than in `attributes` |
 | `properties[].attributes` | The declaration attributes Unity did not turn into a flag, verbatim and with their arguments — `Toggle(_ALPHATEST_ON)`, `KeywordEnum(...)`, a custom drawer's name. `Toggle` is the one worth reading: it names the keyword a property drives, which no flag reports |
 | `activeSubshaderIndex` | Which subshader Unity selected for the current platform and pipeline |
-| `subshaders[]` | The compiled subshaders and their passes. A pass's `name` is `null` when the shader did not name it, and `lightMode` is its `LightMode` tag, or `null` when it declares none |
+| `subshaders[]` | The subshaders Unity **compiled**, which is not always what the file declares — when a shader's own subshaders are unusable and it names a `Fallback`, these are the fallback's. A pass's `name` is `null` when the shader did not name it, and `lightMode` is its `LightMode` tag, or `null` when it declares none |
 
 ### What this answers that the file does not
 
@@ -570,13 +570,26 @@ Each message keeps its context rather than being flattened into a string:
 | `line` | The line in that file, or `0` when the message names none |
 | `platform` | The graphics API the message came from, which is why the same edit can fail on one and pass on another. `null` when the message has no API behind it — a ShaderLab parse error happens before any is involved, and Unity reports an undefined platform there |
 
-### When the shader is not the one you wrote
+### When Unity read nothing from the file
 
-A shader Unity rejected is replaced by Unity's error shader, and the object this endpoint reads is that substitute. Measured on 6000.0.80f1 against a shader declaring one property and one pass that failed with a ShaderLab parse error, every structural field described the substitute rather than the file: `name` was `""`, `properties` was empty, `keywords` listed four stereo keywords the shader never declared, and `passCount` was `3`. None of that is distinguishable from a real answer, and a client building a material from `properties` would build one with no properties and never learn why.
+The structural fields are `null` in exactly one case: the ShaderLab parse failed before the shader's name was read, so nothing in the response could have come from the file. Measured on 6000.0.80f1 against a shader declaring one property and one pass that failed that way, `name` was `""`, `properties` was empty, `keywords` listed four stereo keywords the shader never declared, and `passCount` was `3` against the one pass in the file. None of that is distinguishable from a real answer, and a client building a material from `properties` would build one with no properties and never learn why.
 
-So when `isSupported` is `false`, the whole structural group is `null` together — `renderQueue`, `maximumLOD`, `subshaderCount`, `passCount`, `keywords`, `properties`, `activeSubshaderIndex`, and `subshaders` — and `messages` is the answer instead. `guid`, `assetPath`, `isSupported`, `hasError`, `hasWarnings`, and `messages` are always reported. One rule, so a client checks `isSupported` once rather than learning which fields happen to lie.
+So when that happens, `renderQueue`, `maximumLOD`, `subshaderCount`, `passCount`, `keywords`, `properties`, `activeSubshaderIndex`, and `subshaders` are `null` together, and `messages` is the answer instead. `guid`, `assetPath`, `isSupported`, `hasError`, `hasWarnings`, and `messages` are always reported.
 
-**`hasError` is not that rule.** A shader can carry errors and still be the shader Unity draws with. Measured on 6000.0.80f1 against a shader whose first subshader fails to compile and whose second does not, `hasError` is `true` while `isSupported` is `true`, Unity selects the working subshader, and the structure is reported normally. A client that wants "did my edit compile cleanly" reads `hasError`; one that wants "can this shader be used" reads `isSupported`.
+That case is narrow on purpose. Every other shader — including one that fails to compile, and one that cannot run here — reports what it declares.
+
+### What `isSupported` does and does not tell you
+
+`isSupported` is [Unity's own capability signal](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Shader-isSupported.html): whether the shader can run on the current GPU, with fallbacks taken into account. Two measurements on 6000.0.80f1 show why it cannot be read as anything more:
+
+| Shader | `hasError` | `isSupported` | What the fields describe |
+| --- | --- | --- | --- |
+| Valid, but its only pass is excluded for the current renderer | `false` | **`false`** | Its own declaration — `properties`, `name` and the rest are correct |
+| The same shader with `Fallback "Diffuse"` | `false` | **`true`** | `properties` is its own, but `subshaders` is `Legacy Shaders/Diffuse`'s — two subshaders and four passes, identical to reading that shader directly |
+
+So a `false` does not mean the import failed, and a `true` does not establish that `subshaders` belongs to the file you wrote. Read `isSupported` as "can this shader be used here", `hasError` as "did my edit compile cleanly", and neither as a claim about provenance.
+
+`hasError` is likewise not a usability signal. Measured against a shader whose first subshader fails to compile and whose second does not, `hasError` is `true` while `isSupported` is `true`, and Unity selects the working subshader.
 
 ### Errors
 
