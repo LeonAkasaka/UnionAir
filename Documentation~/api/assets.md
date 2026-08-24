@@ -478,6 +478,144 @@ A texture is named the way `GET /api/gameobjects` reports one, so a texture read
 
 ---
 
+## GET /api/assets/shaders/{guid}
+
+Returns a shader's import state, cached compiler messages, declared keywords, declared properties with their defaults, and the subshaders Unity compiled.
+
+> Requires the Read category (enabled by default).
+
+### Path Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `guid` | GUID of the shader asset |
+
+### Response
+
+```json
+{
+  "guid": "5ebb6c...",
+  "assetPath": "Assets/Shaders/Toon.shader",
+  "name": "Toon/Toon",
+  "isSupported": true,
+  "hasError": false,
+  "hasWarnings": false,
+  "messages": [],
+  "renderQueue": 2000,
+  "maximumLOD": -1,
+  "subshaderCount": 1,
+  "passCount": 2,
+  "keywords": [
+    { "name": "_ALPHATEST_ON", "isOverridable": false, "isDynamic": false }
+  ],
+  "properties": [
+    { "name": "_BaseColor", "type": "Color", "description": "Base Color", "defaultValue": { "r": 1, "g": 1, "b": 1, "a": 1 }, "flags": ["MainColor"], "attributes": [] },
+    { "name": "_Cutoff", "type": "Range", "description": "Alpha Cutoff", "defaultValue": 0.5, "range": { "min": 0, "max": 1 }, "flags": [], "attributes": [] },
+    { "name": "_AlphaClip", "type": "Float", "description": "Alpha Clipping", "defaultValue": 0, "flags": [], "attributes": ["Toggle(_ALPHATEST_ON)"] },
+    { "name": "_MainTex", "type": "Texture", "description": "Base Map", "defaultValue": "white", "textureDimension": "Tex2D", "flags": ["MainTexture"], "attributes": [] }
+  ],
+  "activeSubshaderIndex": 0,
+  "subshaders": [
+    {
+      "levelOfDetail": 300,
+      "passes": [
+        { "name": "ForwardLit", "lightMode": "UniversalForward", "isGrabPass": false },
+        { "name": "ShadowCaster", "lightMode": "ShadowCaster", "isGrabPass": false }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `guid`, `assetPath` | The asset the shader was imported from. A shader Unity built into the editor reports the shared built-in resource container instead — `Standard` reports `Resources/unity_builtin_extra` and the GUID every built-in asset shares — so its `guid` is not an identity and reading it back answers `400`. The lookup by name is how such a shader is reached |
+| `name` | The shader's name — the string `POST /api/assets/materials` takes and `GET /api/assets/materials/{guid}` reports. `null` for a shader Unity rejected, which has no usable name |
+| `isSupported` | Whether the object Unity holds is the client's shader at all. `false` when the import failed and Unity substituted its error shader, and `false` when the shader imported but no subshader survives for this platform and pipeline. It decides whether the structural fields are reported — see [When the shader is not the one you wrote](#when-the-shader-is-not-the-one-you-wrote) |
+| `renderQueue` | The queue declared by the shader, which a material can override |
+| `maximumLOD` | `Shader.maximumLOD`. `-1` when the shader sets no cap, which is the ordinary case |
+| `hasError`, `hasWarnings` | Whether Unity recorded errors or warnings for the last import. `hasError` does **not** mean the shader is unusable; see `isSupported` |
+| `messages[]` | The compiler messages Unity cached at import. See [Diagnostics come from the last import](#diagnostics-come-from-the-last-import) |
+| `keywords[]` | Every keyword the shader declares, enabled or not, with `isOverridable` and `isDynamic` |
+| `properties[]` | Every declared property, in declaration order, hidden ones included |
+| `properties[].type` | `Color`, `Float`, `Range`, `Int`, `Vector`, or `Texture` |
+| `properties[].description` | The Inspector label, or `null` when the declaration carries none |
+| `properties[].defaultValue` | The value a new material starts at, spelled the way `PATCH /api/assets/materials` reads it. A `Texture` reports its built-in texture name (`"white"`, `"bump"`) rather than an object reference, because that is what the declaration carries |
+| `properties[].range` | `{min, max}`, present only on a `Range` property |
+| `properties[].textureDimension` | What kind of texture the property expects (`Tex2D`, `Cube`, `Tex3D`, …), present only on a `Texture` property |
+| `properties[].flags` | Unity's shader property flag names, the same set `GET /api/assets/materials/{guid}` reports. Unity turns some declaration attributes into flags: `[HideInInspector]`, `[MainTexture]`, `[MainColor]`, `[HDR]`, and `[NoScaleOffset]` all arrive here rather than in `attributes` |
+| `properties[].attributes` | The declaration attributes Unity did not turn into a flag, verbatim and with their arguments — `Toggle(_ALPHATEST_ON)`, `KeywordEnum(...)`, a custom drawer's name. `Toggle` is the one worth reading: it names the keyword a property drives, which no flag reports |
+| `activeSubshaderIndex` | Which subshader Unity selected for the current platform and pipeline |
+| `subshaders[]` | The compiled subshaders and their passes. A pass's `name` is `null` when the shader did not name it, and `lightMode` is its `LightMode` tag, or `null` when it declares none |
+
+### What this answers that the file does not
+
+A client can write a `.shader` or `.hlsl` file itself, and this endpoint does not take that over. Two things are not in the file:
+
+- **Whether Unity accepted it.** Shader compilation happens at import, and a shader that failed still sits on disk looking exactly as it did. `hasError` and `messages` close the edit-import-diagnose loop the same way [`POST /api/compile`](compile.md) closes it for C#.
+- **What the import produced.** `activeSubshaderIndex` is decided by the current render pipeline and platform and is written nowhere. A Shader Graph asset does not expose its properties, keywords or passes in readable form at all — they are generated during import.
+
+### Diagnostics come from the last import
+
+`messages` is what Unity cached when the asset was last imported, not a fresh compile. After editing the file, reimport it with [`POST /api/assets/reimport`](#post-apiassetsreimport) or [`POST /api/editor/refresh`](editor.md#post-apieditorrefresh), then read again.
+
+Each message keeps its context rather than being flattened into a string:
+
+| Field | Description |
+|-------|-------------|
+| `severity` | `Error` or `Warning` |
+| `message` | The compiler message |
+| `messageDetails` | Unity's longer form, or `null` where it has none |
+| `file` | The file the message points at, which can be an included file rather than the shader. `null` when the message names none |
+| `line` | The line in that file, or `0` when the message names none |
+| `platform` | The graphics API the message came from, which is why the same edit can fail on one and pass on another. `null` when the message has no API behind it — a ShaderLab parse error happens before any is involved, and Unity reports an undefined platform there |
+
+### When the shader is not the one you wrote
+
+A shader Unity rejected is replaced by Unity's error shader, and the object this endpoint reads is that substitute. Measured on 6000.0.80f1 against a shader declaring one property and one pass that failed with a ShaderLab parse error, every structural field described the substitute rather than the file: `name` was `""`, `properties` was empty, `keywords` listed four stereo keywords the shader never declared, and `passCount` was `3`. None of that is distinguishable from a real answer, and a client building a material from `properties` would build one with no properties and never learn why.
+
+So when `isSupported` is `false`, the whole structural group is `null` together — `renderQueue`, `maximumLOD`, `subshaderCount`, `passCount`, `keywords`, `properties`, `activeSubshaderIndex`, and `subshaders` — and `messages` is the answer instead. `guid`, `assetPath`, `isSupported`, `hasError`, `hasWarnings`, and `messages` are always reported. One rule, so a client checks `isSupported` once rather than learning which fields happen to lie.
+
+**`hasError` is not that rule.** A shader can carry errors and still be the shader Unity draws with. Measured on 6000.0.80f1 against a shader whose first subshader fails to compile and whose second does not, `hasError` is `true` while `isSupported` is `true`, Unity selects the working subshader, and the structure is reported normally. A client that wants "did my edit compile cleanly" reads `hasError`; one that wants "can this shader be used" reads `isSupported`.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `guid` is empty, or the asset is not a shader |
+| 404 | No asset exists for the GUID |
+
+---
+
+## GET /api/assets/shaders
+
+Returns the same report for the shader with a given name.
+
+> Requires the Read category (enabled by default).
+
+### Query Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `name` | The shader name, as `GET /api/assets/materials/{guid}` reports it and `POST /api/assets/materials` takes it |
+
+The name is what a material carries, and it is not the file name. This is also the only way to reach a shader that ships with Unity rather than living in the project's assets. `Standard` is the example: it reports `Resources/unity_builtin_extra` and the GUID every built-in asset shares, and sending that GUID to `GET /api/assets/shaders/{guid}` answers `400 Asset is not a Shader`, because the container's main asset is not one. The name is the only handle such a shader has.
+
+The lookup is the same one `POST /api/assets/materials` performs, so a name this endpoint answers 404 for is a name that endpoint would also fail on. Asking here first is how a client finds that out before creating the material.
+
+### Response
+
+The same document as [`GET /api/assets/shaders/{guid}`](#get-apiassetsshadersguid).
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `name` is missing or empty |
+| 404 | No shader carries the name |
+
+---
+
 ## DELETE /api/assets/{guid}
 
 Deletes the asset and its `.meta` file.

@@ -480,6 +480,144 @@ GUID で指定したアセットの詳細情報を返します。
 
 ---
 
+## GET /api/assets/shaders/{guid}
+
+シェーダーのインポート状態、キャッシュされたコンパイラメッセージ、宣言済みキーワード、既定値付きの宣言済みプロパティ、および Unity がコンパイルしたサブシェーダーを返します。
+
+> Read カテゴリが必要です(既定で有効)。
+
+### パスパラメータ
+
+| パラメータ | 説明 |
+|-----------|------|
+| `guid` | 対象シェーダーアセットの GUID |
+
+### レスポンス
+
+```json
+{
+  "guid": "5ebb6c...",
+  "assetPath": "Assets/Shaders/Toon.shader",
+  "name": "Toon/Toon",
+  "isSupported": true,
+  "hasError": false,
+  "hasWarnings": false,
+  "messages": [],
+  "renderQueue": 2000,
+  "maximumLOD": -1,
+  "subshaderCount": 1,
+  "passCount": 2,
+  "keywords": [
+    { "name": "_ALPHATEST_ON", "isOverridable": false, "isDynamic": false }
+  ],
+  "properties": [
+    { "name": "_BaseColor", "type": "Color", "description": "Base Color", "defaultValue": { "r": 1, "g": 1, "b": 1, "a": 1 }, "flags": ["MainColor"], "attributes": [] },
+    { "name": "_Cutoff", "type": "Range", "description": "Alpha Cutoff", "defaultValue": 0.5, "range": { "min": 0, "max": 1 }, "flags": [], "attributes": [] },
+    { "name": "_AlphaClip", "type": "Float", "description": "Alpha Clipping", "defaultValue": 0, "flags": [], "attributes": ["Toggle(_ALPHATEST_ON)"] },
+    { "name": "_MainTex", "type": "Texture", "description": "Base Map", "defaultValue": "white", "textureDimension": "Tex2D", "flags": ["MainTexture"], "attributes": [] }
+  ],
+  "activeSubshaderIndex": 0,
+  "subshaders": [
+    {
+      "levelOfDetail": 300,
+      "passes": [
+        { "name": "ForwardLit", "lightMode": "UniversalForward", "isGrabPass": false },
+        { "name": "ShadowCaster", "lightMode": "ShadowCaster", "isGrabPass": false }
+      ]
+    }
+  ]
+}
+```
+
+| フィールド | 説明 |
+|-----------|------|
+| `guid`, `assetPath` | シェーダーのインポート元アセット。Unity 内蔵シェーダーの場合は共有の内蔵リソースコンテナが返ります(`Standard` なら `Resources/unity_builtin_extra` と、全内蔵アセットが共有する GUID)。したがってその `guid` は識別子として使えず、送り返しても `400` になります。そうしたシェーダーには名前による検索で到達してください |
+| `name` | シェーダー名。`POST /api/assets/materials` が受け取り、`GET /api/assets/materials/{guid}` が報告するのと同じ文字列です。Unity が拒否したシェーダーは使える名前を持たないため `null` になります |
+| `isSupported` | Unity が保持しているオブジェクトがそもそもクライアントのシェーダーかどうか。インポートに失敗して Unity がエラーシェーダーに差し替えた場合も、インポートは通ったが現在のプラットフォーム/パイプラインで生き残るサブシェーダーがない場合も `false` です。構造的フィールドを報告するかどうかはこの値で決まります — [書いたシェーダーではない場合](#書いたシェーダーではない場合) を参照 |
+| `renderQueue` | シェーダーが宣言するキュー。マテリアル側で上書きできます |
+| `maximumLOD` | `Shader.maximumLOD`。キャップを設定していない場合は `-1` で、こちらが通常のケースです |
+| `hasError`, `hasWarnings` | 直近のインポートで Unity がエラー/警告を記録したかどうか。`hasError` は「そのシェーダーが使用不能」を意味**しません**。`isSupported` を参照してください |
+| `messages[]` | インポート時に Unity がキャッシュしたコンパイラメッセージ。[診断は直近のインポート由来](#診断は直近のインポート由来) を参照 |
+| `keywords[]` | シェーダーが宣言する全キーワード(有効・無効を問わない)。`isOverridable` と `isDynamic` を伴います |
+| `properties[]` | 宣言された全プロパティ。宣言順で、非表示のものも含みます |
+| `properties[].type` | `Color`、`Float`、`Range`、`Int`、`Vector`、`Texture` のいずれか |
+| `properties[].description` | Inspector に表示されるラベル。宣言にない場合は `null` |
+| `properties[].defaultValue` | 新規マテリアルの初期値。`PATCH /api/assets/materials` が読み取る表記に揃えてあります。`Texture` はオブジェクト参照ではなく組み込みテクスチャ名(`"white"`、`"bump"` など)を返します。宣言が保持しているのがその名前だからです |
+| `properties[].range` | `{min, max}`。`Range` プロパティにのみ存在します |
+| `properties[].textureDimension` | プロパティが要求するテクスチャの種類(`Tex2D`、`Cube`、`Tex3D` など)。`Texture` プロパティにのみ存在します |
+| `properties[].flags` | Unity のシェーダープロパティフラグ名。`GET /api/assets/materials/{guid}` が返すものと同じ集合です。Unity は一部の宣言属性をフラグに変換します。`[HideInInspector]`、`[MainTexture]`、`[MainColor]`、`[HDR]`、`[NoScaleOffset]` は `attributes` ではなくこちらに現れます |
+| `properties[].attributes` | Unity がフラグに変換しなかった宣言属性を、引数を含めてそのまま返します(`Toggle(_ALPHATEST_ON)`、`KeywordEnum(...)`、カスタムドローワー名など)。特に `Toggle` は、そのプロパティがどのキーワードを駆動するかを示す唯一の手がかりです(フラグには現れません) |
+| `activeSubshaderIndex` | 現在のプラットフォームとパイプラインに対して Unity が選択したサブシェーダー |
+| `subshaders[]` | コンパイル済みサブシェーダーとそのパス。パスの `name` は名前が付いていない場合 `null`、`lightMode` はパスの `LightMode` タグで、宣言がない場合は `null` |
+
+### ファイルからは分からないこと
+
+クライアントは `.shader` や `.hlsl` を自分で書けますし、このエンドポイントはその役割を奪いません。ファイルに書かれていないのは次の 2 点です。
+
+- **Unity がそれを受け入れたかどうか。** シェーダーのコンパイルはインポート時に行われ、失敗したシェーダーも見た目はそのままディスク上に残ります。`hasError` と `messages` は、[`POST /api/compile`](compile.ja.md) が C# に対して閉じているのと同じ「編集 → インポート → 診断」のループをシェーダーに対して閉じます。
+- **インポートが何を生成したか。** `activeSubshaderIndex` は現在のレンダーパイプラインとプラットフォームによって決まり、どのファイルにも書かれていません。Shader Graph アセットに至っては、プロパティ・キーワード・パスのいずれも読める形では持っておらず、すべてインポート時に生成されます。
+
+### 診断は直近のインポート由来
+
+`messages` は、そのアセットが最後にインポートされたときに Unity がキャッシュした内容であり、その場でのコンパイル結果ではありません。ファイルを編集したら [`POST /api/assets/reimport`](#post-apiassetsreimport) か [`POST /api/editor/refresh`](editor.ja.md#post-apieditorrefresh) で再インポートしてから読み直してください。
+
+各メッセージは 1 本の文字列に潰さず、文脈を保ったまま返します。
+
+| フィールド | 説明 |
+|-----------|------|
+| `severity` | `Error` または `Warning` |
+| `message` | コンパイラメッセージ |
+| `messageDetails` | Unity が持っている場合の詳細形式。ない場合は `null` |
+| `file` | メッセージが指すファイル。シェーダー本体ではなくインクルード先のこともあります。メッセージがファイルを持たない場合は `null` |
+| `line` | そのファイル内の行番号。メッセージが行を持たない場合は `0` |
+| `platform` | メッセージの発生元グラフィックス API。同じ編集が API によってエラーになったりならなかったりする理由です。API が関与しないメッセージでは `null` — ShaderLab のパースエラーは API に到達する前に発生し、Unity は未定義のプラットフォーム値を報告します |
+
+### 書いたシェーダーではない場合
+
+Unity が拒否したシェーダーは Unity のエラーシェーダーに差し替えられ、このエンドポイントが読むのはその差し替え後のオブジェクトです。6000.0.80f1 で、プロパティ1個・パス1個を宣言して ShaderLab パースエラーで失敗したシェーダーを実測したところ、構造的フィールドはすべてファイルではなく差し替え後を記述していました。`name` は `""`、`properties` は空、`keywords` にはシェーダーが宣言していない stereo 系キーワードが4件、`passCount` は `3` でした。いずれも正常な回答と区別がつかず、`properties` からマテリアルを組み立てるクライアントはプロパティのないマテリアルを作り、その理由を知ることもありません。
+
+そのため `isSupported` が `false` のときは、構造的フィールドをまとめて `null` にします — `renderQueue`、`maximumLOD`、`subshaderCount`、`passCount`、`keywords`、`properties`、`activeSubshaderIndex`、`subshaders`。代わりに `messages` が答えになります。`guid`、`assetPath`、`isSupported`、`hasError`、`hasWarnings`、`messages` は常に報告されます。規則を1つにしてあるので、クライアントは `isSupported` を1回確認すればよく、「どのフィールドが嘘をつくか」を覚える必要はありません。
+
+**その規則は `hasError` ではありません。** シェーダーはエラーを抱えたまま Unity が描画に使うシェーダーであり続けられます。6000.0.80f1 で、1つ目のサブシェーダーがコンパイルに失敗し2つ目が成功するシェーダーを実測すると、`hasError` は `true` で `isSupported` も `true` になり、Unity は成功したサブシェーダーを選択し、構造は通常どおり報告されます。「自分の編集はクリーンにコンパイルされたか」を知りたいクライアントは `hasError` を、「このシェーダーは使えるか」を知りたいクライアントは `isSupported` を読んでください。
+
+### エラー
+
+| ステータス | 原因 |
+|-----------|------|
+| 400 | `guid` が空、またはアセットがシェーダーではない |
+| 404 | その GUID のアセットが存在しない |
+
+---
+
+## GET /api/assets/shaders
+
+指定した名前のシェーダーについて、同じ内容を返します。
+
+> Read カテゴリが必要です(既定で有効)。
+
+### クエリパラメータ
+
+| パラメータ | 説明 |
+|-----------|------|
+| `name` | シェーダー名。`GET /api/assets/materials/{guid}` が報告し、`POST /api/assets/materials` が受け取る文字列です |
+
+この名前はマテリアルが保持している文字列であり、ファイル名ではありません。またこの方法は、プロジェクトのアセットとしてではなく Unity に同梱されているシェーダーに到達できる唯一の手段です。`Standard` がその例で、`Resources/unity_builtin_extra` と全内蔵アセットが共有する GUID を返します。その GUID を `GET /api/assets/shaders/{guid}` に送っても、コンテナのメインアセットがシェーダーではないため `400 Asset is not a Shader` になります。こうしたシェーダーにとって名前は唯一の手がかりです。
+
+検索は `POST /api/assets/materials` が行うものと同一です。したがって、このエンドポイントが 404 を返す名前は、マテリアル作成でも失敗する名前です。先にここで確認しておけば、マテリアルを作る前にそれが分かります。
+
+### レスポンス
+
+[`GET /api/assets/shaders/{guid}`](#get-apiassetsshadersguid) と同じドキュメントです。
+
+### エラー
+
+| ステータス | 原因 |
+|-----------|------|
+| 400 | `name` が未指定または空 |
+| 404 | その名前のシェーダーが存在しない |
+
+---
+
 ## DELETE /api/assets/{guid}
 
 アセットとその `.meta` ファイルを削除します。
