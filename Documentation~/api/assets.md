@@ -480,7 +480,7 @@ A texture is named the way `GET /api/gameobjects` reports one, so a texture read
 
 ## GET /api/assets/shaders/{guid}
 
-Returns a shader's import state, cached compiler messages, declared keywords, declared properties with their defaults, and the subshaders Unity compiled.
+Returns a shader's import state, cached compiler messages, its effective local keyword space, declared properties with their defaults, and the subshaders Unity compiled.
 
 > Requires the Read category (enabled by default).
 
@@ -576,7 +576,7 @@ The structural fields are `null` in exactly one case: the ShaderLab parse failed
 
 So when that happens, `renderQueue`, `maximumLOD`, `subshaderCount`, `passCount`, `keywords`, `properties`, `activeSubshaderIndex`, and `subshaders` are `null` together, and `messages` is the answer instead. `guid`, `assetPath`, `isSupported`, `hasError`, `hasWarnings`, and `messages` are always reported.
 
-That case is narrow on purpose. Every other shader — including one that fails to compile, and one that cannot run here — reports what it declares.
+That case is narrow on purpose. Every other shader — including one that fails to compile, and one that cannot run here — reports the structure Unity exposes for it. That is the declaration for `properties`, `name` and `renderQueue`; for `subshaders` it is what Unity compiled, which can be a `Fallback`'s.
 
 ### What `isSupported` does and does not tell you
 

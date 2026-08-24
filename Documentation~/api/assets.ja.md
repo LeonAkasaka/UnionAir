@@ -482,7 +482,7 @@ GUID で指定したアセットの詳細情報を返します。
 
 ## GET /api/assets/shaders/{guid}
 
-シェーダーのインポート状態、キャッシュされたコンパイラメッセージ、宣言済みキーワード、既定値付きの宣言済みプロパティ、および Unity がコンパイルしたサブシェーダーを返します。
+シェーダーのインポート状態、キャッシュされたコンパイラメッセージ、実効ローカルキーワード空間、既定値付きの宣言済みプロパティ、および Unity がコンパイルしたサブシェーダーを返します。
 
 > Read カテゴリが必要です(既定で有効)。
 
@@ -578,7 +578,7 @@ GUID で指定したアセットの詳細情報を返します。
 
 そのため、このときは `renderQueue`、`maximumLOD`、`subshaderCount`、`passCount`、`keywords`、`properties`、`activeSubshaderIndex`、`subshaders` をまとめて `null` にし、代わりに `messages` が答えになります。`guid`、`assetPath`、`isSupported`、`hasError`、`hasWarnings`、`messages` は常に報告されます。
 
-この条件は意図的に狭くしてあります。それ以外のシェーダー — コンパイルに失敗したものも、この環境では動作しないものも — は宣言内容を報告します。
+この条件は意図的に狭くしてあります。それ以外のシェーダー — コンパイルに失敗したものも、この環境では動作しないものも — は Unity が公開している構造を報告します。`properties`、`name`、`renderQueue` についてはそれが宣言内容ですが、`subshaders` については Unity がコンパイルしたものであり、`Fallback` 先のこともあります。
 
 ### `isSupported` が言えること・言えないこと
 
