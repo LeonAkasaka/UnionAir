@@ -137,7 +137,7 @@ namespace LeonAkasaka.UnionAir.Editor
         /// </remarks>
         private static void AppendStructure(StringBuilder sb, Shader shader)
         {
-            if (WasNotRead(shader))
+            if (ShaderProvenance.WasNotRead(shader))
             {
                 sb.Append("\"renderQueue\":null,\"maximumLOD\":null,\"subshaderCount\":null,");
                 sb.Append("\"passCount\":null,\"keywords\":null,\"properties\":null,");
@@ -244,7 +244,7 @@ namespace LeonAkasaka.UnionAir.Editor
             sb.Append($"\"description\":{RestResponse.FormatNullableString(NullIfEmpty(shader.GetPropertyDescription(index)))},");
 
             sb.Append("\"defaultValue\":");
-            AppendDefaultValue(sb, shader, index, type);
+            ShaderPropertyDefaultJson.Append(sb, shader, index, type);
 
             if (type == ShaderPropertyType.Range)
             {
@@ -272,46 +272,6 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append($"\"{RestResponse.EscapeJson(attributes[i])}\"");
             }
             sb.Append("]}");
-        }
-
-        /// <summary>
-        /// The value a new material gets, spelled the way <c>PATCH /api/assets/materials</c> reads
-        /// it, so a client can tell an untouched property from a deliberate one.
-        /// </summary>
-        private static void AppendDefaultValue(StringBuilder sb, Shader shader, int index, ShaderPropertyType type)
-        {
-            switch (type)
-            {
-                case ShaderPropertyType.Color:
-                {
-                    var v = shader.GetPropertyDefaultVectorValue(index);
-                    sb.Append($"{{\"r\":{RestResponse.FormatFloat(v.x)},\"g\":{RestResponse.FormatFloat(v.y)},\"b\":{RestResponse.FormatFloat(v.z)},\"a\":{RestResponse.FormatFloat(v.w)}}}");
-                    break;
-                }
-                case ShaderPropertyType.Vector:
-                {
-                    var v = shader.GetPropertyDefaultVectorValue(index);
-                    sb.Append($"{{\"x\":{RestResponse.FormatFloat(v.x)},\"y\":{RestResponse.FormatFloat(v.y)},\"z\":{RestResponse.FormatFloat(v.z)},\"w\":{RestResponse.FormatFloat(v.w)}}}");
-                    break;
-                }
-                case ShaderPropertyType.Float:
-                case ShaderPropertyType.Range:
-                    sb.Append(RestResponse.FormatFloat(shader.GetPropertyDefaultFloatValue(index)));
-                    break;
-                case ShaderPropertyType.Int:
-                    sb.Append(Int(shader.GetPropertyDefaultIntValue(index)));
-                    break;
-                case ShaderPropertyType.Texture:
-                    // A built-in texture name — "white", "bump", "gray" — rather than an object
-                    // reference, because that is what the declaration carries and no asset exists
-                    // to point at. null means the declaration named none.
-                    sb.Append(RestResponse.FormatNullableString(
-                        NullIfEmpty(shader.GetPropertyTextureDefaultName(index))));
-                    break;
-                default:
-                    sb.Append("null");
-                    break;
-            }
         }
 
         /// <summary>
@@ -379,18 +339,6 @@ namespace LeonAkasaka.UnionAir.Editor
             }
             sb.Append("]");
         }
-
-        /// <summary>
-        /// Whether Unity got nothing out of the file: the ShaderLab parse failed before even the
-        /// shader's name was read, so every structural field describes an internal substitute.
-        /// </summary>
-        /// <remarks>
-        /// A shader that parses always has a name — ShaderLab requires one — so an empty name on a
-        /// shader carrying an error identifies this state and nothing else. The error is required
-        /// alongside it so that the check cannot be met by any shader Unity accepted.
-        /// </remarks>
-        private static bool WasNotRead(Shader shader)
-            => ShaderUtil.ShaderHasError(shader) && string.IsNullOrEmpty(shader.name);
 
         /// <summary>
         /// Reports "absent" as JSON null rather than as an empty string. Unity spells absence both

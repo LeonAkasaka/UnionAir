@@ -478,6 +478,103 @@ A texture is named the way `GET /api/gameobjects` reports one, so a texture read
 
 ---
 
+## GET /api/assets/materials/{guid}/shader-compatibility
+
+Reports where a material and its shader disagree: values the material is holding that the shader has no way to read, properties the shader declares that the material has no value for, and keywords the material has enabled that the shader has no room for.
+
+Reports only. It never writes to the material.
+
+> Requires the Read category (enabled by default).
+
+### Path Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `guid` | GUID of the material asset |
+
+### Response
+
+```json
+{
+  "guid": "5ebb6c...",
+  "assetPath": "Assets/Materials/Hair.mat",
+  "shader": {
+    "name": "Toon/Toon",
+    "guid": "a1b2c3...",
+    "assetPath": "Assets/Shaders/Toon.shader"
+  },
+  "comparable": true,
+  "reason": null,
+  "staleProperties": [
+    { "name": "_OldTint", "storage": "Color", "value": { "r": 1, "g": 0, "b": 0, "a": 1 } },
+    { "name": "_OldTex", "storage": "Texture", "value": { "texture": { "assetGuid": "cbb65e...", "assetPath": "Assets/Textures/hair.tga", "assetType": "UnityEngine.Texture2D", "localIdentifier": "2800000" }, "scale": { "x": 2, "y": 3 }, "offset": { "x": 0.25, "y": 0.5 } } }
+  ],
+  "unsetProperties": [
+    { "name": "_Smoothness", "type": "Range", "defaultValue": 0.5 }
+  ],
+  "invalidKeywords": ["_LEGACY_EMISSION_ON"]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `guid`, `assetPath` | The material asked about |
+| `shader` | The shader the comparison is against, identified so it can be read with [`GET /api/assets/shaders/{guid}`](#get-apiassetsshadersguid). Reported even when the comparison is refused, because which shader the material ended up on is most of the answer in that case. `name` is `null` when the ShaderLab parse failed before it was read |
+| `comparable` | Whether the pair could be compared. `false` means the three lists are `null` and `reason` says why — see [When the pair cannot be compared](#when-the-pair-cannot-be-compared) |
+| `reason` | `null` when `comparable` is `true`, otherwise `shaderMissing` or `shaderNotRead` |
+| `staleProperties[]` | Values the material is holding that the shader's current declarations cannot reach, because the declaration was dropped or because it changed type and kept its name. Unity keeps them in the `.mat` file and hides them, so nothing else reports them — see [What a stale property is](#what-a-stale-property-is) |
+| `staleProperties[].storage` | Which map in the material's serialization held the value: `Texture`, `Int`, `Float`, or `Color`. It is **not** the declared type, and it cannot be — the declaration naming the type is what is gone. `Float` also holds a `Range`, and `Color` also holds a `Vector` |
+| `staleProperties[].value` | The value that would be lost, spelled for its storage. A `Texture` reports the reference together with the `scale` and `offset` stored beside it, because all three go together |
+| `unsetProperties[]` | Properties the shader declares that the material has no serialized value for, with the `type` and `defaultValue` the shader declares. Empty for a pair that has not drifted: Unity writes an entry for every declared property when the material is created, so this fills when the shader **gains** a property afterwards |
+| `invalidKeywords[]` | Keywords the material has enabled that are not in the shader's effective local keyword space. Unity does not prune a material's keywords when its shader changes |
+
+### What a stale property is
+
+[`GET /api/assets/materials/{guid}`](#get-apiassetsmaterialsguid) reports the properties the shader currently declares with the material's values, and [`GET /api/assets/shaders/{guid}`](#get-apiassetsshadersguid) reports what the shader declares. Both walk the shader's current declarations, so a value those declarations cannot reach appears in neither.
+
+Unity does not discard that value — it stays in the `.mat` file and is hidden from the Inspector. So after editing a shader, the old value looks simply lost, with nothing to say where it went. That is what `staleProperties` answers, and it reports the value as well as the name so the answer is "here is what you would lose" rather than only "something would be lost".
+
+Two edits leave a value unreachable, and only the first is about the name:
+
+- **The shader dropped the declaration.** A renamed property is this case twice over — the old name's value is stranded, and the new name has none.
+- **The declaration changed type and kept its name.** The name still resolves, so a check that only asks whether the shader still declares it reports nothing wrong. Measured on 6000.0.80f1 with `_Extra` redeclared from `Float` to `Color`: `m_Floats` still held `_Extra` at `42` while `GetColor("_Extra")` answered the new declaration's default. The `42` is as lost as a dropped property's value. `storage` is what tells such an entry apart from the one the current declaration reads.
+
+A property whose every stored entry is unreachable appears in `unsetProperties` as well, because it then has no value the shader can read either.
+
+### `unsetProperties` describes the material as it is serialized right now
+
+Unity writes the entry for a newly reachable property lazily, so a property can leave `unsetProperties` without anyone touching the material. Measured on 6000.0.80f1 across two calls against the same unmodified material, after its shader redeclared `_X` from `Float` to `Color`: the first call reported `_X` in `staleProperties` (the unreachable `Float` holding `7`) **and** in `unsetProperties`, because no `Color` entry existed yet; the second reported it only in `staleProperties`, Unity having written that entry in between.
+
+Both answers are accurate about the moment they were asked, and `staleProperties` is unaffected — the stranded value is reported either way. Read `unsetProperties` as "the material has no serialized value for this right now", not as a durable property of the pair.
+
+Nothing here removes it. Dropping a stale property is a write to the material whose consequence is discarding the very value a client may be trying to recover, so it does not belong behind a read.
+
+### What `invalidKeywords` does and does not claim
+
+The check is against the shader's **effective local keyword space**, which is what Unity exposes and what the shader read reports under `keywords`. That space is wider than the shader source: it also carries keywords reached through `Fallback` and `UsePass` dependencies, and keywords Unity adds by itself.
+
+So a keyword listed here is genuinely unusable on the shader, and a keyword **not** listed here is not evidence that the shader's author declared it. "Did the author declare this keyword" is not answerable through public API at all, and this endpoint does not pretend to answer it.
+
+### When the pair cannot be compared
+
+A shader Unity substituted declares no properties. Comparing against one would report every value the material carries as stale — the exact opposite of the truth, and indistinguishable from a real answer. So the endpoint refuses instead, with `comparable` `false`, a `reason`, and `staleProperties`, `unsetProperties` and `invalidKeywords` `null` together, so `comparable` is the one thing a client has to check.
+
+| `reason` | Cause |
+| --- | --- |
+| `shaderMissing` | The material's shader was replaced by Unity's internal error shader, which is what a deleted or unassigned shader looks like. Measured on 6000.0.80f1, both routes read identically: `name` is `Hidden/InternalErrorShader`, the shader carries no error, and it declares no properties |
+| `shaderNotRead` | The ShaderLab parse failed before the shader's name was read, so nothing about the shader came from its file. This is the same state that makes the shader read report its structural fields as `null` |
+
+A `Fallback` is **not** one of these. When a shader's own subshaders are unusable and it names a `Fallback`, Unity replaces the compiled subshaders but not the declared properties, so the property comparison is still against the shader the material names and the answer is sound.
+
+### Errors
+
+| Status | Cause |
+|--------|-------|
+| 400 | `guid` is empty, or the asset is not a material |
+| 404 | No asset exists for the GUID |
+
+---
+
 ## GET /api/assets/shaders/{guid}
 
 Returns a shader's import state, cached compiler messages, its effective local keyword space, declared properties with their defaults, and the subshaders Unity compiled.
