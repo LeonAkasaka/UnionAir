@@ -29,6 +29,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         private const string PartlyBrokenShaderPath = Dir + "/PartlyBroken.shader";
         private const string UnsupportedShaderPath = Dir + "/Unsupported.shader";
         private const string FallbackShaderPath = Dir + "/UnsupportedWithFallback.shader";
+        private const string PipelineTaggedShaderPath = Dir + "/PipelineTagged.shader";
         private const string TexturePath = Dir + "/Test.png";
 
         private const string ShaderName = "UnionAir/ReadTest";
@@ -181,6 +182,49 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 }
 ";
 
+        // Two subshaders, one claiming a render pipeline by tag and one claiming none. The tag
+        // decides which subshader a pipeline may select, and it is the only thing in the response
+        // that says which pipeline a shader was written for. Both subshaders are here so the test
+        // reads the same way in a built-in project and a URP one: a subshader tagged for a pipeline
+        // that is not active is skipped, and the untagged one is always a candidate, so one of them
+        // is selectable either way and neither project needs a Fallback.
+        private const string PipelineTaggedSource = @"Shader ""UnionAir/PipelineTaggedReadTest""
+{
+    SubShader
+    {
+        Tags { ""RenderPipeline"" = ""UniversalPipeline"" ""RenderType"" = ""Opaque"" }
+        LOD 300
+        Pass
+        {
+            Name ""TaggedPass""
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #include ""UnityCG.cginc""
+            float4 vert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+            fixed4 frag () : SV_Target { return fixed4(1, 1, 1, 1); }
+            ENDCG
+        }
+    }
+    SubShader
+    {
+        Tags { ""RenderType"" = ""Opaque"" }
+        LOD 100
+        Pass
+        {
+            Name ""UntaggedPass""
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #include ""UnityCG.cginc""
+            float4 vert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+            fixed4 frag () : SV_Target { return fixed4(1, 1, 1, 1); }
+            ENDCG
+        }
+    }
+}
+";
+
         private string _guid;
         private Shader _shader;
 
@@ -312,6 +356,30 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             StringAssert.Contains("\"levelOfDetail\":200", body);
             StringAssert.Contains(
                 "\"name\":\"UnionAirForward\",\"lightMode\":\"UnionAirTest\",\"isGrabPass\":false", body);
+        }
+
+        [Test]
+        public void Read_ReportsASubshaderWithNoRenderPipelineTagAsNull()
+        {
+            // The fixture declares no RenderPipeline tag, which is how a built-in-pipeline
+            // subshader reads. Absence is null rather than "", the same as an untagged pass.
+            StringAssert.Contains("\"levelOfDetail\":200,\"renderPipeline\":null", Read());
+        }
+
+        [Test]
+        public void Read_ReportsTheRenderPipelineTagOfEachSubshader()
+        {
+            // The tag that answers "which pipeline is this shader for", which is the first question
+            // when picking a shader for a material. It is per subshader, not per shader: the same
+            // file can carry a URP subshader and a built-in one, and only the tag tells them apart.
+            // Reading it from the file works for a hand-written shader and not for a generated one.
+            Import(PipelineTaggedShaderPath, PipelineTaggedSource);
+
+            var response = ReadResponse(AssetDatabase.AssetPathToGUID(PipelineTaggedShaderPath));
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+
+            StringAssert.Contains("\"levelOfDetail\":300,\"renderPipeline\":\"UniversalPipeline\"", response.Body);
+            StringAssert.Contains("\"levelOfDetail\":100,\"renderPipeline\":null", response.Body);
         }
 
         [Test]

@@ -520,6 +520,7 @@ GUID で指定したアセットの詳細情報を返します。
   "subshaders": [
     {
       "levelOfDetail": 300,
+      "renderPipeline": "UniversalPipeline",
       "passes": [
         { "name": "ForwardLit", "lightMode": "UniversalForward", "isGrabPass": false },
         { "name": "ShadowCaster", "lightMode": "ShadowCaster", "isGrabPass": false }
@@ -549,6 +550,7 @@ GUID で指定したアセットの詳細情報を返します。
 | `properties[].attributes` | Unity がフラグに変換しなかった宣言属性を、引数を含めてそのまま返します(`Toggle(_ALPHATEST_ON)`、`KeywordEnum(...)`、カスタムドローワー名など)。特に `Toggle` は、そのプロパティがどのキーワードを駆動するかを示す唯一の手がかりです(フラグには現れません) |
 | `activeSubshaderIndex` | 現在のプラットフォームとパイプラインに対して Unity が選択したサブシェーダー |
 | `subshaders[]` | Unity が**コンパイルした**サブシェーダー。ファイルの宣言と一致するとは限りません — シェーダー自身のサブシェーダーが使用不能で `Fallback` を指定している場合、ここに現れるのはフォールバック先のものです。パスの `name` は名前が付いていない場合 `null`、`lightMode` はパスの `LightMode` タグで、宣言がない場合は `null` |
+| `subshaders[].renderPipeline` | サブシェーダーの `RenderPipeline` タグ(`UniversalPipeline`、`HDRenderPipeline`、あるいはファイルが指定した文字列)。つまり「このシェーダーはどのパイプライン向けか」への答えです。そのタグを宣言していない場合は `null` で、ビルトインパイプライン向けのサブシェーダーはこう読めます。シェーダー単位ではなくサブシェーダー単位である点に注意してください — 1 つのファイルが URP 用とビルトイン用のサブシェーダーを併せ持つことができ、両者を区別できるのはこのタグだけです |
 
 ### ファイルからは分からないこと
 
@@ -556,6 +558,8 @@ GUID で指定したアセットの詳細情報を返します。
 
 - **Unity がそれを受け入れたかどうか。** シェーダーのコンパイルはインポート時に行われ、失敗したシェーダーも見た目はそのままディスク上に残ります。`hasError` と `messages` は、[`POST /api/compile`](compile.ja.md) が C# に対して閉じているのと同じ「編集 → インポート → 診断」のループをシェーダーに対して閉じます。
 - **インポートが何を生成したか。** `activeSubshaderIndex` は現在のレンダーパイプラインとプラットフォームによって決まり、どのファイルにも書かれていません。Shader Graph アセットに至っては、プロパティ・キーワード・パスのいずれも読める形では持っておらず、すべてインポート時に生成されます。
+
+タグは `tags` のようなマップではなく、名前付きフィールドとして報告します。フィールドを持つのは `lightMode` と `renderPipeline` の 2 つです。Unity はタグを名前で引くことしかできず、サブシェーダーやパスが保持しているタグを列挙する手段を公開していません。したがってマップにしたところで、このエンドポイントが問い合わせようと決めたキーしか入らないのに、全件であるかのように見えてしまいます。
 
 ### 診断は直近のインポート由来
 
