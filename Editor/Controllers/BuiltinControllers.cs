@@ -609,6 +609,14 @@ namespace LeonAkasaka.UnionAir.Editor
         private void Get(UnionAirRequestContext ctx)
             => new MaterialReadHandler().Handle(ctx.Response, ctx.RouteValues["guid"]);
 
+        [UnionAirEndpoint("GET", "{guid}/shader-compatibility",
+            Category = UnionAirEndpointCategories.Read,
+            Summary = "Reports where a material and its shader disagree: 'staleProperties' are values the material still carries for properties the shader no longer declares, which Unity keeps in the .mat file and hides, so a renamed property otherwise looks like a lost value with no explanation; 'unsetProperties' are properties the shader declares that the material has no serialized value for, which is what a property added to the shader after the material existed looks like; 'invalidKeywords' are keywords the material has enabled that are not in the shader's effective local keyword space, which Unity does not prune. Reports only and never writes. 'comparable' is false with a 'reason' when the material's shader was replaced by Unity's internal error shader ('shaderMissing') or the ShaderLab parse failed before the shader's name was read ('shaderNotRead'), because such a shader declares no properties and every value the material carries would otherwise be reported stale.",
+            PathParams = new string[] { "guid" },
+            ResponseExample = "{\"guid\":\"5ebb6c...\",\"assetPath\":\"Assets/Materials/Hair.mat\",\"shader\":{\"name\":\"Toon/Toon\",\"guid\":\"a1b2c3...\",\"assetPath\":\"Assets/Shaders/Toon.shader\"},\"comparable\":true,\"reason\":null,\"staleProperties\":[{\"name\":\"_OldTint\",\"storage\":\"Color\",\"value\":{\"r\":1,\"g\":0,\"b\":0,\"a\":1}}],\"unsetProperties\":[{\"name\":\"_Smoothness\",\"type\":\"Range\",\"defaultValue\":0.5}],\"invalidKeywords\":[\"_LEGACY_EMISSION_ON\"]}")]
+        private void ShaderCompatibility(UnionAirRequestContext ctx)
+            => new MaterialShaderCompatibilityHandler().Handle(ctx.Response, ctx.RouteValues["guid"]);
+
         [UnionAirEndpoint("POST", "",
             Category = UnionAirEndpointCategories.AssetWrite,
             PlayModePolicy = UnionAirPlayModePolicy.Blocked,

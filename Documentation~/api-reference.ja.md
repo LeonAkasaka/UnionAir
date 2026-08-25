@@ -66,7 +66,7 @@ GameObject の読み取り、検索、作成/更新/削除、コンポーネン�
 
 アセットの閲覧、検索、プレハブ、マテリアル、ScriptableObject、インポーター:
 
-`GET /api/assets` · `GET /api/assets/{guid}` · `GET /api/search/asset-refs` · `GET /api/assets/dependents` · `POST /api/assets/prefabs`(+ `apply`、`revert`) · `GET /api/assets/materials/{guid}` · `POST|PATCH /api/assets/materials` · `GET /api/assets/shaders/{guid}` · `GET /api/assets/shaders` · `DELETE /api/assets/{guid}` · `POST /api/assets/move` · `POST /api/assets/open` · `POST /api/assets/reimport` · ScriptableObject CRUD(`/api/assets/scriptableobjects`) · `PATCH /api/assets/texture-importer/{guid}` · `GET|PATCH /api/assets/audio-importer/{guid}` · ModelImporter の core、material/remap、rig/Avatar、imported clip 設定 (`GET|PATCH /api/assets/model-importer/{guid}`、`POST /api/assets/model-importer/{guid}/preflight`)
+`GET /api/assets` · `GET /api/assets/{guid}` · `GET /api/search/asset-refs` · `GET /api/assets/dependents` · `POST /api/assets/prefabs`(+ `apply`、`revert`) · `GET /api/assets/materials/{guid}` · `POST|PATCH /api/assets/materials` · `GET /api/assets/materials/{guid}/shader-compatibility` · `GET /api/assets/shaders/{guid}` · `GET /api/assets/shaders` · `DELETE /api/assets/{guid}` · `POST /api/assets/move` · `POST /api/assets/open` · `POST /api/assets/reimport` · ScriptableObject CRUD(`/api/assets/scriptableobjects`) · `PATCH /api/assets/texture-importer/{guid}` · `GET|PATCH /api/assets/audio-importer/{guid}` · ModelImporter の core、material/remap、rig/Avatar、imported clip 設定 (`GET|PATCH /api/assets/model-importer/{guid}`、`POST /api/assets/model-importer/{guid}/preflight`)
 
 ### [Animation](api/animation.ja.md)
 
