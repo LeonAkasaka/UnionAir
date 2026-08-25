@@ -518,6 +518,7 @@ Returns a shader's import state, cached compiler messages, its effective local k
   "subshaders": [
     {
       "levelOfDetail": 300,
+      "renderPipeline": "UniversalPipeline",
       "passes": [
         { "name": "ForwardLit", "lightMode": "UniversalForward", "isGrabPass": false },
         { "name": "ShadowCaster", "lightMode": "ShadowCaster", "isGrabPass": false }
@@ -547,6 +548,7 @@ Returns a shader's import state, cached compiler messages, its effective local k
 | `properties[].attributes` | The declaration attributes Unity did not turn into a flag, verbatim and with their arguments — `Toggle(_ALPHATEST_ON)`, `KeywordEnum(...)`, a custom drawer's name. `Toggle` is the one worth reading: it names the keyword a property drives, which no flag reports |
 | `activeSubshaderIndex` | Which subshader Unity selected for the current platform and pipeline |
 | `subshaders[]` | The subshaders Unity **compiled**, which is not always what the file declares — when a shader's own subshaders are unusable and it names a `Fallback`, these are the fallback's. A pass's `name` is `null` when the shader did not name it, and `lightMode` is its `LightMode` tag, or `null` when it declares none |
+| `subshaders[].renderPipeline` | The subshader's `RenderPipeline` tag — `UniversalPipeline`, `HDRenderPipeline`, or whatever the file names — and so the answer to "which pipeline is this shader for". `null` when the subshader declares no such tag, which is how a built-in-pipeline subshader reads. It is per subshader, not per shader: one file can carry a URP subshader and a built-in one, and only the tag tells them apart |
 
 ### What this answers that the file does not
 
@@ -554,6 +556,8 @@ A client can write a `.shader` or `.hlsl` file itself, and this endpoint does no
 
 - **Whether Unity accepted it.** Shader compilation happens at import, and a shader that failed still sits on disk looking exactly as it did. `hasError` and `messages` close the edit-import-diagnose loop the same way [`POST /api/compile`](compile.md) closes it for C#.
 - **What the import produced.** `activeSubshaderIndex` is decided by the current render pipeline and platform and is written nowhere. A Shader Graph asset does not expose its properties, keywords or passes in readable form at all — they are generated during import.
+
+Tags are reported as named fields rather than as a `tags` map, and `lightMode` and `renderPipeline` are the two that have one. Unity looks a tag up by name and offers no way to enumerate the tags a subshader or pass carries, so a map could only ever hold the keys this endpoint thought to ask for while reading like the whole set.
 
 ### Diagnostics come from the last import
 

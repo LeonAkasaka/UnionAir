@@ -344,7 +344,22 @@ namespace LeonAkasaka.UnionAir.Editor
                 if (i > 0) sb.Append(",");
                 var subshader = data.GetSubshader(i);
 
-                sb.Append($"{{\"levelOfDetail\":{Int(subshader.LevelOfDetail)},\"passes\":[");
+                sb.Append($"{{\"levelOfDetail\":{Int(subshader.LevelOfDetail)},");
+
+                // The tag that decides which render pipeline a subshader belongs to, and the first
+                // thing a client has to know when picking a shader for a material: whether this is
+                // a URP shader, an HDRP one, or a built-in one. A built-in-pipeline subshader
+                // declares no such tag and reports null, the same way an untagged pass reports a
+                // null lightMode.
+                //
+                // A named field per tag rather than a tags map, because Unity has no way to
+                // enumerate the tags a subshader carries -- they are looked up by name -- so a map
+                // could only ever hold the keys this handler thought to ask for, while looking
+                // like the whole set.
+                var renderPipeline = subshader.FindTagValue(new ShaderTagId("RenderPipeline"));
+                sb.Append($"\"renderPipeline\":{RestResponse.FormatNullableString(NullIfEmpty(renderPipeline.name))},");
+
+                sb.Append("\"passes\":[");
                 for (var p = 0; p < subshader.PassCount; p++)
                 {
                     if (p > 0) sb.Append(",");
