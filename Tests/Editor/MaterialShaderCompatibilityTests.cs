@@ -78,6 +78,35 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 }
 ";
 
+        // The same shader with _Extra retyped rather than removed. The name survives, so a check
+        // that only asks whether the shader still declares the name reports nothing wrong -- while
+        // the float the material holds has become unreachable.
+        private const string RetypedSource = @"Shader ""UnionAir/CompatTest""
+{
+    Properties
+    {
+        _Color (""Tint"", Color) = (1, 1, 1, 1)
+        _Extra (""Extra"", Color) = (0, 0, 0, 1)
+        _OldTex (""OldTex"", 2D) = ""white"" {}
+    }
+    SubShader
+    {
+        Tags { ""RenderType"" = ""Opaque"" }
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile _ UNIONAIR_COMPAT_ON
+            #include ""UnityCG.cginc""
+            float4 vert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+            fixed4 frag () : SV_Target { return fixed4(1, 1, 1, 1); }
+            ENDCG
+        }
+    }
+}
+";
+
         // An unknown property type, which ShaderLab rejects while parsing the asset, so Unity gets
         // nothing out of the file at all.
         private const string BrokenSource = @"Shader ""UnionAir/CompatTest""
@@ -221,6 +250,28 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             var body = Read();
             Assert.IsFalse(body.Contains("\"name\":\"_Color\""),
                 "a property the shader still declares was reported as drift: " + body);
+        }
+
+        [Test]
+        public void APropertyThatKeptItsNameAndChangedItsTypeIsReportedToo()
+        {
+            // The case a name-only check misses, and the reason this endpoint compares storage
+            // against the declaration rather than just asking whether the name survives.
+            // Measured on 6000.0.80f1: with _Extra redeclared from Float to Color, m_Floats still
+            // holds _Extra at 42, m_Colors gains an _Extra at the declared default, and
+            // GetColor("_Extra") answers that default -- so the 42 is exactly as lost as a dropped
+            // property's value, while the shader still declares the name.
+            Import(ShaderPath, RetypedSource);
+
+            var body = Read();
+            StringAssert.Contains("\"comparable\":true", body);
+            StringAssert.Contains("\"name\":\"_Extra\",\"storage\":\"Float\",\"value\":42", body);
+
+            // And the live entry is not reported as drift, so the two do not collapse into
+            // "everything is stale".
+            Assert.IsFalse(
+                body.Contains("\"name\":\"_Extra\",\"storage\":\"Color\""),
+                "the entry the current declaration reads was reported as unreachable: " + body);
         }
 
         // ── When the pair cannot be compared ─────────────────────────────────

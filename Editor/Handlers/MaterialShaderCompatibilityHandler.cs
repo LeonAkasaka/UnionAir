@@ -15,10 +15,10 @@ namespace LeonAkasaka.UnionAir.Editor
     /// A material and its shader can disagree, and neither existing read says so.
     /// <c>GET /api/assets/materials/{guid}</c> reports the properties the shader currently declares
     /// with the material's values, and <c>GET /api/assets/shaders/{guid}</c> reports what the
-    /// shader declares. Both walk the shader's declarations, so a value the material still carries
-    /// for a property the shader dropped appears in neither — Unity keeps it in the <c>.mat</c>
-    /// file and hides it, and a renamed property therefore looks like a lost value with no
-    /// explanation.
+    /// shader declares. Both walk the shader's current declarations, so a value the material is
+    /// holding that those declarations cannot reach appears in neither — Unity keeps it in the
+    /// <c>.mat</c> file and hides it, and a renamed or retyped property therefore looks like a
+    /// lost value with no explanation.
     ///
     /// That is the question after editing a shader, and it is about a pair, which is why it is its
     /// own endpoint rather than a section on either read: neither read owns the pair, and a client
@@ -93,7 +93,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             sb.Append("\"comparable\":true,\"reason\":null,");
 
-            var declared = DeclaredNames(shader);
+            var declared = DeclaredTypes(shader);
             var stored = new HashSet<string>();
             AppendStaleProperties(sb, mat, declared, stored);
             AppendUnsetProperties(sb, shader, stored);
@@ -146,31 +146,73 @@ namespace LeonAkasaka.UnionAir.Editor
             return null;
         }
 
-        private static HashSet<string> DeclaredNames(Shader shader)
+        private static Dictionary<string, ShaderPropertyType> DeclaredTypes(Shader shader)
         {
-            var names = new HashSet<string>();
+            var declared = new Dictionary<string, ShaderPropertyType>();
             var count = shader.GetPropertyCount();
             for (var i = 0; i < count; i++)
-                names.Add(shader.GetPropertyName(i));
-            return names;
+                declared[shader.GetPropertyName(i)] = shader.GetPropertyType(i);
+            return declared;
         }
 
         /// <summary>
-        /// The values the material still carries for properties its shader no longer declares.
+        /// Whether an entry found in <paramref name="mapIndex"/> is the one the shader's current
+        /// declaration of <paramref name="name"/> reads, so the value in it is still reachable.
         /// </summary>
         /// <remarks>
-        /// Walked through <c>SerializedObject</c> because there is no other way to see them:
-        /// <c>Material.HasProperty</c> answers false for exactly these names, and every typed
-        /// getter needs a name the shader declares. Measured on 6000.0.80f1 against a material
-        /// created from a shader declaring <c>_Extra</c> and then reimported after the declaration
-        /// was removed: <c>m_SavedProperties.m_Floats</c> still held <c>_Extra</c> with its value,
-        /// while <c>HasProperty("_Extra")</c> answered false.
+        /// The name being declared is not enough, because a declaration can change type while
+        /// keeping its name and the old entry stays behind unreachable. Measured on 6000.0.80f1
+        /// against a material holding <c>_X</c> at 7 whose shader was then reimported with
+        /// <c>_X</c> redeclared from <c>Float</c> to <c>Color</c>: <c>m_Floats</c> still held
+        /// <c>_X</c> at 7 while <c>GetColor("_X")</c> answered the new declaration's default. The
+        /// 7 is as lost as a dropped property's value, and testing only the name reports the pair
+        /// as agreeing.
+        ///
+        /// <c>Int</c> accepts <c>m_Floats</c> as well as <c>m_Ints</c>. <c>m_Ints</c> is a
+        /// serialization detail rather than an API, a project on the 2022.3 floor is not promised
+        /// to have it, and where it is absent an <c>Int</c>'s value has nowhere else to be — so the
+        /// tolerance costs a mismatch this check would never have been sure of, and buys not
+        /// reporting every <c>Int</c> in such a project as unreachable.
+        /// </remarks>
+        private static bool StorageReadsDeclaration(
+            Dictionary<string, ShaderPropertyType> declared, string name, int mapIndex)
+        {
+            ShaderPropertyType type;
+            if (!declared.TryGetValue(name, out type)) return false;
+
+            switch (type)
+            {
+                case ShaderPropertyType.Texture: return StorageMaps[mapIndex] == "m_TexEnvs";
+                case ShaderPropertyType.Int: return StorageMaps[mapIndex] == "m_Ints"
+                                                    || StorageMaps[mapIndex] == "m_Floats";
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range: return StorageMaps[mapIndex] == "m_Floats";
+                default: return StorageMaps[mapIndex] == "m_Colors";
+            }
+        }
+
+        /// <summary>
+        /// The values the material is holding that its shader has no way to read.
+        /// </summary>
+        /// <remarks>
+        /// Two things put a value here, and both leave it as unreachable as the other. The shader
+        /// dropped the declaration: measured on 6000.0.80f1 against a material created from a
+        /// shader declaring <c>_Extra</c> and then reimported after the declaration was removed,
+        /// <c>m_SavedProperties.m_Floats</c> still held <c>_Extra</c> with its value while
+        /// <c>HasProperty("_Extra")</c> answered false. Or the declaration changed type and kept
+        /// its name, which <see cref="StorageReadsDeclaration"/> records the measurement for.
+        ///
+        /// Walked through <c>SerializedObject</c> because there is no other way to see either:
+        /// every typed getter needs a name the shader declares, and for the type-change case the
+        /// getter answers with the new declaration's default rather than admitting the old value
+        /// is there.
         ///
         /// <paramref name="stored"/> is filled in on the way past, because the same walk answers
         /// the opposite question and walking twice would be walking the same maps twice.
         /// </remarks>
         private static void AppendStaleProperties(
-            StringBuilder sb, Material mat, HashSet<string> declared, HashSet<string> stored)
+            StringBuilder sb, Material mat,
+            Dictionary<string, ShaderPropertyType> declared, HashSet<string> stored)
         {
             var so = new SerializedObject(mat);
             var first = true;
@@ -189,8 +231,16 @@ namespace LeonAkasaka.UnionAir.Editor
 
                     var name = key.stringValue;
                     if (string.IsNullOrEmpty(name)) continue;
-                    stored.Add(name);
-                    if (declared.Contains(name)) continue;
+
+                    // Only an entry the current declaration reads counts as this property having
+                    // a value. An entry left behind by a type change does not, so a property whose
+                    // every entry is unreachable is reported as unset as well as stale, which
+                    // together is the whole truth about it.
+                    if (StorageReadsDeclaration(declared, name, m))
+                    {
+                        stored.Add(name);
+                        continue;
+                    }
 
                     if (!first) sb.Append(",");
                     first = false;
@@ -273,6 +323,14 @@ namespace LeonAkasaka.UnionAir.Editor
         /// The properties the shader declares that the material has no serialized value for.
         /// </summary>
         /// <remarks>
+        /// This describes the material as it is serialized at the moment of the call, and Unity
+        /// writes the entry for a newly reachable property lazily. Measured on 6000.0.80f1 across
+        /// two calls against the same unmodified material after its shader redeclared <c>_X</c>
+        /// from <c>Float</c> to <c>Color</c>: the first reported <c>_X</c> here as well as in
+        /// <c>staleProperties</c>, because no <c>Color</c> entry existed yet, and the second
+        /// reported it only as stale. Both are accurate about when they were asked, and the
+        /// reference tells a client to read this list that way.
+        ///
         /// Unity writes an entry for every property the shader declares when the material is
         /// created, so this is empty for a material and shader that have not drifted. It fills when
         /// the shader gains a property afterwards, which is the case worth knowing about: measured

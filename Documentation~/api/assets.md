@@ -480,7 +480,7 @@ A texture is named the way `GET /api/gameobjects` reports one, so a texture read
 
 ## GET /api/assets/materials/{guid}/shader-compatibility
 
-Reports where a material and its shader disagree: values the material still carries for properties the shader no longer declares, properties the shader declares that the material has no value for, and keywords the material has enabled that the shader has no room for.
+Reports where a material and its shader disagree: values the material is holding that the shader has no way to read, properties the shader declares that the material has no value for, and keywords the material has enabled that the shader has no room for.
 
 Reports only. It never writes to the material.
 
@@ -522,7 +522,7 @@ Reports only. It never writes to the material.
 | `shader` | The shader the comparison is against, identified so it can be read with [`GET /api/assets/shaders/{guid}`](#get-apiassetsshadersguid). Reported even when the comparison is refused, because which shader the material ended up on is most of the answer in that case. `name` is `null` when the ShaderLab parse failed before it was read |
 | `comparable` | Whether the pair could be compared. `false` means the three lists are `null` and `reason` says why — see [When the pair cannot be compared](#when-the-pair-cannot-be-compared) |
 | `reason` | `null` when `comparable` is `true`, otherwise `shaderMissing` or `shaderNotRead` |
-| `staleProperties[]` | Values the material still carries for properties the shader no longer declares. Unity keeps them in the `.mat` file and hides them, so nothing else reports them — see [What a stale property is](#what-a-stale-property-is) |
+| `staleProperties[]` | Values the material is holding that the shader's current declarations cannot reach, because the declaration was dropped or because it changed type and kept its name. Unity keeps them in the `.mat` file and hides them, so nothing else reports them — see [What a stale property is](#what-a-stale-property-is) |
 | `staleProperties[].storage` | Which map in the material's serialization held the value: `Texture`, `Int`, `Float`, or `Color`. It is **not** the declared type, and it cannot be — the declaration naming the type is what is gone. `Float` also holds a `Range`, and `Color` also holds a `Vector` |
 | `staleProperties[].value` | The value that would be lost, spelled for its storage. A `Texture` reports the reference together with the `scale` and `offset` stored beside it, because all three go together |
 | `unsetProperties[]` | Properties the shader declares that the material has no serialized value for, with the `type` and `defaultValue` the shader declares. Empty for a pair that has not drifted: Unity writes an entry for every declared property when the material is created, so this fills when the shader **gains** a property afterwards |
@@ -530,9 +530,22 @@ Reports only. It never writes to the material.
 
 ### What a stale property is
 
-[`GET /api/assets/materials/{guid}`](#get-apiassetsmaterialsguid) reports the properties the shader currently declares with the material's values, and [`GET /api/assets/shaders/{guid}`](#get-apiassetsshadersguid) reports what the shader declares. Both walk the shader's declarations, so a value the material still carries for a property the shader dropped appears in neither.
+[`GET /api/assets/materials/{guid}`](#get-apiassetsmaterialsguid) reports the properties the shader currently declares with the material's values, and [`GET /api/assets/shaders/{guid}`](#get-apiassetsshadersguid) reports what the shader declares. Both walk the shader's current declarations, so a value those declarations cannot reach appears in neither.
 
-Unity does not discard that value — it stays in the `.mat` file and is hidden from the Inspector. So after renaming a shader property, the old value looks simply lost, with nothing to say where it went. That is what `staleProperties` answers, and it reports the value as well as the name so the answer is "here is what you would lose" rather than only "something would be lost".
+Unity does not discard that value — it stays in the `.mat` file and is hidden from the Inspector. So after editing a shader, the old value looks simply lost, with nothing to say where it went. That is what `staleProperties` answers, and it reports the value as well as the name so the answer is "here is what you would lose" rather than only "something would be lost".
+
+Two edits leave a value unreachable, and only the first is about the name:
+
+- **The shader dropped the declaration.** A renamed property is this case twice over — the old name's value is stranded, and the new name has none.
+- **The declaration changed type and kept its name.** The name still resolves, so a check that only asks whether the shader still declares it reports nothing wrong. Measured on 6000.0.80f1 with `_Extra` redeclared from `Float` to `Color`: `m_Floats` still held `_Extra` at `42` while `GetColor("_Extra")` answered the new declaration's default. The `42` is as lost as a dropped property's value. `storage` is what tells such an entry apart from the one the current declaration reads.
+
+A property whose every stored entry is unreachable appears in `unsetProperties` as well, because it then has no value the shader can read either.
+
+### `unsetProperties` describes the material as it is serialized right now
+
+Unity writes the entry for a newly reachable property lazily, so a property can leave `unsetProperties` without anyone touching the material. Measured on 6000.0.80f1 across two calls against the same unmodified material, after its shader redeclared `_X` from `Float` to `Color`: the first call reported `_X` in `staleProperties` (the unreachable `Float` holding `7`) **and** in `unsetProperties`, because no `Color` entry existed yet; the second reported it only in `staleProperties`, Unity having written that entry in between.
+
+Both answers are accurate about the moment they were asked, and `staleProperties` is unaffected — the stranded value is reported either way. Read `unsetProperties` as "the material has no serialized value for this right now", not as a durable property of the pair.
 
 Nothing here removes it. Dropping a stale property is a write to the material whose consequence is discarding the very value a client may be trying to recover, so it does not belong behind a read.
 
