@@ -168,14 +168,32 @@ namespace LeonAkasaka.UnionAir.Editor
         /// 7 is as lost as a dropped property's value, and testing only the name reports the pair
         /// as agreeing.
         ///
-        /// <c>Int</c> accepts <c>m_Floats</c> as well as <c>m_Ints</c>. <c>m_Ints</c> is a
-        /// serialization detail rather than an API, a project on the 2022.3 floor is not promised
-        /// to have it, and where it is absent an <c>Int</c>'s value has nowhere else to be — so the
-        /// tolerance costs a mismatch this check would never have been sure of, and buys not
-        /// reporting every <c>Int</c> in such a project as unreachable.
+        /// An <c>Int</c> declaration reads <c>m_Ints</c>, and <c>m_Floats</c> is accepted for it
+        /// only when the material's serialization carries no <c>m_Ints</c> map at all. <c>m_Ints</c>
+        /// is a serialization detail rather than an API and a project on the 2022.3 floor is not
+        /// promised to have it; where the map does not exist an <c>Int</c>'s value has nowhere else
+        /// to be, and reporting every one of them unreachable would be wrong.
+        ///
+        /// The fallback has to be conditional rather than blanket, because <c>Float</c> to
+        /// <c>Int</c> is a type change like any other and strands a value the same way. Measured on
+        /// 6000.0.80f1 against a material holding <c>_N</c> at 7.5 whose shader was then reimported
+        /// with <c>_N</c> redeclared from <c>Float</c> to <c>Integer</c>: <c>m_Ints</c> gained
+        /// <c>_N</c> at the declared default, <c>m_Floats</c> still held <c>_N</c> at 7.5, and both
+        /// <c>GetInteger("_N")</c> and <c>GetFloat("_N")</c> answered 0. A blanket fallback accepts
+        /// that 7.5 as reachable and reports the pair as agreeing.
+        ///
+        /// The condition is the map's existence and deliberately not "does <c>m_Ints</c> hold this
+        /// name", which is the same rule keyed on something that is briefly untrue: Unity writes
+        /// the entry for a newly reachable property lazily, so immediately after the reimport the
+        /// map can exist while the name is not yet in it. Keying on the entry made the check pass
+        /// the stranded value through in exactly that window. The map's presence is a property of
+        /// the format rather than of timing.
         /// </remarks>
         private static bool StorageReadsDeclaration(
-            Dictionary<string, ShaderPropertyType> declared, string name, int mapIndex)
+            Dictionary<string, ShaderPropertyType> declared,
+            bool hasIntStorage,
+            string name,
+            int mapIndex)
         {
             ShaderPropertyType type;
             if (!declared.TryGetValue(name, out type)) return false;
@@ -183,12 +201,27 @@ namespace LeonAkasaka.UnionAir.Editor
             switch (type)
             {
                 case ShaderPropertyType.Texture: return StorageMaps[mapIndex] == "m_TexEnvs";
-                case ShaderPropertyType.Int: return StorageMaps[mapIndex] == "m_Ints"
-                                                    || StorageMaps[mapIndex] == "m_Floats";
+                case ShaderPropertyType.Int:
+                    return StorageMaps[mapIndex] == "m_Ints"
+                           || (StorageMaps[mapIndex] == "m_Floats" && !hasIntStorage);
                 case ShaderPropertyType.Float:
                 case ShaderPropertyType.Range: return StorageMaps[mapIndex] == "m_Floats";
                 default: return StorageMaps[mapIndex] == "m_Colors";
             }
+        }
+
+        /// <summary>
+        /// Whether this material's serialization has an <c>m_Ints</c> map, which is what says the
+        /// format keeps <c>Int</c> values apart from <c>Float</c> ones.
+        /// </summary>
+        /// <remarks>
+        /// Read before the walk rather than during it, so that the rule does not depend on
+        /// <see cref="StorageMaps"/> listing <c>m_Ints</c> before <c>m_Floats</c>.
+        /// </remarks>
+        private static bool HasIntStorage(SerializedObject so)
+        {
+            var arr = so.FindProperty("m_SavedProperties.m_Ints");
+            return arr != null && arr.isArray;
         }
 
         /// <summary>
@@ -215,6 +248,7 @@ namespace LeonAkasaka.UnionAir.Editor
             Dictionary<string, ShaderPropertyType> declared, HashSet<string> stored)
         {
             var so = new SerializedObject(mat);
+            var hasIntStorage = HasIntStorage(so);
             var first = true;
 
             sb.Append("\"staleProperties\":[");
@@ -236,7 +270,7 @@ namespace LeonAkasaka.UnionAir.Editor
                     // a value. An entry left behind by a type change does not, so a property whose
                     // every entry is unreachable is reported as unset as well as stale, which
                     // together is the whole truth about it.
-                    if (StorageReadsDeclaration(declared, name, m))
+                    if (StorageReadsDeclaration(declared, hasIntStorage, name, m))
                     {
                         stored.Add(name);
                         continue;

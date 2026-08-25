@@ -107,6 +107,35 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 }
 ";
 
+        // The same shader with _Extra retyped from Float to Integer. Unity stores an Int in its own
+        // map, so this is the one type change where the old entry and the new one are both numeric
+        // -- and the one a blanket "an Int may live in m_Floats" tolerance would wave through.
+        private const string RetypedToIntSource = @"Shader ""UnionAir/CompatTest""
+{
+    Properties
+    {
+        _Color (""Tint"", Color) = (1, 1, 1, 1)
+        _Extra (""Extra"", Integer) = 0
+        _OldTex (""OldTex"", 2D) = ""white"" {}
+    }
+    SubShader
+    {
+        Tags { ""RenderType"" = ""Opaque"" }
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile _ UNIONAIR_COMPAT_ON
+            #include ""UnityCG.cginc""
+            float4 vert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+            fixed4 frag () : SV_Target { return fixed4(1, 1, 1, 1); }
+            ENDCG
+        }
+    }
+}
+";
+
         // An unknown property type, which ShaderLab rejects while parsing the asset, so Unity gets
         // nothing out of the file at all.
         private const string BrokenSource = @"Shader ""UnionAir/CompatTest""
@@ -271,6 +300,27 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             // "everything is stale".
             Assert.IsFalse(
                 body.Contains("\"name\":\"_Extra\",\"storage\":\"Color\""),
+                "the entry the current declaration reads was reported as unreachable: " + body);
+        }
+
+        [Test]
+        public void AFloatStrandedByAChangeToIntIsReportedRatherThanExcusedAsIntStorage()
+        {
+            // An Int declaration reads m_Ints, and m_Floats is accepted for it only when the
+            // material has no m_Ints entry of that name -- which is the older serialization, not
+            // this. Measured on 6000.0.80f1 with _Extra redeclared from Float to Integer: m_Ints
+            // gained _Extra at the declared default, m_Floats still held _Extra at 42, and both
+            // GetInteger("_Extra") and GetFloat("_Extra") answered 0. Accepting m_Floats for every
+            // Int would take that 42 for the live value and report the pair as agreeing.
+            Import(ShaderPath, RetypedToIntSource);
+
+            var body = Read();
+            StringAssert.Contains("\"comparable\":true", body);
+            StringAssert.Contains("\"name\":\"_Extra\",\"storage\":\"Float\",\"value\":42", body);
+
+            // The entry the Int declaration does read is not drift.
+            Assert.IsFalse(
+                body.Contains("\"name\":\"_Extra\",\"storage\":\"Int\""),
                 "the entry the current declaration reads was reported as unreachable: " + body);
         }
 
