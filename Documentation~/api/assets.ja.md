@@ -640,7 +640,7 @@ Unity が差し替えたシェーダーはプロパティを1つも宣言しま�
 | `hasError`, `hasWarnings` | 直近のインポートで Unity がエラー/警告を記録したかどうか。`hasError` は「そのシェーダーが使用不能」を意味**しません**。`isSupported` を参照してください |
 | `messages[]` | インポート時に Unity がキャッシュしたコンパイラメッセージ。[診断は直近のインポート由来](#診断は直近のインポート由来) を参照 |
 | `hasImportError`, `hasImportWarnings` | **アセットインポーター**がエラー/警告を記録したかどうか。`hasError` とは別の問いであり、生成シェーダーに対しては答えも異なります。問い合わせるインポーターが存在しない場合は `null` — [2 つのログと、後者が必要な理由](#2-つのログと後者が必要な理由) を参照 |
-| `importMessages[]` | インポーターのログエントリ。`severity`(`Error`、`Warning`、`None`)、`message`、`file`、`line` を持ちます。`platform` はありません — インポーターはグラフィックス API ごとに実行されるわけではないからです。インポーターに言うべきことがなかった場合は `[]`、問い合わせるインポーターがない場合は `null` |
+| `importMessages[]` | インポーターのログエントリ。`severity`(`Error`、`Warning`、`None`)、`message`、`file`、`line` を持ちます。`platform` はありません — インポーターはグラフィックス API ごとに実行されるわけではないからです。`messages[].file` と違い、`file` はプロジェクト内のファイルとは**限りません**。6000.0.80f1 で実測したところ、ネイティブのインポーターが書いたエントリは `Editor\Src\AssetPipeline` 以下の Unity 自身の C++ ソースを指しており、これはエディタをビルドしたマシン上のパスです。インポーターに言うべきことがなかった場合は `[]`、問い合わせるインポーターがない場合は `null` |
 | `keywords[]` | シェーダーの**実効ローカルキーワード空間** — そのシェーダーで有効なキーワード全件(有効・無効を問わない)。`isOverridable` と `isDynamic` を伴います。ソースより広く、`Fallback` や `UsePass` の依存先から来るキーワードや、Unity が自動的に追加するキーワードも含みます。6000.0.80f1 で実測したところ、`multi_compile` でちょうど1件だけ宣言したシェーダーが5件を報告し、残り4件は `STEREO_INSTANCING_ON`、`UNITY_SINGLE_PASS_STEREO`、`STEREO_MULTIVIEW_ON`、`STEREO_CUBEMAP_RENDER_ON` でした。ここに名前があることは、それがファイルに書かれている根拠には**なりません** |
 | `properties[]` | 宣言された全プロパティ。宣言順で、非表示のものも含みます |
 | `properties[].type` | `Color`、`Float`、`Range`、`Int`、`Vector`、`Texture` のいずれか |
@@ -745,7 +745,9 @@ Unity が差し替えたシェーダーはプロパティを1つも宣言しま�
 | 400 | `guid` が空、またはアセットがシェーダーを生成しなかった |
 | 404 | その GUID のアセットが存在しない |
 
-`400` はこの 2 つのどちらであるかを区別し、アセットにインポーターがある場合は `error` と並べて `hasImportError`、`hasImportWarnings`、`importMessages` を返します。単にシェーダーではないアセットは `Asset is not a Shader: <path>`、インポート自体が失敗したシェーダーアセット(例えば JSON がパースできない `.shadergraph`)は `Shader asset failed to import: <path>` とインポーターのエラーを返します。ここでも「編集 → インポート → 診断」のループが行き止まりにならずに閉じるようにするためです。
+`400` はこの 2 つのどちらであるかを区別します。アセットにインポーターがある限り `error` と並べて `hasImportError`、`hasImportWarnings`、`importMessages` を返します — ログはどちらの場合も返し、変わるのはその前の一文だけです。単にシェーダーではないアセットは `Asset is not a Shader: <path>`、インポート自体が失敗したシェーダーアセット(例えば JSON がパースできない `.shadergraph`)は `Shader asset failed to import: <path>` を返します。ここでも「編集 → インポート → 診断」のループが行き止まりにならずに閉じるようにするためです。
+
+後者の文言には、インポートエラーに**加えて**シェーダーを生成する拡張子(`.shader` または `.shadergraph`)であることが必要です。すべてのインポーターが同じログに書くため、インポートエラーだけではそのアセットがシェーダーである根拠にならないからです。Unity が読めない `.png` はインポートに失敗し、壊れたグラフとまったく同じく `DefaultAsset` になります。それを「シェーダーのインポート失敗」と呼べば、GUID を取り違えたクライアントにテクスチャインポーターのエラーを渡すことになります。`.shadersubgraph` は意図的に含めていません — Sub Graph のメインアセットは `Shader` にはならず、正常にインポートされたものはすでに `Asset is not a Shader` と答えるためです。失敗したときだけ別の話をすべきではありません。
 
 ---
 

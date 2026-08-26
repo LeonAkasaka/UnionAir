@@ -31,6 +31,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         private const string FallbackShaderPath = Dir + "/UnsupportedWithFallback.shader";
         private const string PipelineTaggedShaderPath = Dir + "/PipelineTagged.shader";
         private const string TexturePath = Dir + "/Test.png";
+        private const string BrokenTexturePath = Dir + "/Broken.png";
 
         private const string ShaderName = "UnionAir/ReadTest";
 
@@ -587,6 +588,27 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             var response = ReadResponse(AssetDatabase.AssetPathToGUID(TexturePath));
             Assert.AreEqual(400, response.StatusCode, response.Body);
             StringAssert.Contains("not a Shader", response.Body);
+        }
+
+        [Test]
+        public void AnAssetThatFailedToImportAndIsNotAShaderIsStillNotAShader()
+        {
+            // Every importer writes to the same log, so an import error is not evidence that the
+            // asset is a shader. Measured on 6000.0.80f1 before the extension was checked, a .png
+            // holding plain text — rejected by the texture importer, so typed as a DefaultAsset
+            // exactly like a broken graph — was answered "Shader asset failed to import", with the
+            // texture importer's error attached for the client to act on.
+            LogAssert.ignoreFailingMessages = true;
+            Import(BrokenTexturePath, "this is not a png at all, not even close");
+
+            var response = ReadResponse(AssetDatabase.AssetPathToGUID(BrokenTexturePath));
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("Asset is not a Shader", response.Body);
+            Assert.IsFalse(response.Body.Contains("failed to import"), response.Body);
+
+            // The log is still reported. Only the sentence in front of it changes.
+            StringAssert.Contains("\"hasImportError\":true", response.Body);
         }
 
         [Test]

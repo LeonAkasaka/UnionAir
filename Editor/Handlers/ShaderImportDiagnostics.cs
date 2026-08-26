@@ -36,19 +36,32 @@ namespace LeonAkasaka.UnionAir.Editor
         /// Appends <c>hasImportError</c>, <c>hasImportWarnings</c> and <c>importMessages</c>,
         /// with a trailing comma.
         /// </summary>
+        /// <returns>
+        /// Whether the importer recorded an error, so that a caller needing the answer before this
+        /// text — the error response writes <c>error</c> first — does not have to read the log a
+        /// second time to get it. Two reads would also be two answers: an import landing between
+        /// them would let the message and the entries below it disagree.
+        /// </returns>
         /// <remarks>
         /// All three are <c>null</c> when there is no importer to ask rather than when the importer
         /// had nothing to say, and the two are not the same answer. A shader Unity built into the
         /// editor is reached through the shared built-in resource container, which no importer in
         /// this project owns; an empty log on an asset that does have an importer means the import
         /// was clean, and that is <c>[]</c>.
+        ///
+        /// <c>file</c> and <c>line</c> are reported as Unity gives them and are not necessarily a
+        /// location in the project. Measured on 6000.0.80f1, an entry written by a native importer
+        /// pointed at Unity's own C++ source under
+        /// <c>Editor\Src\AssetPipeline</c>, a path on the machine that built the editor. The
+        /// reference says so, because <c>messages[].file</c> beside it does name a file the client
+        /// can open.
         /// </remarks>
-        internal static void Append(StringBuilder sb, string assetPath)
+        internal static bool Append(StringBuilder sb, string assetPath)
         {
             if (string.IsNullOrEmpty(assetPath) || AssetImporter.GetAtPath(assetPath) == null)
             {
                 sb.Append("\"hasImportError\":null,\"hasImportWarnings\":null,\"importMessages\":null,");
-                return;
+                return false;
             }
 
             var entries = Entries(assetPath);
@@ -78,26 +91,8 @@ namespace LeonAkasaka.UnionAir.Editor
                 sb.Append("}");
             }
             sb.Append("],");
-        }
 
-        /// <summary>
-        /// Whether the importer recorded an error for the asset at <paramref name="assetPath"/>.
-        /// </summary>
-        /// <remarks>
-        /// The one question the read cannot ask, because it is asked when there is no Shader to
-        /// report: an import that fails outright produces no shader object at all, and the asset
-        /// then types as a <c>DefaultAsset</c>.
-        /// </remarks>
-        internal static bool HasError(string assetPath)
-        {
-            if (string.IsNullOrEmpty(assetPath)) return false;
-
-            var entries = Entries(assetPath);
-            for (var i = 0; i < entries.Length; i++)
-            {
-                if (IsError(entries[i].flags)) return true;
-            }
-            return false;
+            return hasError;
         }
 
         private static ImportLog.ImportLogEntry[] Entries(string assetPath)

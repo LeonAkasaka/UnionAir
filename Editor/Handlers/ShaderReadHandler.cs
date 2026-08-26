@@ -105,23 +105,54 @@ namespace LeonAkasaka.UnionAir.Editor
         ///
         /// The importer's log is what distinguishes them, so the error carries it. The status stays
         /// 400: there is still no shader to report, and every structural field would be a guess.
+        ///
+        /// An import error is not on its own enough to call the asset a shader, because every
+        /// importer writes to the same log. The extension has to agree, and without that check a
+        /// file named <c>NotAnImage.png</c> holding plain text — rejected by the texture importer,
+        /// so typed as a <c>DefaultAsset</c> exactly like a broken graph — was answered
+        /// "Shader asset failed to import", handing a client that passed the wrong GUID a texture
+        /// importer's error to act on. The log is reported either way; only the sentence changes.
         /// </remarks>
         private static void SendNoShader(UnionAirResponse response, string assetPath)
         {
-            var failed = ShaderImportDiagnostics.HasError(assetPath);
+            // Written first because the answer decides the wording, and reading the log once keeps
+            // the wording and the entries describing the same import.
+            var diagnostics = new StringBuilder();
+            var importFailed = ShaderImportDiagnostics.Append(diagnostics, assetPath);
 
-            var message = failed
+            var message = importFailed && IsShaderSource(assetPath)
                 ? $"Shader asset failed to import: {assetPath}"
                 : $"Asset is not a Shader: {assetPath}";
 
             var sb = new StringBuilder();
             sb.Append("{");
             sb.Append($"\"error\":\"{RestResponse.EscapeJson(message)}\",");
-            ShaderImportDiagnostics.Append(sb, assetPath);
+            sb.Append(diagnostics.ToString());
             sb.Length -= 1; // the shared appender leaves a trailing comma for the fields that follow it
             sb.Append("}");
 
             RestResponse.Send(response, sb.ToString(), 400);
+        }
+
+        /// <summary>
+        /// Whether the asset at <paramref name="assetPath"/> is one whose import produces a Shader.
+        /// </summary>
+        /// <remarks>
+        /// The extension is the test because the asset itself cannot be: an import that failed
+        /// outright leaves no object to ask, which is the whole reason this question is being asked
+        /// here.
+        ///
+        /// <c>.shadersubgraph</c> is deliberately absent. A Sub Graph's main asset is a
+        /// <c>SubGraphAsset</c> and never a <c>Shader</c>, so one that imports cleanly is already
+        /// answered "Asset is not a Shader"; including it here would have a Sub Graph change its
+        /// story depending on whether it failed. <c>.compute</c> and <c>.raytrace</c> are absent for
+        /// the same reason.
+        /// </remarks>
+        private static bool IsShaderSource(string assetPath)
+        {
+            var extension = System.IO.Path.GetExtension(assetPath);
+            return string.Equals(extension, ".shader", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".shadergraph", System.StringComparison.OrdinalIgnoreCase);
         }
 
         private static void Send(UnionAirResponse response, Shader shader, string guid, string assetPath)
