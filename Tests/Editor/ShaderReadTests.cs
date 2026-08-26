@@ -8,8 +8,8 @@ using UnityEngine.TestTools;
 namespace LeonAkasaka.UnionAir.Editor.Tests
 {
     /// <summary>
-    /// Covers the shader read, and the one thing it exists to report: whether Unity accepted the
-    /// last import of a shader, and with what messages.
+    /// Covers the shader read, and the one thing it exists to report: the diagnostics Unity has
+    /// cached for a shader, which straight after a reimport are that import's verdict.
     /// </summary>
     /// <remarks>
     /// The shaders are written as source and imported inside the test rather than loaded from a
