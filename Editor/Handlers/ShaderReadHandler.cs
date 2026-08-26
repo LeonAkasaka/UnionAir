@@ -23,12 +23,24 @@ namespace LeonAkasaka.UnionAir.Editor
     /// The property set is the second half. <c>GET /api/assets/materials/{guid}</c> reports the
     /// properties of a shader a material already uses; a client choosing a shader for a material it
     /// has not created yet had nowhere to ask what that shader declares, what a property defaults
-    /// to, or which keywords are valid on it. A Shader Graph asset does not answer any of that from
-    /// its file at all — the properties and passes are generated during import.
+    /// to, or which keywords are valid on it.
+    ///
+    /// A <c>.shadergraph</c> is read by this endpoint like any other shader asset, and none of it
+    /// is a special case: Unity's importer generates a shader and makes it the asset's main object,
+    /// so <c>AssetDatabase.LoadAssetAtPath&lt;Shader&gt;</c> returns it. Measured on 6000.0.80f1
+    /// with Shader Graph 17.0.4 against a graph carrying one blackboard property, the read reports
+    /// that property with its default alongside the ones Shader Graph generates, the URP
+    /// subshader's ten passes with their <c>lightMode</c>, and a 60-keyword space. The generated
+    /// name is the part a client cannot get from the file: the graph stores its category and Unity
+    /// joins the file name to it, and that name is what a material carries and what
+    /// <c>POST /api/assets/materials</c> takes.
     ///
     /// Diagnostics are the ones Unity cached when the asset was last imported, not a fresh compile.
     /// After editing the file, reimport it — <c>POST /api/assets/reimport</c> or
-    /// <c>POST /api/editor/refresh</c> — and read again.
+    /// <c>POST /api/editor/refresh</c> — and read again. They come from two places, and both are
+    /// reported: <c>hasError</c> and <c>messages</c> are the shader compiler's, and
+    /// <c>hasImportError</c> and <c>importMessages</c> are the asset importer's. A generated shader
+    /// is why the second set is not redundant — see <see cref="ShaderImportDiagnostics"/>.
     /// </remarks>
     internal class ShaderReadHandler
     {
@@ -50,7 +62,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var shader = AssetDatabase.LoadAssetAtPath<Shader>(assetPath);
             if (shader == null)
             {
-                RestResponse.SendError(response, $"Asset is not a Shader: {assetPath}", 400);
+                SendNoShader(response, assetPath);
                 return;
             }
 
@@ -79,6 +91,70 @@ namespace LeonAkasaka.UnionAir.Editor
             Send(response, shader, AssetDatabase.AssetPathToGUID(assetPath), assetPath);
         }
 
+        /// <summary>
+        /// The answer when the asset produced no Shader: either it is not a shader asset, or it is
+        /// one whose import failed outright.
+        /// </summary>
+        /// <remarks>
+        /// The two are worth telling apart. Measured on 6000.0.80f1 with Shader Graph 17.0.4, a
+        /// <c>.shadergraph</c> whose JSON does not parse produces no shader object at all and types
+        /// as a <c>DefaultAsset</c>, so the read reached this path and said "Asset is not a Shader"
+        /// — true of the object Unity holds, and misleading about the asset, which is a shader
+        /// asset that failed to import. A client editing a graph then had no diagnostic and no next
+        /// step, which is the loop this endpoint exists to close.
+        ///
+        /// The importer's log is what distinguishes them, so the error carries it. The status stays
+        /// 400: there is still no shader to report, and every structural field would be a guess.
+        ///
+        /// An import error is not on its own enough to call the asset a shader, because every
+        /// importer writes to the same log. The extension has to agree, and without that check a
+        /// file named <c>NotAnImage.png</c> holding plain text — rejected by the texture importer,
+        /// so typed as a <c>DefaultAsset</c> exactly like a broken graph — was answered
+        /// "Shader asset failed to import", handing a client that passed the wrong GUID a texture
+        /// importer's error to act on. The log is reported either way; only the sentence changes.
+        /// </remarks>
+        private static void SendNoShader(UnionAirResponse response, string assetPath)
+        {
+            // Written first because the answer decides the wording, and reading the log once keeps
+            // the wording and the entries describing the same import.
+            var diagnostics = new StringBuilder();
+            var importFailed = ShaderImportDiagnostics.Append(diagnostics, assetPath);
+
+            var message = importFailed && IsShaderSource(assetPath)
+                ? $"Shader asset failed to import: {assetPath}"
+                : $"Asset is not a Shader: {assetPath}";
+
+            var sb = new StringBuilder();
+            sb.Append("{");
+            sb.Append($"\"error\":\"{RestResponse.EscapeJson(message)}\",");
+            sb.Append(diagnostics.ToString());
+            sb.Length -= 1; // the shared appender leaves a trailing comma for the fields that follow it
+            sb.Append("}");
+
+            RestResponse.Send(response, sb.ToString(), 400);
+        }
+
+        /// <summary>
+        /// Whether the asset at <paramref name="assetPath"/> is one whose import produces a Shader.
+        /// </summary>
+        /// <remarks>
+        /// The extension is the test because the asset itself cannot be: an import that failed
+        /// outright leaves no object to ask, which is the whole reason this question is being asked
+        /// here.
+        ///
+        /// <c>.shadersubgraph</c> is deliberately absent. A Sub Graph's main asset is a
+        /// <c>SubGraphAsset</c> and never a <c>Shader</c>, so one that imports cleanly is already
+        /// answered "Asset is not a Shader"; including it here would have a Sub Graph change its
+        /// story depending on whether it failed. <c>.compute</c> and <c>.raytrace</c> are absent for
+        /// the same reason.
+        /// </remarks>
+        private static bool IsShaderSource(string assetPath)
+        {
+            var extension = System.IO.Path.GetExtension(assetPath);
+            return string.Equals(extension, ".shader", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".shadergraph", System.StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void Send(UnionAirResponse response, Shader shader, string guid, string assetPath)
         {
             var sb = new StringBuilder();
@@ -103,6 +179,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             // Before the structure, because when the structure is absent this is the answer.
             AppendDiagnostics(sb, shader);
+            ShaderImportDiagnostics.Append(sb, assetPath);
             AppendStructure(sb, shader);
 
             sb.Append("}");

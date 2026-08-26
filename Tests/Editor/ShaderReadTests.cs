@@ -31,6 +31,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         private const string FallbackShaderPath = Dir + "/UnsupportedWithFallback.shader";
         private const string PipelineTaggedShaderPath = Dir + "/PipelineTagged.shader";
         private const string TexturePath = Dir + "/Test.png";
+        private const string BrokenTexturePath = Dir + "/Broken.png";
 
         private const string ShaderName = "UnionAir/ReadTest";
 
@@ -510,6 +511,47 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             Assert.IsFalse(body.Contains("\"platform\":\"-1\""), body);
         }
 
+        // ── The importer's log, beside the compiler's ──────────────────
+
+        [Test]
+        public void Read_ReportsAnEmptyImporterLogForAShaderTheImporterAccepted()
+        {
+            // [] rather than null: the asset has an importer, and it had nothing to say.
+            var body = Read();
+            StringAssert.Contains("\"hasImportError\":false", body);
+            StringAssert.Contains("\"hasImportWarnings\":false", body);
+            StringAssert.Contains("\"importMessages\":[]", body);
+        }
+
+        [Test]
+        public void Read_DoesNotTurnACompilerErrorIntoAnImportError()
+        {
+            // The two logs are separate on purpose, because they answer different questions and a
+            // shader can fail in one and not the other. Measured on 6000.0.80f1: a ShaderLab parse
+            // error is the shader compiler's, and ShaderImporter writes nothing to the import log
+            // for it.
+            LogAssert.ignoreFailingMessages = true;
+            Import(BrokenShaderPath, BrokenSource);
+
+            var body = ReadResponse(AssetDatabase.AssetPathToGUID(BrokenShaderPath)).Body;
+            StringAssert.Contains("\"hasError\":true", body);
+            StringAssert.Contains("\"hasImportError\":false", body);
+            StringAssert.Contains("\"importMessages\":[]", body);
+        }
+
+        [Test]
+        public void ReadByName_ReportsNoImporterLogForAShaderUnityShips()
+        {
+            // null rather than []: a built-in shader is reached through the shared resource
+            // container, which no importer in this project owns. "Nothing to ask" and "asked and
+            // clean" are different answers and are not spelled the same way.
+            var response = NameResponse("Standard");
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            StringAssert.Contains("\"hasImportError\":null", response.Body);
+            StringAssert.Contains("\"hasImportWarnings\":null", response.Body);
+            StringAssert.Contains("\"importMessages\":null", response.Body);
+        }
+
         // ── The lookup by name ───────────────────────────────────────────────
 
         [Test]
@@ -546,6 +588,27 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             var response = ReadResponse(AssetDatabase.AssetPathToGUID(TexturePath));
             Assert.AreEqual(400, response.StatusCode, response.Body);
             StringAssert.Contains("not a Shader", response.Body);
+        }
+
+        [Test]
+        public void AnAssetThatFailedToImportAndIsNotAShaderIsStillNotAShader()
+        {
+            // Every importer writes to the same log, so an import error is not evidence that the
+            // asset is a shader. Measured on 6000.0.80f1 before the extension was checked, a .png
+            // holding plain text — rejected by the texture importer, so typed as a DefaultAsset
+            // exactly like a broken graph — was answered "Shader asset failed to import", with the
+            // texture importer's error attached for the client to act on.
+            LogAssert.ignoreFailingMessages = true;
+            Import(BrokenTexturePath, "this is not a png at all, not even close");
+
+            var response = ReadResponse(AssetDatabase.AssetPathToGUID(BrokenTexturePath));
+
+            Assert.AreEqual(400, response.StatusCode, response.Body);
+            StringAssert.Contains("Asset is not a Shader", response.Body);
+            Assert.IsFalse(response.Body.Contains("failed to import"), response.Body);
+
+            // The log is still reported. Only the sentence in front of it changes.
+            StringAssert.Contains("\"hasImportError\":true", response.Body);
         }
 
         [Test]
