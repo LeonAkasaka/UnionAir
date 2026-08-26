@@ -665,6 +665,8 @@ Tags are reported as named fields rather than as a `tags` map, and `lightMode` a
 
 `messages` is what Unity cached when the asset was last imported, not a fresh compile. After editing the file, reimport it with [`POST /api/assets/reimport`](#post-apiassetsreimport) or [`POST /api/editor/refresh`](editor.md#post-apieditorrefresh), then read again.
 
+Those two calls are the whole loop, and there is no shader-specific validation endpoint beside them: the reimport finishes before it answers, takes one asset — including a file Unity has never seen — and covers a project `#include` whether the include or the shader is the one reimported. What it cannot do is notice that you skipped it: a shader edited on disk and read without a reimport reports the previous import's messages, and Unity exposes no "differs from disk" signal that the read could use to mark them stale.
+
 Each message keeps its context rather than being flattened into a string:
 
 | Field | Description |
@@ -675,6 +677,14 @@ Each message keeps its context rather than being flattened into a string:
 | `file` | The file the message points at, which can be an included file rather than the shader. `null` when the message names none |
 | `line` | The line in that file, or `0` when the message names none |
 | `platform` | The graphics API the message came from, which is why the same edit can fail on one and pass on another. `null` when the message has no API behind it — a ShaderLab parse error happens before any is involved, and Unity reports an undefined platform there |
+
+### A clean `hasError` covers the variants the import compiled
+
+The import does not build every variant a shader can produce, and `messages` cannot carry an error from one that was never built.
+
+Measured on 6000.0.80f1 against a shader whose fragment program is broken only inside a `#pragma multi_compile` keyword's branch: after a reimport the read answers `hasError` `false` and `messages` `[]`. The shader does not compile under that keyword and the endpoint says nothing, because the branch that is broken belongs to a variant the import did not build.
+
+So read `hasError` as "the import compiled what it compiles, and it was clean" rather than "this shader is valid". It is also why reimport-then-read is not wrapped in an endpoint called validation: the wrapper would have the same blind spot and a name that denied it.
 
 ### A Shader Graph is read like any other shader asset
 

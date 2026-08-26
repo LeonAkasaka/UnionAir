@@ -37,7 +37,11 @@ namespace LeonAkasaka.UnionAir.Editor
     ///
     /// Diagnostics are the ones Unity cached when the asset was last imported, not a fresh compile.
     /// After editing the file, reimport it — <c>POST /api/assets/reimport</c> or
-    /// <c>POST /api/editor/refresh</c> — and read again. They come from two places, and both are
+    /// <c>POST /api/editor/refresh</c> — and read again. Those two calls are the whole loop; there
+    /// is no validation endpoint beside them, because one would cover no more than they do.
+    /// Measured on 6000.0.80f1, what neither covers is a variant the import did not build: an error
+    /// inside a <c>multi_compile</c> keyword's branch is reported nowhere, so a clean
+    /// <c>hasError</c> is a statement about what was compiled rather than about the shader. They come from two places, and both are
     /// reported: <c>hasError</c> and <c>messages</c> are the shader compiler's, and
     /// <c>hasImportError</c> and <c>importMessages</c> are the asset importer's. A generated shader
     /// is why the second set is not redundant — see <see cref="ShaderImportDiagnostics"/>.

@@ -32,6 +32,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         private const string PipelineTaggedShaderPath = Dir + "/PipelineTagged.shader";
         private const string TexturePath = Dir + "/Test.png";
         private const string BrokenTexturePath = Dir + "/Broken.png";
+        private const string VariantOnlyBrokenPath = Dir + "/VariantOnlyBroken.shader";
 
         private const string ShaderName = "UnionAir/ReadTest";
 
@@ -220,6 +221,37 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             #include ""UnityCG.cginc""
             float4 vert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
             fixed4 frag () : SV_Target { return fixed4(1, 1, 1, 1); }
+            ENDCG
+        }
+    }
+}
+";
+
+        /// <summary>
+        /// Broken only inside a <c>multi_compile</c> keyword's branch, so the import never builds
+        /// the variant that does not compile.
+        /// </summary>
+        private const string VariantOnlyBrokenSource = @"Shader ""UnionAir/VariantOnlyBroken""
+{
+    SubShader
+    {
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile _ UNIONAIR_VARIANT_TEST
+            #include ""UnityCG.cginc""
+            struct v2f { float4 pos : SV_POSITION; };
+            v2f vert (float4 v : POSITION) { v2f o; o.pos = UnityObjectToClipPos(v); return o; }
+            fixed4 frag (v2f i) : SV_Target
+            {
+            #ifdef UNIONAIR_VARIANT_TEST
+                return brokenOnlyInThisVariant;
+            #else
+                return fixed4(1, 1, 1, 1);
+            #endif
+            }
             ENDCG
         }
     }
@@ -535,6 +567,24 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 
             var body = ReadResponse(AssetDatabase.AssetPathToGUID(BrokenShaderPath)).Body;
             StringAssert.Contains("\"hasError\":true", body);
+            StringAssert.Contains("\"hasImportError\":false", body);
+            StringAssert.Contains("\"importMessages\":[]", body);
+        }
+
+        [Test]
+        public void Read_IsSilentAboutAVariantTheImportDidNotBuild()
+        {
+            // A measured limit, asserted so the reference's statement about it cannot quietly stop
+            // matching the code. The fixture does not compile under UNIONAIR_VARIANT_TEST, the
+            // import never builds that variant, and the read reports nothing at all -- which is why
+            // hasError means "what the import compiled was clean" and not "this shader is valid".
+            Import(VariantOnlyBrokenPath, VariantOnlyBrokenSource);
+
+            var body = ReadResponse(AssetDatabase.AssetPathToGUID(VariantOnlyBrokenPath)).Body;
+
+            StringAssert.Contains("\"name\":\"UnionAir/VariantOnlyBroken\"", body);
+            StringAssert.Contains("\"hasError\":false", body);
+            StringAssert.Contains("\"messages\":[]", body);
             StringAssert.Contains("\"hasImportError\":false", body);
             StringAssert.Contains("\"importMessages\":[]", body);
         }
