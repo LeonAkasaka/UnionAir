@@ -598,6 +598,9 @@ Returns a shader's import state, cached compiler messages, its effective local k
   "hasError": false,
   "hasWarnings": false,
   "messages": [],
+  "hasImportError": false,
+  "hasImportWarnings": false,
+  "importMessages": [],
   "renderQueue": 2000,
   "maximumLOD": -1,
   "subshaderCount": 1,
@@ -634,6 +637,8 @@ Returns a shader's import state, cached compiler messages, its effective local k
 | `maximumLOD` | `Shader.maximumLOD`. `-1` when the shader sets no cap, which is the ordinary case |
 | `hasError`, `hasWarnings` | Whether Unity recorded errors or warnings for the last import. `hasError` does **not** mean the shader is unusable; see `isSupported` |
 | `messages[]` | The compiler messages Unity cached at import. See [Diagnostics come from the last import](#diagnostics-come-from-the-last-import) |
+| `hasImportError`, `hasImportWarnings` | Whether the **asset importer** recorded errors or warnings, which is a different question from `hasError` and has a different answer for a generated shader. `null` when there is no importer to ask — see [Two logs, and why the second one matters](#two-logs-and-why-the-second-one-matters) |
+| `importMessages[]` | The importer's log entries: `severity` (`Error`, `Warning` or `None`), `message`, `file` and `line`. No `platform` — an importer does not run per graphics API. `[]` when the importer had nothing to say, `null` when there is none to ask |
 | `keywords[]` | The shader's **effective local keyword space** — every keyword valid on it, enabled or not, with `isOverridable` and `isDynamic`. Wider than the source: it also carries keywords reached through `Fallback` and `UsePass` dependencies, and keywords Unity adds by itself. Measured on 6000.0.80f1, a shader declaring exactly one keyword through `multi_compile` reports five, the other four being `STEREO_INSTANCING_ON`, `UNITY_SINGLE_PASS_STEREO`, `STEREO_MULTIVIEW_ON` and `STEREO_CUBEMAP_RENDER_ON`. A name appearing here is **not** evidence that it appears in the file |
 | `properties[]` | Every declared property, in declaration order, hidden ones included |
 | `properties[].type` | `Color`, `Float`, `Range`, `Int`, `Vector`, or `Texture` |
@@ -652,7 +657,7 @@ Returns a shader's import state, cached compiler messages, its effective local k
 A client can write a `.shader` or `.hlsl` file itself, and this endpoint does not take that over. Two things are not in the file:
 
 - **Whether Unity accepted it.** Shader compilation happens at import, and a shader that failed still sits on disk looking exactly as it did. `hasError` and `messages` close the edit-import-diagnose loop the same way [`POST /api/compile`](compile.md) closes it for C#.
-- **What the import produced.** `activeSubshaderIndex` is decided by the current render pipeline and platform and is written nowhere. A Shader Graph asset does not expose its properties, keywords or passes in readable form at all — they are generated during import.
+- **What the import produced.** `activeSubshaderIndex` is decided by the current render pipeline and platform and is written nowhere. For a `.shadergraph` that is almost the whole document: the properties, keywords and passes are generated at import, and the file is a node graph that states none of them.
 
 Tags are reported as named fields rather than as a `tags` map, and `lightMode` and `renderPipeline` are the two that have one. Unity looks a tag up by name and offers no way to enumerate the tags a subshader or pass carries, so a map could only ever hold the keys this endpoint thought to ask for while reading like the whole set.
 
@@ -670,6 +675,45 @@ Each message keeps its context rather than being flattened into a string:
 | `file` | The file the message points at, which can be an included file rather than the shader. `null` when the message names none |
 | `line` | The line in that file, or `0` when the message names none |
 | `platform` | The graphics API the message came from, which is why the same edit can fail on one and pass on another. `null` when the message has no API behind it — a ShaderLab parse error happens before any is involved, and Unity reports an undefined platform there |
+
+### A Shader Graph is read like any other shader asset
+
+`.shadergraph` needs no separate endpoint and gets no special case here. Unity's importer generates a shader and makes it the asset's main object, so the same read answers it in full.
+
+Measured on 6000.0.80f1 with Shader Graph 17.0.4 and URP 17.0.4, against a graph carrying one blackboard Color property and a URP Lit target:
+
+| Field | What it reported |
+| --- | --- |
+| `name` | `Shader Graphs/<file name>` |
+| `properties` | the blackboard property with its default, alongside the ones Shader Graph generates (`_QueueOffset`, `_QueueControl`, `unity_Lightmaps`, …) |
+| `subshaders[0]` | `renderPipeline` `UniversalPipeline`, ten passes, each with its `lightMode` |
+| `keywords` | 60 |
+| `messages` | `[]` |
+
+`name` is the field worth knowing about. It is the graph's category joined to the **file name**, and the file states only the category — so this read is how a client learns the string a material carries and [`POST /api/assets/materials`](#post-apiassetsmaterials) takes, after creating or renaming a graph. `GET /api/assets/shaders?name=` finds it too.
+
+None of this makes `com.unity.shadergraph` a dependency. The package references no Shader Graph type and `GET /api/help` answers the same in a project without it.
+
+### Two logs, and why the second one matters
+
+`hasError` and `messages` are the **shader compiler's**. `hasImportError` and `importMessages` are the **asset importer's**. They are reported side by side rather than merged, because a shader can fail in one and not the other, and for a generated shader the second is the only one that speaks.
+
+A Shader Graph the importer cannot build is replaced by Shader Graph's own error shader, renamed to the name the graph would have had. That substitute compiles cleanly, so the compiler has nothing to report and `hasError` is `false`. Without the importer's log there is nothing in the response to distinguish it from a shader that simply declares little.
+
+For a hand-written `.shader` the traffic goes the other way: measured on 6000.0.80f1, a ShaderLab parse error fills `messages` and leaves `importMessages` empty, because `ShaderImporter` does not use the import log.
+
+`null` and `[]` are different answers. `[]` means the asset has an importer and it recorded nothing; `null` means there is no importer to ask, which is how a shader Unity ships reads — it is reached through the shared built-in resource container, which no importer in the project owns.
+
+**A measured limit.** Not every Shader Graph failure reaches the import log. Measured on 6000.0.80f1 with Shader Graph 17.0.4:
+
+| Failure | What the endpoint reports |
+| --- | --- |
+| The file does not parse | `400`, `hasImportError` `true`, and the importer's exception in `importMessages` |
+| The graph builds with node or compiler errors | reported, because Shader Graph routes those through the import context |
+| The graph parses and cannot be built | **nothing** — `hasError` `false`, `importMessages` `[]`, one unnamed pass, no properties |
+| A target that does not resolve | **nothing** in either log; the subshader is silently dropped, and Shader Graph writes the message to the Console with `Debug.LogError` rather than to the import context |
+
+For the last two, [`GET /api/editor/logs`](editor.md#get-apieditorlogs) is where the message is, as prose with an asset path glued to the front. A client that needs certainty should compare `subshaders[].renderPipeline` against the pipeline it expected rather than trusting a clean `hasError`.
 
 ### When Unity read nothing from the file
 
@@ -696,8 +740,10 @@ So a `false` does not mean the import failed, and a `true` does not establish th
 
 | Status | Cause |
 |--------|-------|
-| 400 | `guid` is empty, or the asset is not a shader |
+| 400 | `guid` is empty, or the asset produced no shader |
 | 404 | No asset exists for the GUID |
+
+A `400` says which of the two it was, and carries `hasImportError`, `hasImportWarnings` and `importMessages` beside `error` when the asset has an importer. An asset that is simply not a shader answers `Asset is not a Shader: <path>`; a shader asset whose import failed outright — a `.shadergraph` whose JSON does not parse, for instance — answers `Shader asset failed to import: <path>` with the importer's errors, so the edit-import-diagnose loop terminates there too instead of dead-ending.
 
 ---
 

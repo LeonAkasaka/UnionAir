@@ -23,12 +23,24 @@ namespace LeonAkasaka.UnionAir.Editor
     /// The property set is the second half. <c>GET /api/assets/materials/{guid}</c> reports the
     /// properties of a shader a material already uses; a client choosing a shader for a material it
     /// has not created yet had nowhere to ask what that shader declares, what a property defaults
-    /// to, or which keywords are valid on it. A Shader Graph asset does not answer any of that from
-    /// its file at all — the properties and passes are generated during import.
+    /// to, or which keywords are valid on it.
+    ///
+    /// A <c>.shadergraph</c> is read by this endpoint like any other shader asset, and none of it
+    /// is a special case: Unity's importer generates a shader and makes it the asset's main object,
+    /// so <c>AssetDatabase.LoadAssetAtPath&lt;Shader&gt;</c> returns it. Measured on 6000.0.80f1
+    /// with Shader Graph 17.0.4 against a graph carrying one blackboard property, the read reports
+    /// that property with its default alongside the ones Shader Graph generates, the URP
+    /// subshader's ten passes with their <c>lightMode</c>, and a 60-keyword space. The generated
+    /// name is the part a client cannot get from the file: the graph stores its category and Unity
+    /// joins the file name to it, and that name is what a material carries and what
+    /// <c>POST /api/assets/materials</c> takes.
     ///
     /// Diagnostics are the ones Unity cached when the asset was last imported, not a fresh compile.
     /// After editing the file, reimport it — <c>POST /api/assets/reimport</c> or
-    /// <c>POST /api/editor/refresh</c> — and read again.
+    /// <c>POST /api/editor/refresh</c> — and read again. They come from two places, and both are
+    /// reported: <c>hasError</c> and <c>messages</c> are the shader compiler's, and
+    /// <c>hasImportError</c> and <c>importMessages</c> are the asset importer's. A generated shader
+    /// is why the second set is not redundant — see <see cref="ShaderImportDiagnostics"/>.
     /// </remarks>
     internal class ShaderReadHandler
     {
@@ -50,7 +62,7 @@ namespace LeonAkasaka.UnionAir.Editor
             var shader = AssetDatabase.LoadAssetAtPath<Shader>(assetPath);
             if (shader == null)
             {
-                RestResponse.SendError(response, $"Asset is not a Shader: {assetPath}", 400);
+                SendNoShader(response, assetPath);
                 return;
             }
 
@@ -79,6 +91,39 @@ namespace LeonAkasaka.UnionAir.Editor
             Send(response, shader, AssetDatabase.AssetPathToGUID(assetPath), assetPath);
         }
 
+        /// <summary>
+        /// The answer when the asset produced no Shader: either it is not a shader asset, or it is
+        /// one whose import failed outright.
+        /// </summary>
+        /// <remarks>
+        /// The two are worth telling apart. Measured on 6000.0.80f1 with Shader Graph 17.0.4, a
+        /// <c>.shadergraph</c> whose JSON does not parse produces no shader object at all and types
+        /// as a <c>DefaultAsset</c>, so the read reached this path and said "Asset is not a Shader"
+        /// — true of the object Unity holds, and misleading about the asset, which is a shader
+        /// asset that failed to import. A client editing a graph then had no diagnostic and no next
+        /// step, which is the loop this endpoint exists to close.
+        ///
+        /// The importer's log is what distinguishes them, so the error carries it. The status stays
+        /// 400: there is still no shader to report, and every structural field would be a guess.
+        /// </remarks>
+        private static void SendNoShader(UnionAirResponse response, string assetPath)
+        {
+            var failed = ShaderImportDiagnostics.HasError(assetPath);
+
+            var message = failed
+                ? $"Shader asset failed to import: {assetPath}"
+                : $"Asset is not a Shader: {assetPath}";
+
+            var sb = new StringBuilder();
+            sb.Append("{");
+            sb.Append($"\"error\":\"{RestResponse.EscapeJson(message)}\",");
+            ShaderImportDiagnostics.Append(sb, assetPath);
+            sb.Length -= 1; // the shared appender leaves a trailing comma for the fields that follow it
+            sb.Append("}");
+
+            RestResponse.Send(response, sb.ToString(), 400);
+        }
+
         private static void Send(UnionAirResponse response, Shader shader, string guid, string assetPath)
         {
             var sb = new StringBuilder();
@@ -103,6 +148,7 @@ namespace LeonAkasaka.UnionAir.Editor
 
             // Before the structure, because when the structure is absent this is the answer.
             AppendDiagnostics(sb, shader);
+            ShaderImportDiagnostics.Append(sb, assetPath);
             AppendStructure(sb, shader);
 
             sb.Append("}");
