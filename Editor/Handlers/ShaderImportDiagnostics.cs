@@ -19,11 +19,19 @@ namespace LeonAkasaka.UnionAir.Editor
     /// does not exist, and <see cref="ShaderProvenance.WasNotRead"/> does not catch it, because the
     /// name is not empty and there is no compiler error to pair it with.
     ///
-    /// <c>AssetImporter.GetImportLog</c> is where that failure is actually written, and it is a
-    /// supported public API on the declared floor: it and <c>ImportLog.ImportLogEntry</c>'s
+    /// <c>AssetImporter.GetImportLog</c> is the only channel that can carry such a failure, and it
+    /// is a supported public API on the declared floor: it and <c>ImportLog.ImportLogEntry</c>'s
     /// <c>message</c>, <c>flags</c>, <c>file</c> and <c>line</c> read identically out of
     /// 2022.3.62f2 and 6000.0.80f1. The alternative was parsing <c>GET /api/editor/logs</c>, where
-    /// the same failure arrives as prose with an asset path glued to the front.
+    /// an import failure arrives as prose with an asset path glued to the front.
+    ///
+    /// "Can carry" rather than "does carry", and the difference is one the reference states: an
+    /// import that fails outright writes its exception here, but the substitute case above does
+    /// not — measured on 6000.0.80f1, a graph that parses and cannot be built writes to neither log
+    /// and not even to the Console, and a target that does not resolve reaches only the Console,
+    /// because Shader Graph writes that one with <c>Debug.LogError</c> instead of through the
+    /// import context. A clean <c>hasImportError</c> is not proof of a clean import, and
+    /// <c>Documentation~/api/assets.md</c> carries the boundary as a table.
     ///
     /// These are reported beside the compiler's messages rather than merged into them.
     /// <c>hasError</c> and <c>messages</c> keep meaning what the reference already says they mean,

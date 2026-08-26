@@ -223,7 +223,19 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 
             var body = Read(Import(UnbuildableGraphPath, UnbuildableGraphSource));
 
+            // Neither channel. The compiler's, because the substitute compiled:
             StringAssert.Contains("\"hasError\":false", body);
+            StringAssert.Contains("\"hasWarnings\":false", body);
+            StringAssert.Contains("\"messages\":[]", body);
+
+            // and the importer's, because this path does not write to the import log. This is the
+            // assertion the reference's boundary table rests on: without it the documented limit
+            // could stop being true and nothing would say so.
+            StringAssert.Contains("\"hasImportError\":false", body);
+            StringAssert.Contains("\"hasImportWarnings\":false", body);
+            StringAssert.Contains("\"importMessages\":[]", body);
+
+            // What is left is a shader-shaped answer describing a shader that does not exist.
             StringAssert.Contains("\"properties\":[]", body);
             StringAssert.Contains("\"passCount\":1", body);
         }

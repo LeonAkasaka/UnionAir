@@ -696,24 +696,26 @@ None of this makes `com.unity.shadergraph` a dependency. The package references 
 
 ### Two logs, and why the second one matters
 
-`hasError` and `messages` are the **shader compiler's**. `hasImportError` and `importMessages` are the **asset importer's**. They are reported side by side rather than merged, because a shader can fail in one and not the other, and for a generated shader the second is the only one that speaks.
+`hasError` and `messages` are the **shader compiler's**. `hasImportError` and `importMessages` are the **asset importer's**. They are reported side by side rather than merged, because a shader can fail in one and not the other.
 
-A Shader Graph the importer cannot build is replaced by Shader Graph's own error shader, renamed to the name the graph would have had. That substitute compiles cleanly, so the compiler has nothing to report and `hasError` is `false`. Without the importer's log there is nothing in the response to distinguish it from a shader that simply declares little.
+The compiler only ever sees the shader Unity ended up with, so it cannot say that Unity ended up with the wrong one — and for a generated shader that is a failure that happens. A Shader Graph the importer cannot build is replaced by Shader Graph's own error shader, renamed to the name the graph would have had; that substitute compiles cleanly, so `hasError` is `false` and `messages` is empty however badly the import went. Only the importer's log can speak for that half, which is why it is reported.
+
+**It does not follow that every such failure is reported.** What the importer's log carries is bounded, and the table below is the boundary — read it before treating a clean `hasImportError` as a clean import.
 
 For a hand-written `.shader` the traffic goes the other way: measured on 6000.0.80f1, a ShaderLab parse error fills `messages` and leaves `importMessages` empty, because `ShaderImporter` does not use the import log.
 
 `null` and `[]` are different answers. `[]` means the asset has an importer and it recorded nothing; `null` means there is no importer to ask, which is how a shader Unity ships reads — it is reached through the shared built-in resource container, which no importer in the project owns.
 
-**A measured limit.** Not every Shader Graph failure reaches the import log. Measured on 6000.0.80f1 with Shader Graph 17.0.4:
+**What the importer's log does and does not carry.** Not every Shader Graph failure reaches it. On 6000.0.80f1 with Shader Graph 17.0.4:
 
-| Failure | What the endpoint reports |
-| --- | --- |
-| The file does not parse | `400`, `hasImportError` `true`, and the importer's exception in `importMessages` |
-| The graph builds with node or compiler errors | reported, because Shader Graph routes those through the import context |
-| The graph parses and cannot be built | **nothing** — `hasError` `false`, `importMessages` `[]`, one unnamed pass, no properties |
-| A target that does not resolve | **nothing** in either log; the subshader is silently dropped, and Shader Graph writes the message to the Console with `Debug.LogError` rather than to the import context |
+| Failure | What the endpoint reports | |
+| --- | --- | --- |
+| The file does not parse | `400`, `hasImportError` `true`, and the importer's exception in `importMessages` | measured |
+| The graph parses and cannot be built | **nothing** — `hasError` `false`, `hasImportError` `false`, `importMessages` `[]`, one unnamed pass, no properties | measured |
+| A target that does not resolve | **nothing** in either log; the subshader is silently dropped, and Shader Graph writes the message to the Console with `Debug.LogError` rather than to the import context | measured |
+| The graph builds with node or compiler errors | expected in `importMessages`, because Shader Graph routes those through the import context rather than the Console | **not measured** — read from Shader Graph's source; no fixture was found that produces it |
 
-For the last two, [`GET /api/editor/logs`](editor.md#get-apieditorlogs) is where the message is, as prose with an asset path glued to the front. A client that needs certainty should compare `subshaders[].renderPipeline` against the pipeline it expected rather than trusting a clean `hasError`.
+For the unresolved target, [`GET /api/editor/logs`](editor.md#get-apieditorlogs) is where the message is, as prose with an asset path glued to the front. For a graph that parses and cannot be built there is no message at all — measured on 6000.0.80f1, that import wrote nothing to the Console either. So a clean `hasError` and a clean `hasImportError` together are not proof of a clean import. A client that needs certainty should check what it expected to be there: `subshaders[].renderPipeline` for the pipeline, and `properties` for the names it put on the blackboard.
 
 ### When Unity read nothing from the file
 
