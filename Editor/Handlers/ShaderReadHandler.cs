@@ -17,7 +17,7 @@ namespace LeonAkasaka.UnionAir.Editor
     /// compilation happens at import time, its diagnostics carry a platform, a file and a line that
     /// the Console flattens into prose, and a shader that failed still exists on disk looking
     /// exactly as it did. <c>hasError</c> and <c>messages</c> are the diagnostics Unity has cached,
-    /// and read straight after a reimport they are that answer, which makes an
+    /// and once a reimport has settled they are that answer, which makes an
     /// edit-import-diagnose cycle terminate the way the C# one already does through
     /// <c>POST /api/compile</c>. They are not only that answer, and the remark below the property
     /// set says what else gets into them.

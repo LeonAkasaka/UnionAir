@@ -9,7 +9,11 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 {
     /// <summary>
     /// Covers the shader read, and the one thing it exists to report: the diagnostics Unity has
-    /// cached for a shader, which straight after a reimport are that import's verdict.
+    /// cached for a shader, which once a reimport has settled are that import's verdict.
+    ///
+    /// These tests read straight after importing because <see cref="Import"/> asks for a
+    /// synchronous import, which the fixtures need and <c>POST /api/assets/reimport</c> does not
+    /// do. Nothing here should be read as evidence about that endpoint's timing.
     /// </summary>
     /// <remarks>
     /// The shaders are written as source and imported inside the test rather than loaded from a
