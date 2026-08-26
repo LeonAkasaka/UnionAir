@@ -663,9 +663,11 @@ Tags are reported as named fields rather than as a `tags` map, and `lightMode` a
 
 ### Diagnostics come from the last import
 
-`messages` is what Unity cached when the asset was last imported, not a fresh compile. After editing the file, reimport it with [`POST /api/assets/reimport`](#post-apiassetsreimport) or [`POST /api/editor/refresh`](editor.md#post-apieditorrefresh), then read again.
+`messages` is the set Unity currently has cached for the shader, not a fresh compile. A reimport clears that set and refills it with what the import compiled, so after editing the file, reimport it with [`POST /api/assets/reimport`](#post-apiassetsreimport) or [`POST /api/editor/refresh`](editor.md#post-apieditorrefresh), then read again.
 
-Those two calls are the whole loop, and there is no shader-specific validation endpoint beside them: the reimport finishes before it answers, takes one asset — including a file Unity has never seen — and covers a project `#include` whether the include or the shader is the one reimported. What it cannot do is notice that you skipped it: a shader edited on disk and read without a reimport reports the previous import's messages, and Unity exposes no "differs from disk" signal that the read could use to mark them stale.
+Reimport the asset you edited: an `#include` is covered whether the include or the shader is the one reimported, and a `.shader` Unity has never seen can be reimported by `assetPath`. If you need to be sure the import has settled before reading, check `isUpdating` on the reimport's response.
+
+A shader edited on disk and read without a reimport reports the previous import's messages, and nothing marks them stale — Unity exposes no "differs from disk" signal for the read to report.
 
 Each message keeps its context rather than being flattened into a string:
 
@@ -678,13 +680,11 @@ Each message keeps its context rather than being flattened into a string:
 | `line` | The line in that file, or `0` when the message names none |
 | `platform` | The graphics API the message came from, which is why the same edit can fail on one and pass on another. `null` when the message has no API behind it — a ShaderLab parse error happens before any is involved, and Unity reports an undefined platform there |
 
-### A clean `hasError` covers the variants the import compiled
+### `hasError` describes the variants Unity has compiled so far
 
-The import does not build every variant a shader can produce, and `messages` cannot carry an error from one that was never built.
+Unity compiles shader variants on demand rather than all at import, so this set grows on its own. Measured on 6000.0.80f1, a shader broken only inside a `multi_compile` keyword's branch read `hasError` `false` after its reimport and `true` once the Scene View rendered a material enabling that keyword, with no reimport in between; reimporting cleared it again.
 
-Measured on 6000.0.80f1 against a shader whose fragment program is broken only inside a `#pragma multi_compile` keyword's branch: after a reimport the read answers `hasError` `false` and `messages` `[]`. The shader does not compile under that keyword and the endpoint says nothing, because the branch that is broken belongs to a variant the import did not build.
-
-So read `hasError` as "the import compiled what it compiles, and it was clean" rather than "this shader is valid". It is also why reimport-then-read is not wrapped in an endpoint called validation: the wrapper would have the same blind spot and a name that denied it.
+Two things follow. A clean `hasError` does not mean the shader is valid — it means nothing has compiled a broken variant yet. And an error appearing in a later read with no edit in between is not a fault: it is a variant reaching the compiler for the first time.
 
 ### A Shader Graph is read like any other shader asset
 

@@ -572,12 +572,19 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         }
 
         [Test]
-        public void Read_IsSilentAboutAVariantTheImportDidNotBuild()
+        public void Read_IsSilentAboutAnUncompiledVariantRightAfterTheImport()
         {
             // A measured limit, asserted so the reference's statement about it cannot quietly stop
             // matching the code. The fixture does not compile under UNIONAIR_VARIANT_TEST, the
-            // import never builds that variant, and the read reports nothing at all -- which is why
-            // hasError means "what the import compiled was clean" and not "this shader is valid".
+            // import does not build that variant, and the read reports nothing at all -- which is
+            // why a clean hasError means "nothing has compiled a broken variant yet" and not "this
+            // shader is valid".
+            //
+            // Right after the import is the whole scope here, deliberately. Unity compiles variants
+            // on demand, and once something renders this keyword the errors do appear without a
+            // reimport -- measured through the API, and written up in the reference. Asserting that
+            // half needs a material on a renderer and a real frame, which an EditMode test has no
+            // dependable way to force.
             Import(VariantOnlyBrokenPath, VariantOnlyBrokenSource);
 
             var body = ReadResponse(AssetDatabase.AssetPathToGUID(VariantOnlyBrokenPath)).Body;
