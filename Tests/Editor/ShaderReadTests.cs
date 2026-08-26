@@ -8,8 +8,12 @@ using UnityEngine.TestTools;
 namespace LeonAkasaka.UnionAir.Editor.Tests
 {
     /// <summary>
-    /// Covers the shader read, and the one thing it exists to report: whether Unity accepted the
-    /// last import of a shader, and with what messages.
+    /// Covers the shader read, and the one thing it exists to report: the diagnostics Unity has
+    /// cached for a shader, which once a reimport has settled are that import's verdict.
+    ///
+    /// These tests read straight after importing because <see cref="Import"/> asks for a
+    /// synchronous import, which the fixtures need and <c>POST /api/assets/reimport</c> does not
+    /// do. Nothing here should be read as evidence about that endpoint's timing.
     /// </summary>
     /// <remarks>
     /// The shaders are written as source and imported inside the test rather than loaded from a
@@ -32,6 +36,7 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
         private const string PipelineTaggedShaderPath = Dir + "/PipelineTagged.shader";
         private const string TexturePath = Dir + "/Test.png";
         private const string BrokenTexturePath = Dir + "/Broken.png";
+        private const string VariantOnlyBrokenPath = Dir + "/VariantOnlyBroken.shader";
 
         private const string ShaderName = "UnionAir/ReadTest";
 
@@ -220,6 +225,37 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
             #include ""UnityCG.cginc""
             float4 vert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
             fixed4 frag () : SV_Target { return fixed4(1, 1, 1, 1); }
+            ENDCG
+        }
+    }
+}
+";
+
+        /// <summary>
+        /// Broken only inside a <c>multi_compile</c> keyword's branch, so the import never builds
+        /// the variant that does not compile.
+        /// </summary>
+        private const string VariantOnlyBrokenSource = @"Shader ""UnionAir/VariantOnlyBroken""
+{
+    SubShader
+    {
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile _ UNIONAIR_VARIANT_TEST
+            #include ""UnityCG.cginc""
+            struct v2f { float4 pos : SV_POSITION; };
+            v2f vert (float4 v : POSITION) { v2f o; o.pos = UnityObjectToClipPos(v); return o; }
+            fixed4 frag (v2f i) : SV_Target
+            {
+            #ifdef UNIONAIR_VARIANT_TEST
+                return brokenOnlyInThisVariant;
+            #else
+                return fixed4(1, 1, 1, 1);
+            #endif
+            }
             ENDCG
         }
     }
@@ -535,6 +571,31 @@ namespace LeonAkasaka.UnionAir.Editor.Tests
 
             var body = ReadResponse(AssetDatabase.AssetPathToGUID(BrokenShaderPath)).Body;
             StringAssert.Contains("\"hasError\":true", body);
+            StringAssert.Contains("\"hasImportError\":false", body);
+            StringAssert.Contains("\"importMessages\":[]", body);
+        }
+
+        [Test]
+        public void Read_IsSilentAboutAnUncompiledVariantRightAfterTheImport()
+        {
+            // A measured limit, asserted so the reference's statement about it cannot quietly stop
+            // matching the code. The fixture does not compile under UNIONAIR_VARIANT_TEST, the
+            // import does not build that variant, and the read reports nothing at all -- which is
+            // why a clean hasError means "nothing has compiled a broken variant yet" and not "this
+            // shader is valid".
+            //
+            // Right after the import is the whole scope here, deliberately. Unity compiles variants
+            // on demand, and once something renders this keyword the errors do appear without a
+            // reimport -- measured through the API, and written up in the reference. Asserting that
+            // half needs a material on a renderer and a real frame, which an EditMode test has no
+            // dependable way to force.
+            Import(VariantOnlyBrokenPath, VariantOnlyBrokenSource);
+
+            var body = ReadResponse(AssetDatabase.AssetPathToGUID(VariantOnlyBrokenPath)).Body;
+
+            StringAssert.Contains("\"name\":\"UnionAir/VariantOnlyBroken\"", body);
+            StringAssert.Contains("\"hasError\":false", body);
+            StringAssert.Contains("\"messages\":[]", body);
             StringAssert.Contains("\"hasImportError\":false", body);
             StringAssert.Contains("\"importMessages\":[]", body);
         }

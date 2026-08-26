@@ -16,9 +16,11 @@ namespace LeonAkasaka.UnionAir.Editor
     /// that over. What the file cannot answer is whether Unity accepted the import: shader
     /// compilation happens at import time, its diagnostics carry a platform, a file and a line that
     /// the Console flattens into prose, and a shader that failed still exists on disk looking
-    /// exactly as it did. <c>hasError</c> and <c>messages</c> are that answer, which makes an
+    /// exactly as it did. <c>hasError</c> and <c>messages</c> are the diagnostics Unity has cached,
+    /// and once a reimport has settled they are that answer, which makes an
     /// edit-import-diagnose cycle terminate the way the C# one already does through
-    /// <c>POST /api/compile</c>.
+    /// <c>POST /api/compile</c>. They are not only that answer, and the remark below the property
+    /// set says what else gets into them.
     ///
     /// The property set is the second half. <c>GET /api/assets/materials/{guid}</c> reports the
     /// properties of a shader a material already uses; a client choosing a shader for a material it
@@ -35,9 +37,18 @@ namespace LeonAkasaka.UnionAir.Editor
     /// joins the file name to it, and that name is what a material carries and what
     /// <c>POST /api/assets/materials</c> takes.
     ///
-    /// Diagnostics are the ones Unity cached when the asset was last imported, not a fresh compile.
-    /// After editing the file, reimport it — <c>POST /api/assets/reimport</c> or
-    /// <c>POST /api/editor/refresh</c> — and read again. They come from two places, and both are
+    /// Diagnostics are the set Unity currently has cached, not a fresh compile. A reimport clears
+    /// it and refills it with what that import compiled, so after editing the file, reimport
+    /// — <c>POST /api/assets/reimport</c> or <c>POST /api/editor/refresh</c> — and read again.
+    /// Those two calls are the whole loop; there is no validation endpoint beside them, because one
+    /// would report the state at the moment it ran and that is not a verdict on the shader.
+    ///
+    /// Unity compiles variants on demand, so the set grows without an import. Measured on
+    /// 6000.0.80f1, an error inside a <c>multi_compile</c> keyword's branch is absent right after
+    /// the reimport and present once the Scene View renders a material enabling that keyword, with
+    /// no reimport in between; reimporting clears it again. A clean <c>hasError</c> therefore means
+    /// nothing has compiled a broken variant yet, and an error appearing in a later read with no
+    /// edit is a variant reaching the compiler for the first time rather than a fault. They come from two places, and both are
     /// reported: <c>hasError</c> and <c>messages</c> are the shader compiler's, and
     /// <c>hasImportError</c> and <c>importMessages</c> are the asset importer's. A generated shader
     /// is why the second set is not redundant — see <see cref="ShaderImportDiagnostics"/>.

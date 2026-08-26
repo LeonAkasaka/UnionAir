@@ -635,8 +635,8 @@ Returns a shader's import state, cached compiler messages, its effective local k
 | `isSupported` | Unity's capability signal: whether this shader can run on the current GPU, with fallbacks taken into account. It is **not** a statement about the import and **not** a statement about whose declaration the fields below describe — see [What `isSupported` does and does not tell you](#what-issupported-does-and-does-not-tell-you) |
 | `renderQueue` | The queue declared by the shader, which a material can override |
 | `maximumLOD` | `Shader.maximumLOD`. `-1` when the shader sets no cap, which is the ordinary case |
-| `hasError`, `hasWarnings` | Whether Unity recorded errors or warnings for the last import. `hasError` does **not** mean the shader is unusable; see `isSupported` |
-| `messages[]` | The compiler messages Unity cached at import. See [Diagnostics come from the last import](#diagnostics-come-from-the-last-import) |
+| `hasError`, `hasWarnings` | Whether the diagnostics Unity currently has cached for this shader carry errors or warnings. Once a reimport has settled that is the import's verdict, but the set grows as Unity compiles variants — see [`hasError` describes the variants Unity has compiled so far](#haserror-describes-the-variants-unity-has-compiled-so-far). `hasError` does **not** mean the shader is unusable; see `isSupported` |
+| `messages[]` | The compiler messages Unity currently has cached. See [Diagnostics are the ones Unity has cached](#diagnostics-are-the-ones-unity-has-cached) |
 | `hasImportError`, `hasImportWarnings` | Whether the **asset importer** recorded errors or warnings, which is a different question from `hasError` and has a different answer for a generated shader. `null` when there is no importer to ask — see [Two logs, and why the second one matters](#two-logs-and-why-the-second-one-matters) |
 | `importMessages[]` | The importer's log entries: `severity` (`Error`, `Warning` or `None`), `message`, `file` and `line`. No `platform` — an importer does not run per graphics API. `file` is **not** necessarily a file in the project, unlike `messages[].file`: measured on 6000.0.80f1, an entry written by a native importer pointed at Unity's own C++ source under `Editor\Src\AssetPipeline`, a path on the machine that built the editor. `[]` when the importer had nothing to say, `null` when there is none to ask |
 | `keywords[]` | The shader's **effective local keyword space** — every keyword valid on it, enabled or not, with `isOverridable` and `isDynamic`. Wider than the source: it also carries keywords reached through `Fallback` and `UsePass` dependencies, and keywords Unity adds by itself. Measured on 6000.0.80f1, a shader declaring exactly one keyword through `multi_compile` reports five, the other four being `STEREO_INSTANCING_ON`, `UNITY_SINGLE_PASS_STEREO`, `STEREO_MULTIVIEW_ON` and `STEREO_CUBEMAP_RENDER_ON`. A name appearing here is **not** evidence that it appears in the file |
@@ -656,14 +656,18 @@ Returns a shader's import state, cached compiler messages, its effective local k
 
 A client can write a `.shader` or `.hlsl` file itself, and this endpoint does not take that over. Two things are not in the file:
 
-- **Whether Unity accepted it.** Shader compilation happens at import, and a shader that failed still sits on disk looking exactly as it did. `hasError` and `messages` close the edit-import-diagnose loop the same way [`POST /api/compile`](compile.md) closes it for C#.
+- **Whether Unity accepted it.** Shader compilation happens at import, and a shader that failed still sits on disk looking exactly as it did. Once the reimport has settled, `hasError` and `messages` close the edit-import-diagnose loop the same way [`POST /api/compile`](compile.md) closes it for C#.
 - **What the import produced.** `activeSubshaderIndex` is decided by the current render pipeline and platform and is written nowhere. For a `.shadergraph` that is almost the whole document: the properties, keywords and passes are generated at import, and the file is a node graph that states none of them.
 
 Tags are reported as named fields rather than as a `tags` map, and `lightMode` and `renderPipeline` are the two that have one. Unity looks a tag up by name and offers no way to enumerate the tags a subshader or pass carries, so a map could only ever hold the keys this endpoint thought to ask for while reading like the whole set.
 
-### Diagnostics come from the last import
+### Diagnostics are the ones Unity has cached
 
-`messages` is what Unity cached when the asset was last imported, not a fresh compile. After editing the file, reimport it with [`POST /api/assets/reimport`](#post-apiassetsreimport) or [`POST /api/editor/refresh`](editor.md#post-apieditorrefresh), then read again.
+`messages` is the set Unity currently has cached for the shader, not a fresh compile. A reimport clears that set and refills it with what the import compiled, so after editing the file, reimport it with [`POST /api/assets/reimport`](#post-apiassetsreimport) or [`POST /api/editor/refresh`](editor.md#post-apieditorrefresh), then read again.
+
+Reimport the asset you edited: an `#include` is covered whether the include or the shader is the one reimported, and a `.shader` Unity has never seen can be reimported by `assetPath`. If you need to be sure the import has settled before reading, check `isUpdating` on the reimport's response.
+
+A shader edited on disk and read without a reimport reports the previous import's messages, and nothing marks them stale — Unity exposes no "differs from disk" signal for the read to report.
 
 Each message keeps its context rather than being flattened into a string:
 
@@ -675,6 +679,12 @@ Each message keeps its context rather than being flattened into a string:
 | `file` | The file the message points at, which can be an included file rather than the shader. `null` when the message names none |
 | `line` | The line in that file, or `0` when the message names none |
 | `platform` | The graphics API the message came from, which is why the same edit can fail on one and pass on another. `null` when the message has no API behind it — a ShaderLab parse error happens before any is involved, and Unity reports an undefined platform there |
+
+### `hasError` describes the variants Unity has compiled so far
+
+Unity compiles shader variants on demand rather than all at import, so this set grows on its own. Measured on 6000.0.80f1, a shader broken only inside a `multi_compile` keyword's branch read `hasError` `false` after its reimport and `true` once the Scene View rendered a material enabling that keyword, with no reimport in between; reimporting cleared it again.
+
+Two things follow. A clean `hasError` does not mean the shader is valid — it means nothing has compiled a broken variant yet. And an error appearing in a later read with no edit in between is not a fault: it is a variant reaching the compiler for the first time.
 
 ### A Shader Graph is read like any other shader asset
 
